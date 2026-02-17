@@ -1,6 +1,11 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
+import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useRouter } from 'next/navigation';
+import { useToast } from "@/hooks/use-toast";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -12,6 +17,25 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 )
 
 export default function LoginPage() {
+    const router = useRouter();
+    const { toast } = useToast();
+
+    const handleGoogleSignIn = async () => {
+        const auth = getAuth();
+        const provider = new GoogleAuthProvider();
+        try {
+            await signInWithPopup(auth, provider);
+            router.push('/');
+        } catch (error: any) {
+            console.error("Authentication error:", error);
+            toast({
+                variant: "destructive",
+                title: "Login Failed",
+                description: error.message,
+            });
+        }
+    };
+
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md shadow-2xl">
@@ -25,11 +49,9 @@ export default function LoginPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" asChild>
-                            <Link href="/">
-                                <GoogleIcon className="mr-2"/>
-                                Login with Google
-                            </Link>
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn}>
+                            <GoogleIcon className="mr-2"/>
+                            Login with Google
                         </Button>
                         <p className="px-8 text-center text-xs text-muted-foreground">
                             By clicking continue, you agree to our{" "}

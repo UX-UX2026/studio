@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "procurementRequest": {
+      "title": "Procurement Request",
+      "description": "Represents a request for procuring goods or services.",
+      "type": "object",
+      "properties": {
+        "itemName": {
+          "type": "string",
+          "description": "The name of the item to be procured."
+        },
+        "itemDescription": {
+          "type": "string",
+          "description": "A detailed description of the item."
+        },
+        "quantity": {
+          "type": "number",
+          "description": "The quantity of the item requested."
+        },
+        "category": {
+          "type": "string",
+          "description": "The procurement category of the item."
+        },
+        "unitPrice": {
+          "type": "number",
+          "description": "The estimated or last known unit price of the item."
+        },
+        "department": {
+          "type": "string",
+          "description": "The department requesting the item."
+        },
+        "historicalPreviousVendors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "historicalAverageLeadTimeDays": {
+          "type": "number"
+        },
+        "historicalAverageCost": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "itemName",
+        "itemDescription",
+        "quantity",
+        "category",
+        "department"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "google.com"
+    ],
+    "claims": {
+      "admin": {
+        "type": "boolean",
+        "description": "Indicates if the user has administrator privileges."
+      }
+    }
+  },
+  "firestore": {}
+}

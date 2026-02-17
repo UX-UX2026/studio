@@ -1,3 +1,5 @@
+'use client';
+
 import type { ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { NavLinks } from "@/components/nav-links";
@@ -7,15 +9,31 @@ import {
   SidebarFooter,
   SidebarHeader,
   SidebarProvider,
-  SidebarTrigger,
-  SidebarInset,
 } from "@/components/app/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
+import { useUser } from "@/firebase/auth/use-user";
+import { useRouter } from "next/navigation";
+import { Loader } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
+  const { user, loading } = useUser();
+  const router = useRouter();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    router.push('/login');
+    return null;
+  }
 
   return (
     <SidebarProvider>
@@ -35,7 +53,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <SidebarFooter>
             <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
               <Avatar className="h-8 w-8">
-                {userAvatar && (
+                {user.photoURL ? (
+                  <AvatarImage
+                    src={user.photoURL}
+                    alt={user.displayName || 'User Avatar'}
+                  />
+                ) : userAvatar && (
                   <AvatarImage
                     src={userAvatar.imageUrl}
                     alt={userAvatar.description}
@@ -44,25 +67,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                     height={32}
                   />
                 )}
-                <AvatarFallback>TM</AvatarFallback>
+                <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
               </Avatar>
               <div className="overflow-hidden">
                 <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                  Tarryn M.
+                  {user.displayName}
                 </p>
                 <p className="truncate text-xs text-sidebar-foreground/80">
-                  Dept Manager
+                  Administrator
                 </p>
               </div>
             </div>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset>
+        <main className="flex-1 flex flex-col">
           <AppHeader />
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-background">
+          <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-background">
             {children}
-          </main>
-        </SidebarInset>
+          </div>
+        </main>
       </div>
     </SidebarProvider>
   );
