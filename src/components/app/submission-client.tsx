@@ -1,0 +1,299 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { Lock, Plus, Trash2, Wand2 } from "lucide-react";
+import {
+  suggestProcurementCategory,
+  SuggestProcurementCategoryOutput,
+} from "@/ai/flows/suggest-procurement-category-flow";
+import { useToast } from "@/hooks/use-toast";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+
+
+type Item = {
+  id: number;
+  type: "Recurring" | "One-Off";
+  description: string;
+  brand: string;
+  qty: number;
+  category: string;
+  unitPrice: number;
+};
+
+const initialItems: Item[] = [
+  {
+    id: 1,
+    type: "Recurring",
+    description: "29 x Dell Vostro 5630 laptop - Rentworks",
+    brand: "Dell",
+    qty: 1,
+    category: "Operational Lease/Rental - SA",
+    unitPrice: 19197.02,
+  },
+  {
+    id: 2,
+    type: "Recurring",
+    description: "DataCentrix MSP Support",
+    brand: "DataCentrix",
+    qty: 1,
+    category: "Tech Support - SA",
+    unitPrice: 48793.5,
+  },
+  {
+    id: 3,
+    type: "One-Off",
+    description: "Cisco Catalyst Router",
+    brand: "Cisco",
+    qty: 1,
+    category: "ICT Maintenance - SA",
+    unitPrice: 33677,
+  },
+];
+
+const categories = [
+  "Operational Lease/Rental - SA",
+  "Tech Support - SA",
+  "ICT Maintenance - SA",
+  "Software Licenses",
+  "Hardware Purchase",
+  "Office Supplies",
+  "Consulting Services",
+];
+
+const formatCurrency = (amount: number) => {
+  return new Intl.NumberFormat("en-ZA", {
+    style: "currency",
+    currency: "ZAR",
+  }).format(amount);
+};
+
+export function SubmissionClient() {
+  const [items, setItems] = useState<Item[]>(initialItems);
+  const [selectedMonths, setSelectedMonths] = useState(["Feb"]);
+  const { toast } = useToast();
+  const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
+  const [isLoadingAi, setIsLoadingAi] = useState(false);
+
+  const total = useMemo(() => {
+    return items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
+  }, [items]);
+
+  const handleItemChange = (id: number, field: keyof Item, value: any) => {
+    setItems((prevItems) =>
+      prevItems.map((item) =>
+        item.id === id ? { ...item, [field]: value } : item
+      )
+    );
+  };
+
+  const handleAddItem = () => {
+    const newItem: Item = {
+      id: Date.now(),
+      type: "One-Off",
+      description: "",
+      brand: "",
+      qty: 1,
+      category: "",
+      unitPrice: 0,
+    };
+    setItems([...items, newItem]);
+  };
+
+  const handleRemoveItem = (id: number) => {
+    setItems(items.filter((item) => item.id !== id));
+  };
+  
+  const handleGetSuggestion = async (description: string, itemId: number) => {
+    if (!description) {
+      toast({
+        variant: "destructive",
+        title: "No Description",
+        description: "Please enter an item description to get suggestions.",
+      });
+      return;
+    }
+    setIsLoadingAi(true);
+    setSuggestions(null);
+    try {
+      const result = await suggestProcurementCategory({ itemDescription: description });
+      setSuggestions(result);
+    } catch (error) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "AI Suggestion Failed",
+        description: "Could not fetch procurement category suggestions.",
+      });
+    } finally {
+      setIsLoadingAi(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col justify-between gap-4 pb-6 border-b md:flex-row md:items-end">
+        <div className="space-y-4">
+           {/* Placeholder for month/department selection */}
+        </div>
+        <div className="p-4 text-right rounded-lg bg-primary/10 border-primary/20 border">
+            <p className="text-xs font-bold uppercase text-primary">Estimated Period Total</p>
+            <p className="text-2xl font-black text-primary">{formatCurrency(total)}</p>
+        </div>
+      </div>
+
+      <div className="-mx-6 overflow-x-auto">
+        <Table className="min-w-[1200px]">
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[100px]">Type</TableHead>
+              <TableHead>Item / Service Description</TableHead>
+              <TableHead className="w-[150px]">Brand</TableHead>
+              <TableHead className="w-[80px]">Qty</TableHead>
+              <TableHead className="w-[250px]">Category</TableHead>
+              <TableHead className="w-[120px] text-right">Unit Price</TableHead>
+              <TableHead className="w-[120px] text-right">Total</TableHead>
+              <TableHead className="w-[80px] text-center">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {items.map((item, index) => (
+              <TableRow key={item.id} className={item.type === 'Recurring' ? 'bg-muted/50' : ''}>
+                <TableCell>
+                  <Badge variant={item.type === "Recurring" ? "secondary" : "outline"}>
+                    {item.type}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={item.description}
+                    onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                    readOnly={item.type === "Recurring"}
+                    className="bg-transparent border-0"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={item.brand}
+                    onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
+                    readOnly={item.type === "Recurring"}
+                    className="bg-transparent border-0"
+                  />
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    value={item.qty}
+                    onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
+                    readOnly={item.type === "Recurring"}
+                    className="w-16 bg-transparent border-0"
+                  />
+                </TableCell>
+                <TableCell className="flex items-center gap-1">
+                   <Select
+                        value={item.category}
+                        onValueChange={(value) => handleItemChange(item.id, "category", value)}
+                        disabled={item.type === 'Recurring'}
+                    >
+                        <SelectTrigger className="w-full bg-transparent border-0">
+                            <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                  {item.type === 'One-Off' && (
+                    <Popover onOpenChange={() => setSuggestions(null)}>
+                      <PopoverTrigger asChild>
+                         <Button variant="ghost" size="icon" onClick={() => handleGetSuggestion(item.description, item.id)} disabled={isLoadingAi}>
+                           <Wand2 className={`h-4 w-4 ${isLoadingAi ? 'animate-pulse' : ''}`}/>
+                         </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[200px] p-0">
+                        <Command>
+                          <CommandInput placeholder="Suggested..." />
+                          <CommandList>
+                            <CommandEmpty>{isLoadingAi ? 'Getting suggestions...' : 'No suggestions found.'}</CommandEmpty>
+                            <CommandGroup>
+                              {suggestions?.suggestedCategories.map((suggestion) => (
+                                <CommandItem
+                                  key={suggestion}
+                                  value={suggestion}
+                                  onSelect={(currentValue) => {
+                                      handleItemChange(item.id, "category", currentValue)
+                                  }}
+                                >
+                                  {suggestion}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="number"
+                    value={item.unitPrice}
+                    onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
+                    readOnly={item.type === "Recurring"}
+                    className="w-24 text-right bg-transparent border-0"
+                  />
+                </TableCell>
+                <TableCell className="text-right font-semibold">
+                  {formatCurrency(item.qty * item.unitPrice)}
+                </TableCell>
+                <TableCell className="text-center">
+                  {item.type === "One-Off" ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveItem(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  ) : (
+                    <Lock className="h-4 w-4 mx-auto text-muted-foreground" />
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      <div className="flex items-center justify-between pt-4">
+        <Button variant="outline" onClick={handleAddItem}>
+          <Plus className="w-4 h-4 mr-2" />
+          Add Manual Item
+        </Button>
+        <div className="flex gap-3">
+          <Button variant="ghost">Save as Draft</Button>
+          <Button className="shadow-lg shadow-primary/20">Submit Period Request</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
