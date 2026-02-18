@@ -24,9 +24,8 @@ export default function RootLayout({
       <body className="font-body antialiased">
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
+          defaultTheme="light"
+          themes={['light', 'dark', 'classic']}
         >
           <FirebaseClientProvider>
             {children}

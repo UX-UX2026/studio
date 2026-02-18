@@ -21,15 +21,15 @@ export function ThemeSwitcher() {
         >
             <div className="flex items-center space-x-2">
                 <RadioGroupItem value="light" id="light" />
-                <Label htmlFor="light">Light</Label>
+                <Label htmlFor="light">Ubuntu Light</Label>
             </div>
             <div className="flex items-center space-x-2">
                 <RadioGroupItem value="dark" id="dark" />
-                <Label htmlFor="dark">Dark</Label>
+                <Label htmlFor="dark">Ubuntu Dark</Label>
             </div>
              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="system" id="system" />
-                <Label htmlFor="system">System</Label>
+                <RadioGroupItem value="classic" id="classic" />
+                <Label htmlFor="classic">Classic Light</Label>
             </div>
         </RadioGroup>
     </div>
