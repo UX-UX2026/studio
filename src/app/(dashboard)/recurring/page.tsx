@@ -3,8 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Plus, History } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Loader, History } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { recurringItems } from "@/lib/mock-data";
 import { RecurringClient } from "@/components/app/recurring-client";
@@ -31,7 +30,7 @@ export default function RecurringPage() {
   return (
     <div className="space-y-6">
        <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader>
           <div>
             <CardTitle className="flex items-center gap-2 text-primary">
                 <History className="h-6 w-6" />
@@ -41,10 +40,6 @@ export default function RecurringPage() {
                 Items defined here are automatically added to every period submission. Manage items and their recurrence below.
             </CardDescription>
           </div>
-          <Button className="shadow-lg shadow-primary/20">
-            <Plus className="h-4 w-4 mr-2"/>
-            New Recurring Item
-          </Button>
         </CardHeader>
         <CardContent>
             <RecurringClient items={recurringItems} />
