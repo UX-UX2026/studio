@@ -35,6 +35,8 @@ export default function ProcurementSummaryPage() {
     // State for editable data
     const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
     const [capital, setCapital] = useState(initialCapitalData);
+    const [currentPeriod, setCurrentPeriod] = useState('May');
+
 
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
@@ -72,15 +74,15 @@ export default function ProcurementSummaryPage() {
        <Card>
         <CardHeader>
             <CardTitle>Procurement Line Items</CardTitle>
-            <CardDescription>Comparison of May procurement against forecast for cash expenses. Over-budget items are highlighted.</CardDescription>
+            <CardDescription>Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</CardDescription>
         </CardHeader>
         <CardContent>
             <Table>
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[300px]">Item</TableHead>
-                        <TableHead className="text-right">May Procurement</TableHead>
-                        <TableHead className="text-right">May Forecast</TableHead>
+                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                        <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
                         <TableHead className="text-right">Procurement vs Forecast</TableHead>
                         <TableHead>Comments</TableHead>
                     </TableRow>
@@ -131,7 +133,7 @@ export default function ProcurementSummaryPage() {
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[250px]">Item</TableHead>
-                        <TableHead className="text-right">May Procurement</TableHead>
+                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
                         <TableHead className="text-right">July Forecast</TableHead>
                         <TableHead className="text-right">Year Total</TableHead>
                         <TableHead className="text-right">Act+Forecast vs Budget YR</TableHead>
@@ -164,5 +166,6 @@ export default function ProcurementSummaryPage() {
     </div>
   );
 }
+
 
 
