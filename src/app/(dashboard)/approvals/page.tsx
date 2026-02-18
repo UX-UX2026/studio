@@ -13,74 +13,16 @@ import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Check, MessageSquare, Paperclip, Send, User } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { type ApprovalRequest, approvalsData } from "@/lib/approvals-mock-data";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const approvals = [
-  {
-    id: "REQ-00124",
-    department: "ICT",
-    period: "Feb 2026",
-    total: 132178.0,
-    status: "Pending Executive",
-    submittedBy: "Tarryn M.",
-    timeline: [
-      { stage: "Manager Sign-off", actor: "Tarryn M.", date: "27 Jan 2026", status: "completed" },
-      { stage: "Executive Review", actor: "Zukiswa N.", date: null, status: "pending" },
-      { stage: "Procurement Ack.", actor: "Linda K.", date: null, status: "waiting" },
-    ],
-    comments: [
-        {actor: "Zukiswa N.", avatarId: 'avatar-1', text: "Can you please double-check the quote for the Cisco router? Seems a bit high.", timestamp: "2 hours ago"}
-    ]
-  },
-  {
-    id: "REQ-00125",
-    department: "Operations",
-    period: "Feb 2026",
-    total: 75000.0,
-    status: "Pending Executive",
-    submittedBy: "John D.",
-    timeline: [
-        { stage: "Manager Sign-off", actor: "John D.", date: "28 Jan 2026", status: "completed" },
-        { stage: "Executive Review", actor: "Zukiswa N.", date: null, status: "pending" },
-        { stage: "Procurement Ack.", actor: "Linda K.", date: null, status: "waiting" },
-    ],
-    comments: []
-  },
-  {
-    id: "REQ-00123",
-    department: "Marketing",
-    period: "Jan 2026",
-    total: 298100.0,
-    status: "Completed",
-    submittedBy: "Tarryn M.",
-    timeline: [
-        { stage: "Manager Sign-off", actor: "Tarryn M.", date: "27 Dec 2025", status: "completed" },
-        { stage: "Executive Review", actor: "Zukiswa N.", date: "28 Dec 2025", status: "completed" },
-        { stage: "Procurement Ack.", actor: "Linda K.", date: "29 Dec 2025", status: "completed" },
-    ],
-    comments: []
-  },
-    {
-    id: "REQ-00122",
-    department: "ICT",
-    period: "Jan 2026",
-    total: 45000.0,
-    status: "Completed",
-    submittedBy: "Tarryn M.",
-    timeline: [
-        { stage: "Manager Sign-off", actor: "Tarryn M.", date: "15 Jan 2026", status: "completed" },
-        { stage: "Executive Review", actor: "Zukiswa N.", date: "16 Jan 2026", status: "completed" },
-        { stage: "Procurement Ack.", actor: "Linda K.", date: "17 Jan 2026", status: "completed" },
-    ],
-    comments: []
-  },
-];
-
-type Approval = typeof approvals[0];
 
 const getStatusBadge = (status: string) => {
     switch (status) {
         case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
         case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
+        case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
         default: return <Badge variant="secondary">{status}</Badge>
     }
 }
@@ -97,19 +39,19 @@ export default function ApprovalsPage() {
     const router = useRouter();
 
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
-      approvals.find(a => a.status.startsWith('Pending'))?.id || approvals[0]?.id || null
+      approvalsData.find(a => a.status.startsWith('Pending'))?.id || approvalsData[0]?.id || null
     );
 
-    const activeRequest = useMemo(() => approvals.find((req) => req.id === selectedRequestId), [selectedRequestId]);
+    const activeRequest = useMemo(() => approvalsData.find((req) => req.id === selectedRequestId), [selectedRequestId]);
 
-    const requestsByDepartment = useMemo(() => approvals.reduce((acc, req) => {
+    const requestsByDepartment = useMemo(() => approvalsData.reduce((acc, req) => {
         const dept = req.department || 'Unassigned';
         if (!acc[dept]) {
             acc[dept] = [];
         }
         acc[dept].push(req);
         return acc;
-    }, {} as Record<string, Approval[]>), []);
+    }, {} as Record<string, ApprovalRequest[]>), []);
 
     useEffect(() => {
       if (!loading && (!user || (role !== 'Executive' && role !== 'Administrator'))) {
@@ -131,74 +73,102 @@ export default function ApprovalsPage() {
     <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-6">
             {activeRequest ? (
-                <>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Approval Workflow: {activeRequest.id}</CardTitle>
-                            <CardDescription>{activeRequest.period} Request - {formatCurrency(activeRequest.total)}</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ul className="space-y-4">
-                                {activeRequest.timeline.map(step => (
-                                    <li key={step.stage} className="flex items-center gap-4">
-                                        <div className={`flex items-center justify-center h-10 w-10 rounded-full ${step.status === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                            {step.status === 'completed' ? <Check className="h-5 w-5" /> : <User className="h-5 w-5"/>}
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="font-semibold">{step.stage}</p>
-                                            <p className="text-sm text-muted-foreground">{step.actor}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-sm font-medium">{step.date}</p>
-                                            <p className={`text-xs font-semibold capitalize ${step.status === 'completed' ? 'text-green-500' : 'text-orange-500'}`}>{step.status}</p>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </CardContent>
-                        {activeRequest.status.startsWith('Pending') && (
-                            <CardFooter className="flex justify-end gap-2">
-                                <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
-                                <Button><Check className="mr-2 h-4 w-4" />Approve</Button>
-                            </CardFooter>
-                        )}
-                    </Card>
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-primary"/> Communication Log</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-6">
-                            <div className="space-y-4">
-                                {activeRequest.comments?.map((comment, i) => (
-                                     <div key={i} className="flex items-start gap-3">
-                                        <Avatar>
-                                            <AvatarImage src={userAvatar?.imageUrl} data-ai-hint={userAvatar?.imageHint}/>
-                                            <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
-                                        </Avatar>
-                                        <div className="flex-1 p-3 rounded-lg bg-muted">
-                                            <div className="flex justify-between items-center">
-                                                <p className="font-semibold">{comment.actor}</p>
-                                                <p className="text-xs text-muted-foreground">{comment.timestamp}</p>
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Approval Request: {activeRequest.id}</CardTitle>
+                        <CardDescription>{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                       <Tabs defaultValue="workflow">
+                            <TabsList className="grid w-full grid-cols-3">
+                                <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
+                                <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
+                                <TabsTrigger value="communication">Communication Log</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="workflow" className="pt-6">
+                                 <ul className="space-y-4">
+                                    {activeRequest.timeline.map(step => (
+                                        <li key={step.stage} className="flex items-center gap-4">
+                                            <div className={`flex items-center justify-center h-10 w-10 rounded-full ${step.status === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                                                {step.status === 'completed' ? <Check className="h-5 w-5" /> : <User className="h-5 w-5"/>}
                                             </div>
-                                            <p className="text-sm mt-1">{comment.text}</p>
+                                            <div className="flex-1">
+                                                <p className="font-semibold">{step.stage}</p>
+                                                <p className="text-sm text-muted-foreground">{step.actor}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-sm font-medium">{step.date}</p>
+                                                <p className={`text-xs font-semibold capitalize ${step.status === 'completed' ? 'text-green-500' : 'text-orange-500'}`}>{step.status}</p>
+                                            </div>
+                                        </li>
+                                    ))}
+                                </ul>
+                            </TabsContent>
+                            <TabsContent value="items" className="pt-4">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Description</TableHead>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead className="text-right">Qty</TableHead>
+                                            <TableHead className="text-right">Unit Price</TableHead>
+                                            <TableHead className="text-right">Total</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {activeRequest.items.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell className="font-medium">{item.description}</TableCell>
+                                                <TableCell>{item.category}</TableCell>
+                                                <TableCell className="text-right">{item.qty}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
+                                                <TableCell className="text-right font-mono font-semibold">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TabsContent>
+                            <TabsContent value="communication" className="pt-6">
+                                <div className="space-y-6">
+                                    <div className="space-y-4">
+                                        {activeRequest.comments?.map((comment, i) => (
+                                            <div key={i} className="flex items-start gap-3">
+                                                <Avatar>
+                                                    <AvatarImage src={userAvatar?.imageUrl} data-ai-hint={userAvatar?.imageHint}/>
+                                                    <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
+                                                </Avatar>
+                                                <div className="flex-1 p-3 rounded-lg bg-muted">
+                                                    <div className="flex justify-between items-center">
+                                                        <p className="font-semibold">{comment.actor}</p>
+                                                        <p className="text-xs text-muted-foreground">{comment.timestamp}</p>
+                                                    </div>
+                                                    <p className="text-sm mt-1">{comment.text}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {activeRequest.comments?.length === 0 && (
+                                            <p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>
+                                        )}
+                                    </div>
+                                    <div className="relative">
+                                        <Textarea placeholder="Respond to queries or add a comment..." className="pr-24"/>
+                                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                                            <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
+                                            <Button size="icon"><Send className="h-4 w-4"/></Button>
                                         </div>
                                     </div>
-                                ))}
-                                 {activeRequest.comments?.length === 0 && (
-                                     <p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>
-                                 )}
-                            </div>
-                             <div className="relative">
-                                <Textarea placeholder="Respond to queries or add a comment..." className="pr-24"/>
-                                <div className="absolute top-2 right-2 flex items-center gap-1">
-                                    <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
-                                    <Button size="icon"><Send className="h-4 w-4"/></Button>
                                 </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </>
+                            </TabsContent>
+                       </Tabs>
+                    </CardContent>
+                    {activeRequest.status.startsWith('Pending') && (
+                        <CardFooter className="flex justify-end gap-2 border-t pt-6">
+                            <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                            <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
+                            <Button><Check className="mr-2 h-4 w-4" />Approve</Button>
+                        </CardFooter>
+                    )}
+                </Card>
             ) : (
                  <Card>
                     <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">

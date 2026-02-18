@@ -26,46 +26,10 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { fulfillmentItems } from '@/lib/mock-data';
+import { approvalsData } from '@/lib/approvals-mock-data';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const approvals = [
-    {
-      id: "REQ-00124",
-      period: "Feb 2026",
-      total: 132178.0,
-      status: "Pending Executive",
-      submittedBy: "Tarryn M.",
-    },
-    {
-      id: "REQ-00123",
-      period: "Jan 2026",
-      total: 298100.0,
-      status: "Completed",
-      submittedBy: "Tarryn M.",
-    },
-    {
-      id: "REQ-00122",
-      period: "Jan 2026",
-      total: 450500.75,
-      status: "Completed",
-      submittedBy: "Zukiswa N.",
-    },
-    {
-      id: "REQ-00121",
-      period: "Dec 2025",
-      total: 210300.0,
-      status: "Queries Raised",
-      submittedBy: "Tarryn M.",
-    },
-    {
-      id: "REQ-00120",
-      period: "Nov 2025",
-      total: 180450.0,
-      status: "Completed",
-      submittedBy: "Tarryn M.",
-    }
-  ];
   
   const fulfillmentSummary = useMemo(() => fulfillmentItems.reduce((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
@@ -182,7 +146,7 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {approvals.slice(0, 5).map((req) => (
+                {approvalsData.slice(0, 5).map((req) => (
                   <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push('/approvals')}>
                     <TableCell className="font-medium">
                       <Link href="/approvals" className="hover:underline text-primary">{req.id}</Link>
