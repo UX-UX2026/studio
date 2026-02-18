@@ -13,7 +13,7 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import Link from "next/link";
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 const getBreadcrumbItems = (pathname: string) => {
   const segments = pathname.split("/").filter(Boolean);
@@ -35,6 +35,15 @@ export function AppHeader() {
   const { toggleSidebar, isMobile } = useSidebar();
   const pathname = usePathname();
   const breadcrumbItems = getBreadcrumbItems(pathname);
+  const [currentDate, setCurrentDate] = useState("");
+
+  useEffect(() => {
+    setCurrentDate(
+      new Date().toLocaleDateString("en-ZA", {
+        year: 'numeric', month: 'long', day: 'numeric' 
+      })
+    );
+  }, []);
 
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-card px-4 md:px-8">
@@ -68,11 +77,9 @@ export function AppHeader() {
       </div>
 
       <div className="flex items-center space-x-4">
-        <span className="text-sm font-medium text-muted-foreground hidden md:inline">
-          {new Date().toLocaleDateString("en-ZA", {
-            year: 'numeric', month: 'long', day: 'numeric' 
-          })}
-        </span>
+        {currentDate && <span className="text-sm font-medium text-muted-foreground hidden md:inline">
+          {currentDate}
+        </span>}
         <div className="h-8 w-px bg-border hidden md:inline"></div>
         <Button variant="ghost" size="icon">
           <Bell className="h-5 w-5" />
