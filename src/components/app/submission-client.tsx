@@ -28,6 +28,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
+import { Label } from "@/components/ui/label";
+import { mockDepartments } from "@/lib/departments-mock-data";
 
 
 type Item = {
@@ -75,9 +77,16 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
+const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const currentYear = new Date().getFullYear();
+const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock data year format
+
+
 export function SubmissionClient() {
   const [items, setItems] = useState<Item[]>(initialItems);
-  const [selectedMonths, setSelectedMonths] = useState(["Feb"]);
+  const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
+  const [selectedDepartment, setSelectedDepartment] = useState(mockDepartments.find(d => d.name === 'ICT')?.id || mockDepartments[0].id);
+
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
@@ -226,11 +235,32 @@ export function SubmissionClient() {
             accept=".csv"
             onChange={handleFileChange}
         />
-      <div className="flex flex-col justify-between gap-4 pb-6 border-b md:flex-row md:items-end">
-        <div className="space-y-4">
-           {/* Placeholder for month/department selection */}
+      <div className="flex flex-col justify-between gap-4 pb-6 border-b md:flex-row md:items-center">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+            <div className="grid w-full md:max-w-xs items-center gap-1.5">
+                <Label htmlFor="period">Procurement Period</Label>
+                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                    <SelectTrigger id="period">
+                        <SelectValue placeholder="Select period" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {periods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="grid w-full md:max-w-xs items-center gap-1.5">
+                <Label htmlFor="department">Department</Label>
+                 <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                    <SelectTrigger id="department">
+                        <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {mockDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                    </SelectContent>
+                </Select>
+            </div>
         </div>
-        <div className="p-4 text-right rounded-lg bg-primary/10 border-primary/20 border">
+        <div className="p-4 text-right rounded-lg bg-primary/10 border-primary/20 border shrink-0">
             <p className="text-xs font-bold uppercase text-primary">Estimated Period Total</p>
             <p className="text-2xl font-black text-primary">{formatCurrency(total)}</p>
         </div>
