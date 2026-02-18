@@ -27,10 +27,11 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 
 
 type Item = {
-  id: number;
+  id: number | string;
   type: "Recurring" | "One-Off";
   description: string;
   brand: string;
@@ -39,34 +40,22 @@ type Item = {
   unitPrice: number;
 };
 
+// Map recurring items to the submission item format
+const recurringSubmissionItems: Item[] = recurringItems
+  .filter(item => item.active)
+  .map(item => ({
+    id: item.id,
+    type: "Recurring",
+    description: item.name,
+    brand: item.name.split(" ")[0], // Simple brand extraction
+    qty: 1,
+    category: item.category,
+    unitPrice: item.amount,
+  }));
+
 const initialItems: Item[] = [
-  {
-    id: 1,
-    type: "Recurring",
-    description: "29 x Dell Vostro 5630 laptop - Rentworks",
-    brand: "Dell",
-    qty: 1,
-    category: "Operational Lease/Rental - SA",
-    unitPrice: 19197.02,
-  },
-  {
-    id: 2,
-    type: "Recurring",
-    description: "DataCentrix MSP Support",
-    brand: "DataCentrix",
-    qty: 1,
-    category: "Tech Support - SA",
-    unitPrice: 48793.5,
-  },
-  {
-    id: 3,
-    type: "One-Off",
-    description: "Cisco Catalyst Router",
-    brand: "Cisco",
-    qty: 1,
-    category: "ICT Maintenance - SA",
-    unitPrice: 33677,
-  },
+    ...recurringSubmissionItems,
+    ...oneOffSubmissionItems
 ];
 
 const categories = [
@@ -97,7 +86,7 @@ export function SubmissionClient() {
     return items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
   }, [items]);
 
-  const handleItemChange = (id: number, field: keyof Item, value: any) => {
+  const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
       prevItems.map((item) =>
         item.id === id ? { ...item, [field]: value } : item
@@ -118,11 +107,11 @@ export function SubmissionClient() {
     setItems([...items, newItem]);
   };
 
-  const handleRemoveItem = (id: number) => {
+  const handleRemoveItem = (id: number | string) => {
     setItems(items.filter((item) => item.id !== id));
   };
   
-  const handleGetSuggestion = async (description: string, itemId: number) => {
+  const handleGetSuggestion = async (description: string, itemId: number | string) => {
     if (!description) {
       toast({
         variant: "destructive",
@@ -240,7 +229,7 @@ export function SubmissionClient() {
                                   key={suggestion}
                                   value={suggestion}
                                   onSelect={(currentValue) => {
-                                      handleItemChange(item.id, "category", currentValue)
+                                      handleItemChange(item.id, "category", currentValue === item.category ? "" : currentValue)
                                   }}
                                 >
                                   {suggestion}
