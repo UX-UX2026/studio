@@ -77,49 +77,51 @@ export default function ProcurementSummaryPage() {
             <CardDescription>Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</CardDescription>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[300px]">Item</TableHead>
-                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                        <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
-                        <TableHead className="text-right">Procurement vs Forecast</TableHead>
-                        <TableHead>Comments</TableHead>
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[300px]">Item</TableHead>
+                            <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                            <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
+                            <TableHead className="text-right">Procurement vs Forecast</TableHead>
+                            <TableHead>Comments</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {cashExpenses.map((item, index) => {
+                            const vsForecast = item.procurement - item.forecast;
+                            const isOverBudget = vsForecast > 0;
+                            return (
+                                <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10" : ""}>
+                                    <TableCell className="font-medium">{item.item}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
+                                    <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
+                                        {formatCurrency(vsForecast)}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input 
+                                            value={item.comments} 
+                                            onChange={(e) => handleCashCommentChange(index, e.target.value)}
+                                            className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                        />
+                                    </TableCell>
+                                </TableRow>
+                            )
+                        })}
+                    </TableBody>
+                    <TableRow className="font-bold bg-muted/50">
+                        <TableHead>Subtotal cash expenses</TableHead>
+                        <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
+                        <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
+                        <TableHead className={`text-right font-mono ${subtotalVsForecast > 0 ? 'text-red-500' : ''}`}>
+                            {formatCurrency(subtotalVsForecast)}
+                        </TableHead>
+                        <TableHead></TableHead>
                     </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {cashExpenses.map((item, index) => {
-                        const vsForecast = item.procurement - item.forecast;
-                        const isOverBudget = vsForecast > 0;
-                        return (
-                            <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10" : ""}>
-                                <TableCell className="font-medium">{item.item}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
-                                <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
-                                    {formatCurrency(vsForecast)}
-                                </TableCell>
-                                <TableCell>
-                                    <Input 
-                                        value={item.comments} 
-                                        onChange={(e) => handleCashCommentChange(index, e.target.value)}
-                                        className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    />
-                                </TableCell>
-                            </TableRow>
-                        )
-                    })}
-                </TableBody>
-                <TableRow className="font-bold bg-muted/50">
-                    <TableHead>Subtotal cash expenses</TableHead>
-                    <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
-                    <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
-                    <TableHead className={`text-right font-mono ${subtotalVsForecast > 0 ? 'text-red-500' : ''}`}>
-                        {formatCurrency(subtotalVsForecast)}
-                    </TableHead>
-                    <TableHead></TableHead>
-                </TableRow>
-            </Table>
+                </Table>
+            </div>
         </CardContent>
        </Card>
 
@@ -129,43 +131,48 @@ export default function ProcurementSummaryPage() {
             <CardDescription>Capital expenditure summary including forecasts and budget comparisons.</CardDescription>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-[250px]">Item</TableHead>
-                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                        <TableHead className="text-right">July Forecast</TableHead>
-                        <TableHead className="text-right">Year Total</TableHead>
-                        <TableHead className="text-right">Act+Forecast vs Budget YR</TableHead>
-                        <TableHead>Comments</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {capital.map((item, index) => (
-                        <TableRow key={item.item}>
-                            <TableCell className="font-medium">{item.item}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
-                            <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                {formatPercentage(item.vsBudget)}
-                            </TableCell>
-                            <TableCell>
-                                <Input 
-                                    value={item.comments} 
-                                    onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
-                                    className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                                />
-                            </TableCell>
+            <div className="overflow-x-auto">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[250px]">Item</TableHead>
+                            <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                            <TableHead className="text-right">July Forecast</TableHead>
+                            <TableHead className="text-right">Year Total</TableHead>
+                            <TableHead className="text-right">Multiplier</TableHead>
+                            <TableHead className="text-right">Act+F vs Budget</TableHead>
+                            <TableHead className="text-right">Act+F vs Budget YR</TableHead>
+                            <TableHead className="text-right">vs Budget YR %</TableHead>
+                            <TableHead>Comments</TableHead>
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {capital.map((item, index) => (
+                            <TableRow key={item.item}>
+                                <TableCell className="font-medium">{item.item}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
+                                <TableCell className="text-right font-mono">{item.yearTotalMultiplier?.toFixed(4) ?? ''}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudget)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudgetYR)}</TableCell>
+                                <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                    {formatPercentage(item.vsBudget)}
+                                </TableCell>
+                                <TableCell>
+                                    <Input 
+                                        value={item.comments} 
+                                        onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
+                                        className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    />
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
         </CardContent>
        </Card>
     </div>
   );
 }
-
-
-
