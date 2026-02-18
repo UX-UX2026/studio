@@ -3,9 +3,12 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
+import React, { useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -19,6 +22,9 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
     const router = useRouter();
     const { toast } = useToast();
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+
 
     const handleGoogleSignIn = async () => {
         const auth = getAuth();
@@ -33,6 +39,50 @@ export default function LoginPage() {
                 title: "Login Failed",
                 description: error.message,
             });
+        }
+    };
+
+    const handleAdminSignIn = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (username.toLowerCase() !== 'admin') {
+            toast({
+                variant: "destructive",
+                title: "Login Failed",
+                description: "Invalid admin username.",
+            });
+            return;
+        }
+
+        if (password !== 'admin') {
+            toast({
+                variant: "destructive",
+                title: "Login Failed",
+                description: "Invalid password.",
+            });
+            return;
+        }
+
+        const auth = getAuth();
+        const adminEmail = "admin@procurportal.com"; // Hardcoded email for the admin user
+
+        try {
+            await signInWithEmailAndPassword(auth, adminEmail, password);
+            router.push('/');
+        } catch (error: any) {
+            console.error("Admin authentication error:", error);
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+                 toast({
+                    variant: "destructive",
+                    title: "Admin Login Failed",
+                    description: "Invalid credentials. Ensure the admin user is set up correctly in Firebase Auth.",
+                });
+            } else {
+                toast({
+                    variant: "destructive",
+                    title: "Admin Login Failed",
+                    description: error.message,
+                });
+            }
         }
     };
 
@@ -53,6 +103,44 @@ export default function LoginPage() {
                             <GoogleIcon className="mr-2"/>
                             Login with Google
                         </Button>
+                        <div className="relative">
+                          <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
+                          </div>
+                          <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">
+                              Or as an Administrator
+                            </span>
+                          </div>
+                        </div>
+
+                        <form onSubmit={handleAdminSignIn} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="username">Admin Username</Label>
+                                <Input
+                                    id="username"
+                                    type="text"
+                                    placeholder="admin"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="password">Password</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    placeholder="••••••••"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <Button type="submit" className="w-full h-12 text-base">
+                                Login as Admin
+                            </Button>
+                        </form>
                         <p className="px-8 text-center text-xs text-muted-foreground">
                             By clicking continue, you agree to our{" "}
                             <Link href="#" className="underline underline-offset-4 hover:text-primary">
