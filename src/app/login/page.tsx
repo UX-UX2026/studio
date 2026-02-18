@@ -29,7 +29,7 @@ export default function LoginPage() {
     
     const [email, setEmail] = useState('admin@procurportal.com');
     const [password, setPassword] = useState('admin');
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState<'google' | 'admin' | null>(null);
 
     useEffect(() => {
       if (!userLoading && user) {
@@ -38,7 +38,7 @@ export default function LoginPage() {
     }, [user, userLoading, router]);
 
     const handleGoogleSignIn = async () => {
-        setIsLoading(true);
+        setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
@@ -47,7 +47,8 @@ export default function LoginPage() {
             console.error("Google authentication error:", error);
             let description = error.message;
             if (error.code === 'auth/unauthorized-domain') {
-                description = "This domain is not authorized for Google Sign-In. Go to your Firebase project's Authentication settings, and under the 'Sign-in method' tab, add this app's domain to the list of 'Authorized domains'. Ensure the domain, including the port, exactly matches the one in your browser's address bar.";
+                const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+                description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
             }
             toast({
                 variant: "destructive",
@@ -55,13 +56,13 @@ export default function LoginPage() {
                 description: description,
             });
         } finally {
-            setIsLoading(false);
+            setIsLoading(null);
         }
     };
 
     const handleAdminSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
+        setIsLoading('admin');
         try {
             await signInWithEmailAndPassword(auth, email, password);
             // The useEffect will handle the redirect
@@ -94,7 +95,7 @@ export default function LoginPage() {
                 description: description,
             });
         } finally {
-            setIsLoading(false);
+            setIsLoading(null);
         }
     };
 
@@ -119,8 +120,8 @@ export default function LoginPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
-                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
+                             {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Login with Google
                         </Button>
                         <div className="relative">
@@ -144,7 +145,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    disabled={isLoading}
+                                    disabled={!!isLoading}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -156,11 +157,11 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    disabled={isLoading}
+                                    disabled={!!isLoading}
                                 />
                             </div>
-                            <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
-                                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
+                                 {isLoading === 'admin' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Login as Admin
                             </Button>
                         </form>
