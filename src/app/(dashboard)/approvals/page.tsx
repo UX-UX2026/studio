@@ -43,6 +43,25 @@ export default function ApprovalsPage() {
 
     const activeRequest = useMemo(() => approvalsData.find((req) => req.id === selectedRequestId), [selectedRequestId]);
 
+    const approvalSummary = useMemo(() => {
+        const pending = approvalsData.filter(req => req.status.startsWith('Pending'));
+        const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
+        const byDept = pending.reduce((acc, req) => {
+            if (!acc[req.department]) {
+                acc[req.department] = { count: 0, total: 0 };
+            }
+            acc[req.department].count++;
+            acc[req.department].total += req.total;
+            return acc;
+        }, {} as Record<string, { count: number, total: number }>);
+        
+        return {
+            pendingCount: pending.length,
+            totalValue,
+            byDept: Object.entries(byDept).sort((a, b) => b[1].total - a[1].total),
+        }
+    }, []);
+
     useEffect(() => {
       if (!loading && (!user || (role !== 'Executive' && role !== 'Administrator'))) {
         router.push('/');
@@ -167,33 +186,69 @@ export default function ApprovalsPage() {
                 </Card>
             )}
         </div>
-        <div className="lg:col-span-1 space-y-4">
-            <h3 className="text-lg font-semibold">All Requests</h3>
-             <div className="space-y-2 max-h-[calc(100vh-12rem)] overflow-y-auto pr-2">
-                {approvalsData.map(req => (
-                    <Card 
-                        key={req.id} 
-                        className={cn("cursor-pointer transition-colors", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
-                        onClick={() => setSelectedRequestId(req.id)}
-                    >
-                        <CardContent className="p-3">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <p className="font-semibold">{req.id}</p>
-                                    <p className="text-sm text-muted-foreground font-medium">{req.department}</p>
+        <div className="lg:col-span-1 space-y-6">
+             <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle>Approvals Overview</CardTitle>
+                    <CardDescription>Summary of requests awaiting action.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Pending Requests</span>
+                            <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Total Value</span>
+                            <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                            <h4 className="text-sm font-medium">By Department</h4>
+                            {approvalSummary.byDept.length > 0 ? (
+                                <div className="space-y-1 text-sm text-muted-foreground">
+                                    {approvalSummary.byDept.map(([dept, data]) => (
+                                        <div key={dept} className="flex justify-between">
+                                            <span>{dept}</span>
+                                            <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
+                                        </div>
+                                    ))}
                                 </div>
-                                {getStatusBadge(req.status)}
-                            </div>
-                            <div className="flex justify-between items-end mt-2">
-                                <div>
-                                    <p className="text-xs text-muted-foreground">{req.period}</p>
-                                    <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+                <h3 className="text-lg font-semibold">All Requests</h3>
+                <div className="space-y-2 max-h-[calc(100vh-28rem)] overflow-y-auto pr-2">
+                    {approvalsData.map(req => (
+                        <Card 
+                            key={req.id} 
+                            className={cn("cursor-pointer transition-colors", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
+                            onClick={() => setSelectedRequestId(req.id)}
+                        >
+                            <CardContent className="p-3">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <p className="font-semibold">{req.id}</p>
+                                        <p className="text-sm text-muted-foreground font-medium">{req.department}</p>
+                                    </div>
+                                    {getStatusBadge(req.status)}
                                 </div>
-                                <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
-                            </div>
-                        </CardContent>
-                    </Card>
-                ))}
+                                <div className="flex justify-between items-end mt-2">
+                                    <div>
+                                        <p className="text-xs text-muted-foreground">{req.period}</p>
+                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
             </div>
         </div>
     </div>
