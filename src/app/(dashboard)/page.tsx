@@ -15,44 +15,49 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import {
-  CheckCircle2,
-  Clock,
-  Circle,
-  Loader,
   TrendingUp,
   TrendingDown,
 } from "lucide-react";
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 
 export default function DashboardPage() {
-  const periods = [
+  const approvals = [
     {
-      period: "Jan 2026",
-      submissionDate: "27/12/2025",
-      executiveReview: "Signed Off",
-      procurementAck: "Acknowledged",
-      value: 298100.0,
-    },
-    {
+      id: "REQ-00124",
       period: "Feb 2026",
-      submissionDate: "27/01/2026",
-      executiveReview: "Pending",
-      procurementAck: "Waiting",
-      value: 132178.0,
+      total: 132178.0,
+      status: "Pending Executive",
+      submittedBy: "Tarryn M.",
     },
     {
-      period: "Mar 2026",
-      submissionDate: "26/02/2026",
-      executiveReview: "Approved",
-      procurementAck: "Acknowledged",
-      value: 450500.75,
+      id: "REQ-00123",
+      period: "Jan 2026",
+      total: 298100.0,
+      status: "Completed",
+      submittedBy: "Tarryn M.",
     },
     {
-      period: "Apr 2026",
-      submissionDate: "28/03/2026",
-      executiveReview: "Queries Raised",
-      procurementAck: "Waiting",
-      value: 210300.0,
+      id: "REQ-00122",
+      period: "Jan 2026",
+      total: 450500.75,
+      status: "Completed",
+      submittedBy: "Zukiswa N.",
     },
+    {
+      id: "REQ-00121",
+      period: "Dec 2025",
+      total: 210300.0,
+      status: "Queries Raised",
+      submittedBy: "Tarryn M.",
+    },
+    {
+      id: "REQ-00120",
+      period: "Nov 2025",
+      total: 180450.0,
+      status: "Completed",
+      submittedBy: "Tarryn M.",
+    }
   ];
 
   const formatCurrency = (amount: number) => {
@@ -62,22 +67,14 @@ export default function DashboardPage() {
     }).format(amount);
   };
 
-  const StatusIcon = ({ status }: { status: string }) => {
-    switch (status) {
-      case "Signed Off":
-      case "Approved":
-      case "Acknowledged":
-        return <CheckCircle2 className="mr-2 h-4 w-4 text-green-500" />;
-      case "Pending":
-        return <Loader className="mr-2 h-4 w-4 animate-spin text-orange-400" />;
-      case "Waiting":
-        return <Circle className="mr-2 h-4 w-4 text-slate-300" />;
-      case "Queries Raised":
-        return <Clock className="mr-2 h-4 w-4 text-yellow-500" />;
-      default:
-        return null;
+    const getStatusBadge = (status: string) => {
+        switch (status) {
+            case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
+            case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
+            case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+            default: return <Badge variant="secondary">{status}</Badge>
+        }
     }
-  };
 
   return (
     <div className="space-y-6">
@@ -128,39 +125,40 @@ export default function DashboardPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Process Tracker</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Tracking department progress across procurement periods.
-          </p>
+        <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Recent Procurement Requests</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                A summary of recent requests and their current status.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/approvals">View All Requests</Link>
+            </Button>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Request ID</TableHead>
                   <TableHead>Period</TableHead>
-                  <TableHead>Submission Date</TableHead>
-                  <TableHead>Executive Review</TableHead>
-                  <TableHead>Procurement Ack.</TableHead>
+                  <TableHead>Submitted By</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="text-right">Value</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {periods.map((p) => (
-                  <TableRow key={p.period}>
-                    <TableCell className="font-medium">{p.period}</TableCell>
-                    <TableCell>{p.submissionDate}</TableCell>
-                    <TableCell className="flex items-center">
-                      <StatusIcon status={p.executiveReview} />
-                      {p.executiveReview}
+                {approvals.slice(0, 5).map((req) => (
+                  <TableRow key={req.id} className="cursor-pointer" onClick={() => window.location.href='/approvals'}>
+                    <TableCell className="font-medium">
+                      <Link href="/approvals" className="hover:underline text-primary">{req.id}</Link>
                     </TableCell>
-                    <TableCell className="flex items-center">
-                      <StatusIcon status={p.procurementAck} />
-                      {p.procurementAck}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(p.value)}
+                    <TableCell>{req.period}</TableCell>
+                    <TableCell>{req.submittedBy}</TableCell>
+                    <TableCell>{getStatusBadge(req.status)}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatCurrency(req.total)}
                     </TableCell>
                   </TableRow>
                 ))}
