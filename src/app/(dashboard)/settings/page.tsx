@@ -42,9 +42,11 @@ export default function SettingsPage() {
                      <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Approval Workflow</h3>
                         <p className="text-sm text-muted-foreground">
-                            Define the stages and order for procurement request approvals. This feature is a placeholder and requires backend development to become functional.
+                            Define the stages, roles, and permissions for the procurement approval process.
                         </p>
-                        <Button disabled>Customize Workflow</Button>
+                        <Button asChild>
+                           <Link href="/settings/workflow">Manage Workflows</Link>
+                        </Button>
                     </div>
                      <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Departments</h3>

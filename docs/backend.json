@@ -103,6 +103,66 @@
       "required": [
         "name"
       ]
+    },
+    "workflow": {
+      "title": "Approval Workflow",
+      "description": "Defines the stages and permissions for the procurement approval process.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the workflow."
+        },
+        "stages": {
+          "type": "array",
+          "description": "An ordered list of stages in the workflow.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The name of the stage (e.g., 'Manager Review')."
+              },
+              "role": {
+                "type": "string",
+                "description": "The user role responsible for this stage.",
+                "enum": [
+                  "Administrator",
+                  "Manager",
+                  "Procurement Officer",
+                  "Executive"
+                ]
+              },
+              "permissions": {
+                "type": "array",
+                "description": "A list of actions the user can perform at this stage.",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "capture",
+                    "submit",
+                    "review",
+                    "comment",
+                    "approve",
+                    "lock",
+                    "process",
+                    "monitor"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "name",
+              "role",
+              "permissions"
+            ]
+          }
+        }
+      },
+      "required": [
+        "name",
+        "stages"
+      ]
     }
   },
   "auth": {
@@ -141,6 +201,12 @@
         "$ref": "#/entities/procurementRequest"
       },
       "description": "Collection of all procurement requests."
+    },
+    "/workflows/{workflowId}": {
+      "schema": {
+        "$ref": "#/entities/workflow"
+      },
+      "description": "Stores defined approval workflows."
     }
   }
 }
