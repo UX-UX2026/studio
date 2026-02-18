@@ -1,3 +1,9 @@
+'use client';
+
+import { useUser } from "@/firebase/auth/use-user";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Loader } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -52,8 +58,25 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function ApprovalsPage() {
+    const { user, role, loading } = useUser();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (!loading && (!user || (role !== 'Executive' && role !== 'Administrator'))) {
+        router.push('/');
+      }
+    }, [user, role, loading, router]);
+    
     const activeRequest = approvals[0];
     const userAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-1');
+
+    if (loading || !user || (role !== 'Executive' && role !== 'Administrator')) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+                <Loader className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">

@@ -4,9 +4,11 @@ import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth } from '../provider';
 
+export type UserRole = "Administrator" | "Manager" | "Procurement Officer" | "Executive" | null;
+
 interface UserState {
   user: User | null;
-  isAdmin: boolean;
+  role: UserRole;
   loading: boolean;
 }
 
@@ -14,7 +16,7 @@ export function useUser(): UserState {
   const auth = useAuth();
   const [userState, setUserState] = useState<UserState>({
     user: null,
-    isAdmin: false,
+    role: null,
     loading: true,
   });
 
@@ -22,14 +24,20 @@ export function useUser(): UserState {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
-        const isAdmin = tokenResult.claims.admin === true || user.email === 'admin@procurportal.com';
+        let role: UserRole = (tokenResult.claims.role as UserRole) || null;
+        
+        // Fallback for default admin user to have Administrator role
+        if (user.email === 'admin@procurportal.com' && !role) {
+            role = 'Administrator';
+        }
+
         setUserState({
           user,
-          isAdmin: isAdmin,
+          role,
           loading: false,
         });
       } else {
-        setUserState({ user: null, isAdmin: false, loading: false });
+        setUserState({ user: null, role: null, loading: false });
       }
     });
 

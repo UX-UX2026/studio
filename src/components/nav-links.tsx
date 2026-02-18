@@ -1,38 +1,44 @@
-"use client";
+'use client';
 
-import { usePathname } from "next/navigation";
+import { usePathname } from 'next/navigation';
 import {
   LayoutGrid,
   FileText,
   Repeat,
   PenLine,
   ClipboardCheck,
-  Settings,
-} from "lucide-react";
+  Users,
+} from 'lucide-react';
 import {
   SidebarNav,
   SidebarNavLink,
   SidebarNavMain,
-} from "@/components/app/sidebar";
-import Link from "next/link";
+} from '@/components/app/sidebar';
+import Link from 'next/link';
+import { type UserRole } from '@/firebase/auth/use-user';
 
-const links = [
-  { href: "/", label: "Overview", icon: LayoutGrid },
-  { href: "/submission", label: "Period Submission", icon: FileText },
-  { href: "/recurring", label: "Recurring Items", icon: Repeat },
-  { href: "/approvals", label: "Approvals", icon: PenLine },
-  { href: "/fulfillment", label: "Fulfillment", icon: ClipboardCheck },
+const allLinks = [
+  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
+  { href: '/submission', label: 'Period Submission', icon: FileText, roles: ['Administrator', 'Manager'] },
+  { href: '/recurring', label: 'Recurring Items', icon: Repeat, roles: ['Administrator', 'Procurement Officer'] },
+  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive'] },
+  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer'] },
+  { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
 ];
 
-export function NavLinks() {
+export function NavLinks({ role }: { role: UserRole }) {
   const pathname = usePathname();
+
+  const visibleLinks = role ? allLinks.filter(link => link.roles.includes(role)) : [];
 
   return (
     <SidebarNav>
       <SidebarNavMain>
-        {links.map((link) => {
+        {visibleLinks.map((link) => {
           const isActive =
-            link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+            link.href === '/'
+              ? pathname === '/'
+              : pathname.startsWith(link.href);
           return (
             <SidebarNavLink
               key={link.href}

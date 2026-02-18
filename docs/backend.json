@@ -57,9 +57,15 @@
       "password"
     ],
     "claims": {
-      "admin": {
-        "type": "boolean",
-        "description": "Indicates if the user has administrator privileges."
+      "role": {
+        "type": "string",
+        "description": "The user's role in the application, which determines their permissions.",
+        "enum": [
+          "Administrator",
+          "Manager",
+          "Procurement Officer",
+          "Executive"
+        ]
       }
     }
   },

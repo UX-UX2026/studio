@@ -19,7 +19,7 @@ import { Loader } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
-  const { user, loading, isAdmin } = useUser();
+  const { user, loading, role } = useUser();
   const router = useRouter();
 
   useEffect(() => {
@@ -49,7 +49,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </Link>
           </SidebarHeader>
           <SidebarBody>
-            <NavLinks />
+            <NavLinks role={role} />
           </SidebarBody>
           <SidebarFooter>
             <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
@@ -74,9 +74,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 <p className="truncate text-sm font-semibold text-sidebar-foreground">
                   {user.displayName || user.email}
                 </p>
-                {isAdmin && (
+                {role && (
                   <p className="truncate text-xs text-sidebar-foreground/80">
-                    Administrator
+                    {role}
                   </p>
                 )}
               </div>
