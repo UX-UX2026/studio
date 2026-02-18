@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { AppHeader } from "@/components/app-header";
 import { NavLinks } from "@/components/nav-links";
 import {
@@ -22,17 +22,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, loading, isAdmin } = useUser();
   const router = useRouter();
 
-  if (loading) {
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/login');
+    }
+  }, [loading, user, router]);
+
+  if (loading || !user) {
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader className="h-8 w-8 animate-spin" />
       </div>
     );
-  }
-
-  if (!user) {
-    router.push('/login');
-    return null;
   }
 
   return (
