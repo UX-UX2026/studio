@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Card,
   CardContent,
@@ -20,8 +22,10 @@ import {
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { useRouter } from "next/navigation";
 
 export default function DashboardPage() {
+  const router = useRouter();
   const approvals = [
     {
       id: "REQ-00124",
@@ -150,7 +154,7 @@ export default function DashboardPage() {
               </TableHeader>
               <TableBody>
                 {approvals.slice(0, 5).map((req) => (
-                  <TableRow key={req.id} className="cursor-pointer" onClick={() => window.location.href='/approvals'}>
+                  <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push('/approvals')}>
                     <TableCell className="font-medium">
                       <Link href="/approvals" className="hover:underline text-primary">{req.id}</Link>
                     </TableCell>
