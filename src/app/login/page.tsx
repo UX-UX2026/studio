@@ -3,12 +3,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/firebase";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -24,10 +25,10 @@ export default function LoginPage() {
     const { toast } = useToast();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const auth = useAuth();
 
 
     const handleGoogleSignIn = async () => {
-        const auth = getAuth();
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
@@ -44,18 +45,17 @@ export default function LoginPage() {
 
     const handleAdminSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        const auth = getAuth();
 
         try {
             await signInWithEmailAndPassword(auth, email, password);
             router.push('/');
         } catch (error: any) {
             console.error("Admin authentication error:", error);
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password') {
+            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-api-key' || error.code === 'auth/configuration-not-found') {
                  toast({
                     variant: "destructive",
                     title: "Admin Login Failed",
-                    description: "Invalid credentials. Please check your email and password.",
+                    description: "Invalid credentials or configuration. Please check your email, password, and Firebase setup.",
                 });
             } else {
                 toast({
