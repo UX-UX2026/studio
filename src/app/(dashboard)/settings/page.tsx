@@ -57,6 +57,15 @@ export default function SettingsPage() {
                            <Link href="/settings/departments">Manage Departments</Link>
                         </Button>
                     </div>
+                     <div className="space-y-2">
+                        <h3 className="text-lg font-semibold">User Roles</h3>
+                        <p className="text-sm text-muted-foreground">
+                            Define and manage the roles and permissions for users in the application.
+                        </p>
+                        <Button asChild>
+                           <Link href="/settings/roles">Manage Roles</Link>
+                        </Button>
+                    </div>
                     <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Budget Integration</h3>
                         <p className="text-sm text-muted-foreground">

@@ -17,9 +17,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { mockRoles } from "@/lib/roles-mock-data";
 
 
-const allRoles: Exclude<UserRole, null>[] = ["Administrator", "Manager", "Procurement Officer", "Executive"];
+const allRoles = mockRoles;
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
     { id: 'submit', label: 'Submit for Review' },
@@ -169,7 +170,7 @@ export default function WorkflowPage() {
                                                 <SelectValue placeholder="Select a role" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {allRoles.map(r => r && <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                                {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>

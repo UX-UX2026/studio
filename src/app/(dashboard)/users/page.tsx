@@ -22,10 +22,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { mockUsers as initialMockUsers } from "@/lib/users-mock-data";
 import { mockDepartments } from "@/lib/departments-mock-data";
+import { mockRoles } from "@/lib/roles-mock-data";
 
 
 type MockUser = typeof initialMockUsers[0];
-const allRoles: Exclude<UserRole, null>[] = ["Administrator", "Manager", "Procurement Officer", "Executive"];
+const allRoles = mockRoles;
 const allDepartments = mockDepartments.map(d => d.name);
 
 export default function UsersPage() {
@@ -164,7 +165,7 @@ export default function UsersPage() {
                                                 <SelectValue placeholder="Assign role" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {allRoles.map(r => r && <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                                {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -217,7 +218,7 @@ export default function UsersPage() {
                                     <SelectValue placeholder="Assign a role" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {allRoles.map(r => r && <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                    {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

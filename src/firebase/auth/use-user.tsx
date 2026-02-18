@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth } from '../provider';
 
-export type UserRole = "Administrator" | "Manager" | "Procurement Officer" | "Executive" | null;
+export type UserRole = string | null;
 
 interface UserState {
   user: User | null;
