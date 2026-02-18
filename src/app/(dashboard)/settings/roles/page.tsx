@@ -18,14 +18,15 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mockRoles as initialMockRoles, type Role } from "@/lib/roles-mock-data";
+import { useRoles } from "@/lib/roles-provider";
+import type { Role } from "@/lib/roles-mock-data";
 
 
 export default function RolesPage() {
     const { user, role, loading } = useUser();
     const router = useRouter();
 
-    const [roles, setRoles] = useState<Role[]>(initialMockRoles);
+    const { roles, addRole, updateRole, deleteRole } = useRoles();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<Role | null>(null);
     
@@ -58,15 +59,11 @@ export default function RolesPage() {
     
     const handleSave = () => {
         if (!name) return;
-        const roleData: Role = {
-            id: editingRole?.id || `role-${Date.now()}`,
-            name,
-        };
 
         if (editingRole) {
-            setRoles(roles.map(d => d.id === roleData.id ? roleData : d));
+            updateRole({ ...editingRole, name });
         } else {
-            setRoles([...roles, roleData]);
+            addRole({ name });
         }
         setEditingRole(null);
         setIsDialogOpen(false);
@@ -78,7 +75,7 @@ export default function RolesPage() {
     };
     
     const handleDelete = (id: string) => {
-        setRoles(roles.filter(d => d.id !== id));
+        deleteRole(id);
     };
 
     const openAddDialog = () => {

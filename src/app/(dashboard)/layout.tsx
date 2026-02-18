@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
+import { RolesProvider } from "@/lib/roles-provider";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
@@ -110,7 +111,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <main className="flex-1 flex flex-col">
           <AppHeader />
           <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-background">
-            {children}
+            <RolesProvider>{children}</RolesProvider>
           </div>
         </main>
       </div>

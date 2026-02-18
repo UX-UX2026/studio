@@ -22,11 +22,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { mockUsers as initialMockUsers } from "@/lib/users-mock-data";
 import { mockDepartments } from "@/lib/departments-mock-data";
-import { mockRoles } from "@/lib/roles-mock-data";
+import { useRoles } from "@/lib/roles-provider";
 
 
 type MockUser = typeof initialMockUsers[0];
-const allRoles = mockRoles;
 const allDepartments = mockDepartments.map(d => d.name);
 
 export default function UsersPage() {
@@ -36,6 +35,8 @@ export default function UsersPage() {
     const [users, setUsers] = useState<MockUser[]>(initialMockUsers);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<MockUser | null>(null);
+
+    const { roles: allRoles } = useRoles();
 
     // Form state for dialog
     const [name, setName] = useState('');
@@ -62,12 +63,12 @@ export default function UsersPage() {
                 // Reset for new user
                 setName('');
                 setEmail('');
-                setUserRole('Manager');
+                setUserRole(allRoles.length > 0 ? allRoles[0].name as UserRole : 'Manager');
                 setDepartment(allDepartments[0] || '');
                 setAvatar('');
             }
         }
-    }, [editingUser, isDialogOpen]);
+    }, [editingUser, isDialogOpen, allRoles]);
 
     if (loading || !user || role !== 'Administrator') {
         return (

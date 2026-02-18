@@ -17,10 +17,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { mockRoles } from "@/lib/roles-mock-data";
+import { useRoles } from "@/lib/roles-provider";
 
 
-const allRoles = mockRoles;
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
     { id: 'submit', label: 'Submit for Review' },
@@ -50,6 +49,7 @@ export default function WorkflowPage() {
     const router = useRouter();
     const { toast } = useToast();
     const [workflow, setWorkflow] = useState<WorkflowStage[]>(initialWorkflow);
+    const { roles: allRoles } = useRoles();
 
     useEffect(() => {
         if (!loading && (!user || role !== 'Administrator')) {
