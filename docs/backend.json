@@ -68,12 +68,7 @@
         },
         "role": {
           "type": "string",
-          "enum": [
-            "Administrator",
-            "Manager",
-            "Procurement Officer",
-            "Executive"
-          ]
+          "description": "The user's role in the application, which determines their permissions."
         },
         "departmentId": {
           "type": "string",
@@ -125,13 +120,7 @@
               },
               "role": {
                 "type": "string",
-                "description": "The user role responsible for this stage.",
-                "enum": [
-                  "Administrator",
-                  "Manager",
-                  "Procurement Officer",
-                  "Executive"
-                ]
+                "description": "The user role responsible for this stage."
               },
               "permissions": {
                 "type": "array",
@@ -173,13 +162,7 @@
     "claims": {
       "role": {
         "type": "string",
-        "description": "The user's role in the application, which determines their permissions.",
-        "enum": [
-          "Administrator",
-          "Manager",
-          "Procurement Officer",
-          "Executive"
-        ]
+        "description": "The user's role in the application, which determines their permissions."
       }
     }
   },
