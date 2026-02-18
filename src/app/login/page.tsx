@@ -22,7 +22,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
     const router = useRouter();
     const { toast } = useToast();
-    const [username, setUsername] = useState('');
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
 
 
@@ -44,29 +44,10 @@ export default function LoginPage() {
 
     const handleAdminSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (username.toLowerCase() !== 'admin') {
-            toast({
-                variant: "destructive",
-                title: "Login Failed",
-                description: "Invalid admin username.",
-            });
-            return;
-        }
-
-        if (password !== 'admin') {
-            toast({
-                variant: "destructive",
-                title: "Login Failed",
-                description: "Invalid password.",
-            });
-            return;
-        }
-
         const auth = getAuth();
-        const adminEmail = "admin@procurportal.com"; // Hardcoded email for the admin user
 
         try {
-            await signInWithEmailAndPassword(auth, adminEmail, password);
+            await signInWithEmailAndPassword(auth, email, password);
             router.push('/');
         } catch (error: any) {
             console.error("Admin authentication error:", error);
@@ -74,7 +55,7 @@ export default function LoginPage() {
                  toast({
                     variant: "destructive",
                     title: "Admin Login Failed",
-                    description: "Invalid credentials. Ensure the admin user is set up correctly in Firebase Auth.",
+                    description: "Invalid credentials. Please check your email and password.",
                 });
             } else {
                 toast({
@@ -116,13 +97,13 @@ export default function LoginPage() {
 
                         <form onSubmit={handleAdminSignIn} className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="username">Admin Username</Label>
+                                <Label htmlFor="email">Admin Email</Label>
                                 <Input
-                                    id="username"
-                                    type="text"
-                                    placeholder="admin"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
+                                    id="email"
+                                    type="email"
+                                    placeholder="admin@procurportal.com"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
                                     required
                                 />
                             </div>
