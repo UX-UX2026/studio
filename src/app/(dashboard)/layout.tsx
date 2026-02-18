@@ -19,7 +19,7 @@ import { Loader } from "lucide-react";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
-  const { user, loading } = useUser();
+  const { user, loading, isAdmin } = useUser();
   const router = useRouter();
 
   if (loading) {
@@ -71,11 +71,13 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </Avatar>
               <div className="overflow-hidden">
                 <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                  {user.displayName}
+                  {user.displayName || user.email}
                 </p>
-                <p className="truncate text-xs text-sidebar-foreground/80">
-                  Administrator
-                </p>
+                {isAdmin && (
+                  <p className="truncate text-xs text-sidebar-foreground/80">
+                    Administrator
+                  </p>
+                )}
               </div>
             </div>
           </SidebarFooter>
