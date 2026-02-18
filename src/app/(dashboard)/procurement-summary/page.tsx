@@ -5,7 +5,6 @@ import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Loader } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
 import { Input } from "@/components/ui/input";
@@ -67,112 +66,111 @@ export default function ProcurementSummaryPage() {
     
     const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
     const subtotalForecast = cashExpenses.reduce((sum, item) => sum + item.forecast, 0);
-    const subtotalVsForecast = subtotalProcurement - subtotalForecast;
+    const subtotalVsForecast = subtotalForecast - subtotalProcurement;
 
   return (
-    <div className="space-y-8">
-       <Card>
-        <CardHeader>
-            <CardTitle>Procurement Line Items</CardTitle>
-            <CardDescription>Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="overflow-x-auto">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[300px]">Item</TableHead>
-                            <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                            <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
-                            <TableHead className="text-right">Procurement vs Forecast</TableHead>
-                            <TableHead>Comments</TableHead>
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+        <div className="mb-8">
+            <h1 className="text-2xl font-bold text-primary">Procurement Summary</h1>
+            <p className="text-lg text-muted-foreground">SupServ ADM</p>
+        </div>
+
+        <div className="space-y-12">
+            <div>
+                <h2 className="text-xl font-semibold mb-2">Procurement Line Items</h2>
+                <p className="text-sm text-muted-foreground mb-4">Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</p>
+                <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow className="bg-muted hover:bg-muted">
+                                <TableHead className="w-[300px]">Item</TableHead>
+                                <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                                <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
+                                <TableHead className="text-right">Procurement vs Forecast</TableHead>
+                                <TableHead>Comments</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {cashExpenses.map((item, index) => {
+                                const vsForecast = item.forecast - item.procurement;
+                                const isOverBudget = vsForecast < 0;
+                                return (
+                                    <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10 hover:bg-red-500/20" : ""}>
+                                        <TableCell className="font-medium">{item.item}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
+                                        <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
+                                            {formatCurrency(vsForecast)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input 
+                                                value={item.comments} 
+                                                onChange={(e) => handleCashCommentChange(index, e.target.value)}
+                                                className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                            />
+                                        </TableCell>
+                                    </TableRow>
+                                )
+                            })}
+                        </TableBody>
+                        <TableRow className="font-bold bg-muted/50">
+                            <TableHead>Subtotal cash expenses</TableHead>
+                            <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
+                            <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
+                            <TableHead className={`text-right font-mono ${subtotalVsForecast < 0 ? 'text-red-500' : ''}`}>
+                                {formatCurrency(subtotalVsForecast)}
+                            </TableHead>
+                            <TableHead></TableHead>
                         </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {cashExpenses.map((item, index) => {
-                            const vsForecast = item.procurement - item.forecast;
-                            const isOverBudget = vsForecast > 0;
-                            return (
-                                <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10" : ""}>
+                    </Table>
+                </div>
+            </div>
+
+            <div>
+                <h2 className="text-xl font-semibold mb-2">Capital</h2>
+                 <p className="text-sm text-muted-foreground mb-4">Capital expenditure summary including forecasts and budget comparisons.</p>
+                <div className="overflow-x-auto rounded-lg border">
+                    <Table>
+                        <TableHeader>
+                             <TableRow className="bg-muted hover:bg-muted">
+                                <TableHead className="w-[250px]">Item</TableHead>
+                                <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                                <TableHead className="text-right">July Forecast</TableHead>
+                                <TableHead className="text-right">Year Total</TableHead>
+                                <TableHead className="text-right">Multiplier</TableHead>
+                                <TableHead className="text-right">Act+F vs Budget</TableHead>
+                                <TableHead className="text-right">Act+F vs Budget YR</TableHead>
+                                <TableHead className="text-right">vs Budget YR %</TableHead>
+                                <TableHead>Comments</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {capital.map((item, index) => (
+                                <TableRow key={item.item}>
                                     <TableCell className="font-medium">{item.item}</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
-                                    <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
-                                        {formatCurrency(vsForecast)}
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
+                                    <TableCell className="text-right font-mono">{item.yearTotalMultiplier?.toFixed(4) ?? ''}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudget)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudgetYR)}</TableCell>
+                                    <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                        {formatPercentage(item.vsBudget)}
                                     </TableCell>
                                     <TableCell>
                                         <Input 
                                             value={item.comments} 
-                                            onChange={(e) => handleCashCommentChange(index, e.target.value)}
+                                            onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
                                             className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
                                         />
                                     </TableCell>
                                 </TableRow>
-                            )
-                        })}
-                    </TableBody>
-                    <TableRow className="font-bold bg-muted/50">
-                        <TableHead>Subtotal cash expenses</TableHead>
-                        <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
-                        <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
-                        <TableHead className={`text-right font-mono ${subtotalVsForecast > 0 ? 'text-red-500' : ''}`}>
-                            {formatCurrency(subtotalVsForecast)}
-                        </TableHead>
-                        <TableHead></TableHead>
-                    </TableRow>
-                </Table>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
             </div>
-        </CardContent>
-       </Card>
-
-       <Card>
-        <CardHeader>
-            <CardTitle>Capital</CardTitle>
-            <CardDescription>Capital expenditure summary including forecasts and budget comparisons.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="overflow-x-auto">
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-[250px]">Item</TableHead>
-                            <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                            <TableHead className="text-right">July Forecast</TableHead>
-                            <TableHead className="text-right">Year Total</TableHead>
-                            <TableHead className="text-right">Multiplier</TableHead>
-                            <TableHead className="text-right">Act+F vs Budget</TableHead>
-                            <TableHead className="text-right">Act+F vs Budget YR</TableHead>
-                            <TableHead className="text-right">vs Budget YR %</TableHead>
-                            <TableHead>Comments</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {capital.map((item, index) => (
-                            <TableRow key={item.item}>
-                                <TableCell className="font-medium">{item.item}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
-                                <TableCell className="text-right font-mono">{item.yearTotalMultiplier?.toFixed(4) ?? ''}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudget)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudgetYR)}</TableCell>
-                                <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                    {formatPercentage(item.vsBudget)}
-                                </TableCell>
-                                <TableCell>
-                                    <Input 
-                                        value={item.comments} 
-                                        onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
-                                        className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                                    />
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
-        </CardContent>
-       </Card>
+        </div>
     </div>
   );
 }
