@@ -45,10 +45,14 @@ export default function LoginPage() {
             // The useEffect will handle the redirect
         } catch (error: any) {
             console.error("Google authentication error:", error);
+            let description = error.message;
+            if (error.code === 'auth/unauthorized-domain') {
+                description = "This domain is not authorized for Google Sign-In. Go to your Firebase project's Authentication settings, and under the 'Sign-in method' tab, add this app's domain to the list of 'Authorized domains'. Ensure the domain, including the port, exactly matches the one in your browser's address bar.";
+            }
             toast({
                 variant: "destructive",
                 title: "Google Login Failed",
-                description: error.message,
+                description: description,
             });
         } finally {
             setIsLoading(false);
