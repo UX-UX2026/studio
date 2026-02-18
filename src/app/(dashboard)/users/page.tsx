@@ -2,8 +2,8 @@
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Loader, Shield, Plus, Trash2, Edit } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Loader, Shield, Plus, Trash2, Edit, Upload, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label";
 import { mockUsers as initialMockUsers } from "@/lib/users-mock-data";
 import { mockDepartments } from "@/lib/departments-mock-data";
 import { useRoles } from "@/lib/roles-provider";
+import { useToast } from "@/hooks/use-toast";
 
 
 type MockUser = typeof initialMockUsers[0];
@@ -44,6 +45,9 @@ export default function UsersPage() {
     const [userRole, setUserRole] = useState<UserRole>('Manager');
     const [department, setDepartment] = useState('');
     const [avatar, setAvatar] = useState('');
+    
+    const { toast } = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!loading && (!user || role !== 'Administrator')) {
@@ -117,9 +121,92 @@ export default function UsersPage() {
         );
     };
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleExport = () => {
+        if (users.length === 0) {
+            toast({ title: "No Data to Export", description: "There are no users to export." });
+            return;
+        }
+
+        const headers: (keyof MockUser)[] = ['id', 'name', 'email', 'role', 'department', 'avatar'];
+        const csvContent = [
+            headers.join(','),
+            ...users.map(user =>
+                headers.map(header => `"${(user as any)[header]}"`).join(',')
+            )
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute('download', 'users.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            try {
+                const rows = text.split('\n').filter(row => row.trim());
+                if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
+
+                const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                
+                const newUsers: MockUser[] = rows.slice(1).map(row => {
+                    const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                    let user = {} as Partial<MockUser>;
+                    headers.forEach((header, index) => {
+                        (user as any)[header] = values[index];
+                    });
+
+                    if (!user.name || !user.email || !user.role || !user.department) {
+                        throw new Error("CSV is missing required columns: name, email, role, department.");
+                    }
+
+                    return {
+                        id: user.id || `user-${Date.now()}-${Math.random()}`,
+                        name: user.name,
+                        email: user.email,
+                        role: user.role as any,
+                        department: user.department,
+                        avatar: user.avatar || `https://i.pravatar.cc/150?u=${user.email}`,
+                    };
+                });
+                
+                setUsers(prev => [...prev, ...newUsers]);
+
+                toast({ title: "Import Successful", description: `${newUsers.length} users were added.` });
+            } catch (error: any) {
+                console.error("CSV Parsing Error:", error);
+                toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+            } finally {
+                if (event.target) event.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
+
 
     return (
         <>
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".csv"
+                onChange={handleFileChange}
+            />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -133,7 +220,13 @@ export default function UsersPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-4 flex justify-end">
+                    <div className="mb-4 flex justify-end gap-2">
+                         <Button variant="outline" onClick={handleImportClick}>
+                            <Upload className="h-4 w-4 mr-2" /> Import
+                        </Button>
+                        <Button variant="outline" onClick={handleExport}>
+                            <Download className="h-4 w-4 mr-2" /> Export
+                        </Button>
                         <Button onClick={openAddDialog}>
                             <Plus className="h-4 w-4 mr-2" />
                             Add User

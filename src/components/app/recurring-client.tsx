@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LayoutGrid, List, Plus, Trash2 } from "lucide-react";
+import { LayoutGrid, List, Plus, Trash2, Upload, Download } from "lucide-react";
 import { Input } from "../ui/input";
+import { useToast } from "@/hooks/use-toast";
 
 type RecurringItem = {
     id: string;
@@ -28,6 +29,9 @@ const formatCurrency = (amount: number) => {
 export function RecurringClient({ items: initialItems }: { items: RecurringItem[] }) {
     const [items, setItems] = useState<RecurringItem[]>(initialItems);
     const [view, setView] = useState<'grid' | 'list'>('grid');
+    const { toast } = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
 
     const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
         setItems((prevItems) =>
@@ -55,14 +59,100 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
         setItems(items.filter((item) => item.id !== id));
     };
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleExport = () => {
+        if (items.length === 0) {
+            toast({ title: "No Data to Export", description: "There are no recurring items to export." });
+            return;
+        }
+
+        const headers: (keyof RecurringItem)[] = ['id', 'name', 'category', 'frequency', 'nextLoad', 'amount', 'active'];
+        const csvContent = [
+            headers.join(','),
+            ...items.map(item =>
+                headers.map(header => `"${(item as any)[header]}"`).join(',')
+            )
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute('download', 'recurring-items.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            try {
+                const rows = text.split('\n').filter(row => row.trim());
+                if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
+
+                const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                
+                const newItems: RecurringItem[] = rows.slice(1).map(row => {
+                    const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                    let item: any = {};
+                    headers.forEach((header, index) => {
+                        item[header] = values[index];
+                    });
+
+                    if (!item.name || !item.category || !item.amount) {
+                        throw new Error("CSV is missing required columns: name, category, amount.");
+                    }
+
+                    return {
+                        id: item.id || `rec-${Date.now()}-${Math.random()}`,
+                        name: item.name,
+                        category: item.category,
+                        frequency: item.frequency || 'Monthly',
+                        nextLoad: item.nextLoad || '',
+                        amount: parseFloat(item.amount) || 0,
+                        active: item.active === 'true',
+                    };
+                });
+                
+                setItems(prev => [...prev, ...newItems]);
+
+                toast({ title: "Import Successful", description: `${newItems.length} items were added.` });
+            } catch (error: any) {
+                console.error("CSV Parsing Error:", error);
+                toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+            } finally {
+                if (event.target) event.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
 
     return (
         <div>
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileChange} />
             <div className="flex justify-between items-center mb-4">
-                <Button onClick={handleAddItem} className="shadow-lg shadow-primary/20">
-                    <Plus className="h-4 w-4 mr-2"/>
-                    New Recurring Item
-                </Button>
+                <div className="flex items-center gap-2">
+                    <Button onClick={handleAddItem} className="shadow-lg shadow-primary/20">
+                        <Plus className="h-4 w-4 mr-2"/>
+                        New Recurring Item
+                    </Button>
+                     <Button variant="outline" onClick={handleImportClick}>
+                        <Upload className="h-4 w-4 mr-2" /> Import
+                    </Button>
+                    <Button variant="outline" onClick={handleExport}>
+                        <Download className="h-4 w-4 mr-2" /> Export
+                    </Button>
+                </div>
+
                 <div className="flex items-center gap-1 p-1 rounded-lg bg-muted">
                    <Button variant={view === 'grid' ? 'default' : 'ghost'} size="sm" onClick={() => setView('grid')} className="gap-2">
                         <LayoutGrid className="h-4 w-4"/>

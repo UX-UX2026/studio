@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Wand2 } from "lucide-react";
+import { Lock, Plus, Trash2, Wand2, Upload, Download } from "lucide-react";
 import {
   suggestProcurementCategory,
   SuggestProcurementCategoryOutput,
@@ -81,6 +81,7 @@ export function SubmissionClient() {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const total = useMemo(() => {
     return items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
@@ -136,9 +137,95 @@ export function SubmissionClient() {
       setIsLoadingAi(false);
     }
   };
+  
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleExport = () => {
+    if (items.length === 0) {
+        toast({ title: "No Data to Export", description: "There are no submission items to export." });
+        return;
+    }
+
+    const headers: (keyof Item)[] = ['id', 'type', 'description', 'brand', 'qty', 'category', 'unitPrice'];
+    const csvContent = [
+        headers.join(','),
+        ...items.map(item =>
+            headers.map(header => `"${(item as any)[header]}"`).join(',')
+        )
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.setAttribute('download', 'submission-items.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const text = e.target?.result as string;
+        try {
+            const rows = text.split('\n').filter(row => row.trim());
+            if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
+
+            const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+            
+            const newItems: Item[] = rows.slice(1).map(row => {
+                const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                let item: any = {};
+                headers.forEach((header, index) => {
+                    item[header] = values[index];
+                });
+
+                if (item.type === 'Recurring') return null; // Don't import recurring items
+
+                if (!item.description || !item.qty || !item.unitPrice) {
+                    throw new Error("CSV for one-off items is missing required columns: description, qty, unitPrice.");
+                }
+
+                return {
+                    id: item.id || Date.now() + Math.random(),
+                    type: "One-Off",
+                    description: item.description,
+                    brand: item.brand || '',
+                    qty: parseInt(item.qty, 10) || 1,
+                    category: item.category || '',
+                    unitPrice: parseFloat(item.unitPrice) || 0,
+                };
+            }).filter((item): item is Item => item !== null);
+            
+            setItems(prev => [...prev, ...newItems]);
+
+            toast({ title: "Import Successful", description: `${newItems.length} one-off items were added.` });
+        } catch (error: any) {
+            console.error("CSV Parsing Error:", error);
+            toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+        } finally {
+            if (event.target) event.target.value = '';
+        }
+    };
+    reader.readAsText(file);
+  };
 
   return (
     <div className="space-y-6">
+       <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept=".csv"
+            onChange={handleFileChange}
+        />
       <div className="flex flex-col justify-between gap-4 pb-6 border-b md:flex-row md:items-end">
         <div className="space-y-4">
            {/* Placeholder for month/department selection */}
@@ -274,10 +361,18 @@ export function SubmissionClient() {
       </div>
 
       <div className="flex items-center justify-between pt-4">
-        <Button variant="outline" onClick={handleAddItem}>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Manual Item
-        </Button>
+        <div className="flex gap-2">
+            <Button variant="outline" onClick={handleAddItem}>
+            <Plus className="w-4 h-4 mr-2" />
+            Add Manual Item
+            </Button>
+            <Button variant="outline" onClick={handleImportClick}>
+                <Upload className="h-4 w-4 mr-2" /> Import
+            </Button>
+            <Button variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+        </div>
         <div className="flex gap-3">
           <Button variant="ghost">Save as Draft</Button>
           <Button className="shadow-lg shadow-primary/20">Submit Period Request</Button>

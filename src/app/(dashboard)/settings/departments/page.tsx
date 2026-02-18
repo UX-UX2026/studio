@@ -2,8 +2,8 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Loader, Building, Plus, Trash2, Edit } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { Loader, Building, Plus, Trash2, Edit, Upload, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { mockDepartments as initialMockDepartments } from "@/lib/departments-mock-data";
 import { mockUsers } from "@/lib/users-mock-data";
+import { useToast } from "@/hooks/use-toast";
 
 type Department = {
     id: string;
@@ -50,6 +51,9 @@ export default function DepartmentsPage() {
     const [budget, setBudget] = useState(0);
 
     const managers = mockUsers.filter(u => u.role === 'Manager' || u.role === 'Administrator');
+    
+    const { toast } = useToast();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (!loading && (!user || role !== 'Administrator')) {
@@ -115,8 +119,90 @@ export default function DepartmentsPage() {
         return mockUsers.find(u => u.id === managerId)?.name || 'Unknown';
     }
 
+    const handleImportClick = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleExport = () => {
+        if (departments.length === 0) {
+            toast({ title: "No Data to Export", description: "There are no departments to export." });
+            return;
+        }
+
+        const headers: (keyof Department)[] = ['id', 'name', 'managerId', 'budget'];
+        const csvContent = [
+            headers.join(','),
+            ...departments.map(dept =>
+                headers.map(header => `"${(dept as any)[header]}"`).join(',')
+            )
+        ].join('\n');
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.href = url;
+        link.setAttribute('download', 'departments.csv');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
+
+    const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target?.result as string;
+            try {
+                const rows = text.split('\n').filter(row => row.trim());
+                if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
+
+                const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                
+                const newDepts: Department[] = rows.slice(1).map(row => {
+                    const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                    let dept: any = {};
+                    headers.forEach((header, index) => {
+                        dept[header] = values[index];
+                    });
+
+                    if (!dept.name || !dept.budget) {
+                        throw new Error("CSV is missing required columns: name, budget.");
+                    }
+
+                    return {
+                        id: dept.id || `dept-${Date.now()}-${Math.random()}`,
+                        name: dept.name,
+                        managerId: dept.managerId && dept.managerId !== 'null' ? dept.managerId : null,
+                        budget: parseFloat(dept.budget) || 0,
+                    };
+                });
+                
+                setDepartments(prev => [...prev, ...newDepts]);
+
+                toast({ title: "Import Successful", description: `${newDepts.length} departments were added.` });
+            } catch (error: any) {
+                console.error("CSV Parsing Error:", error);
+                toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+            } finally {
+                if (event.target) event.target.value = '';
+            }
+        };
+        reader.readAsText(file);
+    };
+
+
     return (
         <>
+            <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept=".csv"
+                onChange={handleFileChange}
+            />
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -128,7 +214,13 @@ export default function DepartmentsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-4 flex justify-end">
+                    <div className="mb-4 flex justify-end gap-2">
+                        <Button variant="outline" onClick={handleImportClick}>
+                            <Upload className="h-4 w-4 mr-2" /> Import
+                        </Button>
+                        <Button variant="outline" onClick={handleExport}>
+                            <Download className="h-4 w-4 mr-2" /> Export
+                        </Button>
                         <Button onClick={openAddDialog}>
                             <Plus className="h-4 w-4 mr-2" />
                             Add Department
