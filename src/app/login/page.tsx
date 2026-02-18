@@ -43,7 +43,8 @@ export default function LoginPage() {
         try {
             await signInWithPopup(auth, provider);
             // The useEffect will handle the redirect
-        } catch (error: any) {
+        } catch (error: any)
+        {
             console.error("Google authentication error:", error);
             let description = error.message;
             if (error.code === 'auth/unauthorized-domain') {
@@ -55,7 +56,8 @@ export default function LoginPage() {
                 title: "Google Login Failed",
                 description: description,
             });
-        } finally {
+        } 
+        finally {
             setIsLoading(null);
         }
     };
@@ -74,7 +76,7 @@ export default function LoginPage() {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential':
-                    description = "Invalid email or password. Please ensure the user `admin@procurportal.com` with password `admin` exists in your Firebase Authentication users list.";
+                    description = "Admin user not found. To log in as admin, you must first create the user in your Firebase project. Go to Authentication > Users > Add User, and create a user with email 'admin@procurportal.com' and password 'admin'.";
                     break;
                 case 'auth/invalid-email':
                     description = "The email address format is not valid.";
