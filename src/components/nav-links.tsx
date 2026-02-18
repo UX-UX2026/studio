@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   Users,
   Settings,
+  Building2,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -24,6 +25,7 @@ const allLinks = [
   { href: '/recurring', label: 'Recurring Items', icon: Repeat, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive'] },
   { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer'] },
+  { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },
 ];
