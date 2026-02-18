@@ -56,9 +56,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <SidebarHeader>
             <Link
               href="/"
-              className="p-2 text-xl font-bold tracking-tight text-primary"
+              className="p-2 text-xl font-bold tracking-tight text-foreground"
             >
-              PROCURE<span className="text-white">PORTAL</span>
+              UBUNTU PATHWAYS
             </Link>
           </SidebarHeader>
           <SidebarBody>
