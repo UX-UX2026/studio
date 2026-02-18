@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -5,12 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link";
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import { useToast } from "@/hooks/use-toast";
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth, useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -23,13 +32,14 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const router = useRouter();
-    const { toast } = useToast();
     const auth = useAuth();
     const { user, loading: userLoading } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLoading, setIsLoading] = useState<'google' | 'email' | null>(null);
+    const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
+
 
     useEffect(() => {
       if (!userLoading && user) {
@@ -51,8 +61,7 @@ export default function LoginPage() {
                 const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
                 description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
             }
-            toast({
-                variant: "destructive",
+            setErrorDialog({
                 title: "Google Login Failed",
                 description: description,
             });
@@ -91,8 +100,7 @@ export default function LoginPage() {
                 default:
                     description = error.message;
             }
-            toast({
-                variant: "destructive",
+             setErrorDialog({
                 title: "Login Failed",
                 description: description,
             });
@@ -110,77 +118,90 @@ export default function LoginPage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-background p-4">
-            <Card className="w-full max-w-md shadow-2xl">
-                <CardHeader className="text-center">
-                    <div className="mx-auto mb-4 text-center">
-                      <p className="text-sm font-medium uppercase tracking-widest text-primary">ProcurePortal</p>
-                      <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
-                    </div>
-                    <CardTitle className="text-2xl">Welcome</CardTitle>
-                    <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
-                             {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
-                            Sign in with Google
-                        </Button>
-                        <div className="relative">
-                          <div className="absolute inset-0 flex items-center">
-                            <span className="w-full border-t" />
-                          </div>
-                          <div className="relative flex justify-center text-xs uppercase">
-                            <span className="bg-background px-2 text-muted-foreground">
-                              Or continue with email
-                            </span>
-                          </div>
+        <>
+            <div className="flex min-h-screen items-center justify-center bg-background p-4">
+                <Card className="w-full max-w-md shadow-2xl">
+                    <CardHeader className="text-center">
+                        <div className="mx-auto mb-4 text-center">
+                        <p className="text-sm font-medium uppercase tracking-widest text-primary">ProcurePortal</p>
+                        <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
                         </div>
-
-                        <form onSubmit={handleEmailSignIn} className="space-y-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="email">Email</Label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    placeholder="your-email@example.com"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    disabled={!!isLoading}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="password">Password</Label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    disabled={!!isLoading}
-                                />
-                            </div>
-                            <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
-                                 {isLoading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                Sign In
+                        <CardTitle className="text-2xl">Welcome</CardTitle>
+                        <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
+                                {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                                Sign in with Google
                             </Button>
-                        </form>
-                        <p className="px-8 text-center text-xs text-muted-foreground">
-                            By clicking continue, you agree to our{" "}
-                            <Link href="#" className="underline underline-offset-4 hover:text-primary">
-                                Terms of Service
-                            </Link>{" "}
-                            and{" "}
-                            <Link href="#" className="underline underline-offset-4 hover:text-primary">
-                                Privacy Policy
-                            </Link>
-                            .
-                        </p>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
+                            <div className="relative">
+                            <div className="absolute inset-0 flex items-center">
+                                <span className="w-full border-t" />
+                            </div>
+                            <div className="relative flex justify-center text-xs uppercase">
+                                <span className="bg-background px-2 text-muted-foreground">
+                                Or continue with email
+                                </span>
+                            </div>
+                            </div>
+
+                            <form onSubmit={handleEmailSignIn} className="space-y-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="email">Email</Label>
+                                    <Input
+                                        id="email"
+                                        type="email"
+                                        placeholder="your-email@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        required
+                                        disabled={!!isLoading}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="password">Password</Label>
+                                    <Input
+                                        id="password"
+                                        type="password"
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        required
+                                        disabled={!!isLoading}
+                                    />
+                                </div>
+                                <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
+                                    {isLoading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                    Sign In
+                                </Button>
+                            </form>
+                            <p className="px-8 text-center text-xs text-muted-foreground">
+                                By clicking continue, you agree to our{" "}
+                                <Link href="#" className="underline underline-offset-4 hover:text-primary">
+                                    Terms of Service
+                                </Link>{" "}
+                                and{" "}
+                                <Link href="#" className="underline underline-offset-4 hover:text-primary">
+                                    Privacy Policy
+                                </Link>
+                                .
+                            </p>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+             <AlertDialog open={!!errorDialog} onOpenChange={() => setErrorDialog(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>{errorDialog?.title}</AlertDialogTitle>
+                        <AlertDialogDescription>{errorDialog?.description}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={() => setErrorDialog(null)}>OK</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
     )
 }
