@@ -85,7 +85,7 @@ export default function LoginPage() {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential':
-                    description = "Invalid email or password. Please check your credentials and try again.";
+                    description = "Invalid email or password. Please double-check your credentials and try again. Note: users must be created in the Firebase Authentication console before they can sign in with an email and password.";
                     break;
                 case 'auth/invalid-email':
                     description = "The email address format is not valid.";
