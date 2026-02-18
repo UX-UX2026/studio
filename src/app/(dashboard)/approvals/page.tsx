@@ -99,6 +99,82 @@ export default function ApprovalsPage() {
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-6">
+             <Card>
+                <CardHeader className="pb-2">
+                    <CardTitle>Approvals Overview</CardTitle>
+                    <CardDescription>Summary of requests awaiting action.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Pending Requests</span>
+                            <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                            <span className="text-muted-foreground">Total Value</span>
+                            <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                            <h4 className="text-sm font-medium">By Department</h4>
+                            {approvalSummary.byDept.length > 0 ? (
+                                <div className="space-y-1 text-sm text-muted-foreground">
+                                    {approvalSummary.byDept.map(([dept, data]) => (
+                                        <div key={dept} className="flex justify-between">
+                                            <span>{dept}</span>
+                                            <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
+                            )}
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="space-y-4">
+                <h3 className="text-lg font-semibold">All Requests</h3>
+                <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
+                    {departmentOrder.map(dept => (
+                        <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                             <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                                <div className="flex justify-between items-center w-full">
+                                    <span className="font-semibold">{dept}</span>
+                                    <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
+                                </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-2 pt-0">
+                                <div className="space-y-2">
+                                    {requestsByDept[dept].map(req => (
+                                        <Card 
+                                            key={req.id} 
+                                            className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
+                                            onClick={() => setSelectedRequestId(req.id)}
+                                        >
+                                            <CardContent className="p-3">
+                                                <div className="flex justify-between items-start">
+                                                    <p className="font-semibold">{req.id}</p>
+                                                    {getStatusBadge(req.status)}
+                                                </div>
+                                                <div className="flex justify-between items-end mt-2">
+                                                     <div>
+                                                        <p className="text-xs text-muted-foreground">{req.period}</p>
+                                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </AccordionContent>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
+            </div>
+        </div>
         <div className="lg:col-span-2 space-y-6">
             {activeRequest ? (
                 <Card>
@@ -204,82 +280,6 @@ export default function ApprovalsPage() {
                     </CardContent>
                 </Card>
             )}
-        </div>
-        <div className="lg:col-span-1 space-y-6">
-             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle>Approvals Overview</CardTitle>
-                    <CardDescription>Summary of requests awaiting action.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Pending Requests</span>
-                            <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Total Value</span>
-                            <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
-                        </div>
-                        <div className="space-y-2 pt-2">
-                            <h4 className="text-sm font-medium">By Department</h4>
-                            {approvalSummary.byDept.length > 0 ? (
-                                <div className="space-y-1 text-sm text-muted-foreground">
-                                    {approvalSummary.byDept.map(([dept, data]) => (
-                                        <div key={dept} className="flex justify-between">
-                                            <span>{dept}</span>
-                                            <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
-                            )}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-                <h3 className="text-lg font-semibold">All Requests</h3>
-                <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
-                    {departmentOrder.map(dept => (
-                        <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                             <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
-                                <div className="flex justify-between items-center w-full">
-                                    <span className="font-semibold">{dept}</span>
-                                    <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-2 pt-0">
-                                <div className="space-y-2">
-                                    {requestsByDept[dept].map(req => (
-                                        <Card 
-                                            key={req.id} 
-                                            className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
-                                            onClick={() => setSelectedRequestId(req.id)}
-                                        >
-                                            <CardContent className="p-3">
-                                                <div className="flex justify-between items-start">
-                                                    <p className="font-semibold">{req.id}</p>
-                                                    {getStatusBadge(req.status)}
-                                                </div>
-                                                <div className="flex justify-between items-end mt-2">
-                                                     <div>
-                                                        <p className="text-xs text-muted-foreground">{req.period}</p>
-                                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
-                </Accordion>
-            </div>
         </div>
     </div>
   );
