@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { Loader, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function SettingsPage() {
     const { user, role, loading } = useUser();
@@ -48,9 +49,11 @@ export default function SettingsPage() {
                      <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Departments</h3>
                         <p className="text-sm text-muted-foreground">
-                            Manage departments and assign managers.
+                            Manage departments, assign managers, and set budgets.
                         </p>
-                        <Button>Manage Departments</Button>
+                        <Button asChild>
+                           <Link href="/settings/departments">Manage Departments</Link>
+                        </Button>
                     </div>
                     <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Budget Integration</h3>

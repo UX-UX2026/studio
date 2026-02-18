@@ -135,6 +135,12 @@
         "$ref": "#/entities/department"
       },
       "description": "Collection of all departments."
+    },
+    "/procurementRequests/{procurementRequestId}": {
+      "schema": {
+        "$ref": "#/entities/procurementRequest"
+      },
+      "description": "Collection of all procurement requests."
     }
   }
 }
