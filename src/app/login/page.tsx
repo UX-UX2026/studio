@@ -51,19 +51,33 @@ export default function LoginPage() {
             router.push('/');
         } catch (error: any) {
             console.error("Admin authentication error:", error);
-            if (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-api-key' || error.code === 'auth/configuration-not-found') {
-                 toast({
-                    variant: "destructive",
-                    title: "Admin Login Failed",
-                    description: "Invalid credentials or configuration. Please check your email, password, and Firebase setup.",
-                });
-            } else {
-                toast({
-                    variant: "destructive",
-                    title: "Admin Login Failed",
-                    description: error.message,
-                });
+            let description = "An unexpected error occurred. Please try again.";
+
+            switch (error.code) {
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential':
+                    description = "Invalid email or password. Please double-check your credentials and try again.";
+                    break;
+                case 'auth/invalid-email':
+                    description = "The email address is not valid. Please check the format and try again.";
+                    break;
+                case 'auth/operation-not-allowed':
+                    description = "Email & Password sign-in is not enabled for this app. Please contact support.";
+                    break;
+                case 'auth/invalid-api-key':
+                case 'auth/configuration-not-found':
+                    description = "Firebase configuration is invalid. The app is not set up correctly.";
+                    break;
+                default:
+                    description = error.message;
             }
+
+            toast({
+                variant: "destructive",
+                title: "Admin Login Failed",
+                description: description,
+            });
         }
     };
 
