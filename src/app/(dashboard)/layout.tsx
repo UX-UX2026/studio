@@ -15,12 +15,25 @@ import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { Loader } from "lucide-react";
+import { Loader, LogOut } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useAuth } from "@/firebase";
+import { signOut } from "firebase/auth";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
   const { user, loading, role } = useUser();
   const router = useRouter();
+  const auth = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut(auth);
+  };
 
   useEffect(() => {
     if (!loading && !user) {
@@ -52,35 +65,45 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <NavLinks role={role} />
           </SidebarBody>
           <SidebarFooter>
-            <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3">
-              <Avatar className="h-8 w-8">
-                {user.photoURL ? (
-                  <AvatarImage
-                    src={user.photoURL}
-                    alt={user.displayName || 'User Avatar'}
-                  />
-                ) : userAvatar && (
-                  <AvatarImage
-                    src={userAvatar.imageUrl}
-                    alt={userAvatar.description}
-                    data-ai-hint={userAvatar.imageHint}
-                    width={32}
-                    height={32}
-                  />
-                )}
-                <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
-              </Avatar>
-              <div className="overflow-hidden">
-                <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                  {user.displayName || user.email}
-                </p>
-                {role && (
-                  <p className="truncate text-xs text-sidebar-foreground/80">
-                    {role}
-                  </p>
-                )}
-              </div>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3 cursor-pointer hover:bg-sidebar-accent/80 transition-colors">
+                  <Avatar className="h-8 w-8">
+                    {user.photoURL ? (
+                      <AvatarImage
+                        src={user.photoURL}
+                        alt={user.displayName || 'User Avatar'}
+                      />
+                    ) : userAvatar && (
+                      <AvatarImage
+                        src={userAvatar.imageUrl}
+                        alt={userAvatar.description}
+                        data-ai-hint={userAvatar.imageHint}
+                        width={32}
+                        height={32}
+                      />
+                    )}
+                    <AvatarFallback>{user.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
+                  </Avatar>
+                  <div className="overflow-hidden">
+                    <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                      {user.displayName || user.email}
+                    </p>
+                    {role && (
+                      <p className="truncate text-xs text-sidebar-foreground/80">
+                        {role}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="end" forceMount>
+                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+                    <LogOut className="mr-2 h-4 w-4" />
+                    <span>Sign out</span>
+                 </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
         <main className="flex-1 flex flex-col">
