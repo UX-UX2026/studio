@@ -1,15 +1,16 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
 import {
   LayoutGrid,
   FileText,
-  Repeat,
   PenLine,
   ClipboardCheck,
   Users,
   Settings,
   Building2,
+  ChevronDown,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -18,11 +19,22 @@ import {
 } from '@/components/app/sidebar';
 import Link from 'next/link';
 import { type UserRole } from '@/firebase/auth/use-user';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
+import { cn } from '@/lib/utils';
+import React from 'react';
 
 const allLinks = [
   { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-  { href: '/submission', label: 'Period Submission', icon: FileText, roles: ['Administrator', 'Manager'] },
-  { href: '/recurring', label: 'Recurring Items', icon: Repeat, roles: ['Administrator', 'Procurement Officer'] },
+  { 
+    label: 'Procurement', 
+    icon: FileText, 
+    roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'],
+    subLinks: [
+      { href: '/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
+      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager'] },
+      { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer'] },
+    ]
+  },
   { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive'] },
   { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
@@ -39,10 +51,40 @@ export function NavLinks({ role }: { role: UserRole }) {
     <SidebarNav>
       <SidebarNavMain>
         {visibleLinks.map((link) => {
-          const isActive =
-            link.href === '/'
-              ? pathname === '/'
-              : pathname.startsWith(link.href);
+          if (link.subLinks) {
+            const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
+            if (visibleSubLinks.length === 0) return null;
+            
+            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
+
+            return (
+              <Collapsible key={link.label} defaultOpen={isParentActive}>
+                <CollapsibleTrigger asChild>
+                    <div className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors cursor-pointer",
+                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                      isParentActive && "text-sidebar-accent-foreground"
+                    )}>
+                      <link.icon className="h-4 w-4" />
+                      {link.label}
+                      <ChevronDown className="ml-auto h-4 w-4 transition-transform [&[data-state=open]]:rotate-180" />
+                    </div>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-1 flex flex-col gap-1 pl-8">
+                  {visibleSubLinks.map(subLink => {
+                     const isActive = pathname === subLink.href || (subLink.href !== '/' && pathname.startsWith(subLink.href));
+                     return (
+                        <SidebarNavLink key={subLink.href} href={subLink.href} active={isActive} asChild>
+                            <Link href={subLink.href}>{subLink.label}</Link>
+                        </SidebarNavLink>
+                     )
+                  })}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          }
+          
+          const isActive = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
           return (
             <SidebarNavLink
               key={link.href}
