@@ -7,6 +7,7 @@ import { Loader, Settings } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 export default function SettingsPage() {
     const { user, role, loading } = useUser();
@@ -39,6 +40,7 @@ export default function SettingsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
+                     <ThemeSwitcher />
                      <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Approval Workflow</h3>
                         <p className="text-sm text-muted-foreground">
