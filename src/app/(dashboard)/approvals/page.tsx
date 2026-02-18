@@ -244,33 +244,7 @@ export default function ApprovalsPage() {
                                     ))}
                                 </ul>
                             </TabsContent>
-                            <TabsContent value="items" className="pt-4 space-y-8">
-                                <div>
-                                    <h3 className="text-lg font-semibold mb-2">Request Line Items</h3>
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead>Description</TableHead>
-                                                <TableHead>Line Item</TableHead>
-                                                <TableHead className="text-right">Qty</TableHead>
-                                                <TableHead className="text-right">Unit Price</TableHead>
-                                                <TableHead className="text-right">Total</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {activeRequest.items.map(item => (
-                                                <TableRow key={item.id}>
-                                                    <TableCell className="font-medium">{item.description}</TableCell>
-                                                    <TableCell>{item.category}</TableCell>
-                                                    <TableCell className="text-right">{item.qty}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
-                                                    <TableCell className="text-right font-mono font-semibold">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
-                                                </TableRow>
-                                            ))}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                                <Separator />
+                            <TabsContent value="items" className="pt-4">
                                 <div className="space-y-6">
                                      <div>
                                         <h3 className="text-lg font-semibold mb-2">Department Summary: Procurement Line Items</h3>
