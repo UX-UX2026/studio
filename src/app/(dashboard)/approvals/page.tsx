@@ -21,6 +21,9 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
 
 
 const getStatusBadge = (status: string) => {
@@ -36,7 +39,17 @@ const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
       style: "currency",
       currency: "ZAR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
     }).format(amount);
+};
+
+const formatPercentage = (value: number) => {
+    return new Intl.NumberFormat("en-US", {
+        style: "percent",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value);
 };
 
 export default function ApprovalsPage() {
@@ -48,6 +61,12 @@ export default function ApprovalsPage() {
     );
 
     const activeRequest = useMemo(() => approvalsData.find((req) => req.id === selectedRequestId), [selectedRequestId]);
+
+    // State for summary tables
+    const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
+    const [capital, setCapital] = useState(initialCapitalData);
+    const [currentPeriod, setCurrentPeriod] = useState('May');
+
 
     const approvalSummary = useMemo(() => {
         const pending = approvalsData.filter(req => req.status.startsWith('Pending'));
@@ -96,6 +115,23 @@ export default function ApprovalsPage() {
             </div>
         );
     }
+    
+    // Handlers for summary tables
+    const handleCashCommentChange = (index: number, value: string) => {
+        const updatedData = [...cashExpenses];
+        updatedData[index].comments = value;
+        setCashExpenses(updatedData);
+    };
+
+    const handleCapitalCommentChange = (index: number, value: string) => {
+        const updatedData = [...capital];
+        updatedData[index].comments = value;
+        setCapital(updatedData);
+    };
+    
+    const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
+    const subtotalForecast = cashExpenses.reduce((sum, item) => sum + item.forecast, 0);
+    const subtotalVsForecast = subtotalForecast - subtotalProcurement;
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
@@ -208,29 +244,128 @@ export default function ApprovalsPage() {
                                     ))}
                                 </ul>
                             </TabsContent>
-                            <TabsContent value="items" className="pt-4">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Description</TableHead>
-                                            <TableHead>Line Item</TableHead>
-                                            <TableHead className="text-right">Qty</TableHead>
-                                            <TableHead className="text-right">Unit Price</TableHead>
-                                            <TableHead className="text-right">Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {activeRequest.items.map(item => (
-                                            <TableRow key={item.id}>
-                                                <TableCell className="font-medium">{item.description}</TableCell>
-                                                <TableCell>{item.category}</TableCell>
-                                                <TableCell className="text-right">{item.qty}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
-                                                <TableCell className="text-right font-mono font-semibold">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
+                            <TabsContent value="items" className="pt-4 space-y-8">
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-2">Request Line Items</h3>
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>Description</TableHead>
+                                                <TableHead>Line Item</TableHead>
+                                                <TableHead className="text-right">Qty</TableHead>
+                                                <TableHead className="text-right">Unit Price</TableHead>
+                                                <TableHead className="text-right">Total</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {activeRequest.items.map(item => (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="font-medium">{item.description}</TableCell>
+                                                    <TableCell>{item.category}</TableCell>
+                                                    <TableCell className="text-right">{item.qty}</TableCell>
+                                                    <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
+                                                    <TableCell className="text-right font-mono font-semibold">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                                <Separator />
+                                <div className="space-y-6">
+                                     <div>
+                                        <h3 className="text-lg font-semibold mb-2">Department Summary: Procurement Line Items</h3>
+                                        <p className="text-sm text-muted-foreground mb-4">Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</p>
+                                        <div className="overflow-x-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted hover:bg-muted">
+                                                        <TableHead className="w-[300px]">Item</TableHead>
+                                                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                                                        <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
+                                                        <TableHead className="text-right">Procurement vs Forecast</TableHead>
+                                                        <TableHead>Comments</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {cashExpenses.map((item, index) => {
+                                                        const vsForecast = item.forecast - item.procurement;
+                                                        const isOverBudget = vsForecast < 0;
+                                                        return (
+                                                            <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10 hover:bg-red-500/20" : ""}>
+                                                                <TableCell className="font-medium">{item.item}</TableCell>
+                                                                <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
+                                                                <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
+                                                                <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
+                                                                    {formatCurrency(vsForecast)}
+                                                                </TableCell>
+                                                                <TableCell>
+                                                                    <Input 
+                                                                        value={item.comments} 
+                                                                        onChange={(e) => handleCashCommentChange(index, e.target.value)}
+                                                                        className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                                                    />
+                                                                </TableCell>
+                                                            </TableRow>
+                                                        )
+                                                    })}
+                                                </TableBody>
+                                                <TableRow className="font-bold bg-muted/50">
+                                                    <TableHead>Subtotal cash expenses</TableHead>
+                                                    <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
+                                                    <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
+                                                    <TableHead className={`text-right font-mono ${subtotalVsForecast < 0 ? 'text-red-500' : ''}`}>
+                                                        {formatCurrency(subtotalVsForecast)}
+                                                    </TableHead>
+                                                    <TableHead></TableHead>
+                                                </TableRow>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-semibold mb-2">Department Summary: Capital</h3>
+                                        <p className="text-sm text-muted-foreground mb-4">Capital expenditure summary including forecasts and budget comparisons.</p>
+                                        <div className="overflow-x-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted hover:bg-muted">
+                                                        <TableHead className="w-[250px]">Item</TableHead>
+                                                        <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
+                                                        <TableHead className="text-right">July Forecast</TableHead>
+                                                        <TableHead className="text-right">Year Total</TableHead>
+                                                        <TableHead className="text-right">Multiplier</TableHead>
+                                                        <TableHead className="text-right">Act+F vs Budget</TableHead>
+                                                        <TableHead className="text-right">Act+F vs Budget YR</TableHead>
+                                                        <TableHead className="text-right">vs Budget YR %</TableHead>
+                                                        <TableHead>Comments</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {capital.map((item, index) => (
+                                                        <TableRow key={item.item}>
+                                                            <TableCell className="font-medium">{item.item}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{item.yearTotalMultiplier?.toFixed(4) ?? ''}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudget)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudgetYR)}</TableCell>
+                                                            <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                                                {formatPercentage(item.vsBudget)}
+                                                            </TableCell>
+                                                            <TableCell>
+                                                                <Input 
+                                                                    value={item.comments} 
+                                                                    onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
+                                                                    className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                                                />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                </div>
                             </TabsContent>
                             <TabsContent value="communication" className="pt-6">
                                 <div className="space-y-6">
