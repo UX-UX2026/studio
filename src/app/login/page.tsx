@@ -27,9 +27,9 @@ export default function LoginPage() {
     const auth = useAuth();
     const { user, loading: userLoading } = useUser();
     
-    const [email, setEmail] = useState('admin@procurportal.com');
-    const [password, setPassword] = useState('admin');
-    const [isLoading, setIsLoading] = useState<'google' | 'admin' | null>(null);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState<'google' | 'email' | null>(null);
 
     useEffect(() => {
       if (!userLoading && user) {
@@ -62,21 +62,21 @@ export default function LoginPage() {
         }
     };
 
-    const handleAdminSignIn = async (e: React.FormEvent) => {
+    const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsLoading('admin');
+        setIsLoading('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
             // The useEffect will handle the redirect
         } catch (error: any) {
-            console.error("Admin authentication error:", error);
+            console.error("Email/Password authentication error:", error);
             let description = "An unexpected error occurred. Please try again.";
             // The error codes are useful for debugging
             switch (error.code) {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential':
-                    description = "Admin user not found. To log in as admin, you must first create the user in your Firebase project. Go to Authentication > Users > Add User, and create a user with email 'admin@procurportal.com' and password 'admin'.";
+                    description = "Invalid email or password. Please check your credentials and try again.";
                     break;
                 case 'auth/invalid-email':
                     description = "The email address format is not valid.";
@@ -93,7 +93,7 @@ export default function LoginPage() {
             }
             toast({
                 variant: "destructive",
-                title: "Admin Login Failed",
+                title: "Login Failed",
                 description: description,
             });
         } finally {
@@ -124,7 +124,7 @@ export default function LoginPage() {
                     <div className="space-y-4">
                         <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
                              {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
-                            Login with Google
+                            Sign in with Google
                         </Button>
                         <div className="relative">
                           <div className="absolute inset-0 flex items-center">
@@ -132,18 +132,18 @@ export default function LoginPage() {
                           </div>
                           <div className="relative flex justify-center text-xs uppercase">
                             <span className="bg-background px-2 text-muted-foreground">
-                              Or as an Administrator
+                              Or continue with email
                             </span>
                           </div>
                         </div>
 
-                        <form onSubmit={handleAdminSignIn} className="space-y-4">
+                        <form onSubmit={handleEmailSignIn} className="space-y-4">
                             <div className="space-y-2">
-                                <Label htmlFor="email">Admin Email</Label>
+                                <Label htmlFor="email">Email</Label>
                                 <Input
                                     id="email"
                                     type="email"
-                                    placeholder="admin@procurportal.com"
+                                    placeholder="your-email@example.com"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
@@ -163,8 +163,8 @@ export default function LoginPage() {
                                 />
                             </div>
                             <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
-                                 {isLoading === 'admin' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                Login as Admin
+                                 {isLoading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Sign In
                             </Button>
                         </form>
                         <p className="px-8 text-center text-xs text-muted-foreground">
