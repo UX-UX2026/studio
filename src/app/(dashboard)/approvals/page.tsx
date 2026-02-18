@@ -15,6 +15,12 @@ import { cn } from "@/lib/utils";
 import { type ApprovalRequest, approvalsData } from "@/lib/approvals-mock-data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 
 const getStatusBadge = (status: string) => {
@@ -61,6 +67,19 @@ export default function ApprovalsPage() {
             byDept: Object.entries(byDept).sort((a, b) => b[1].total - a[1].total),
         }
     }, []);
+
+    const requestsByDept = useMemo(() => {
+        return approvalsData.reduce((acc, req) => {
+            if (!acc[req.department]) {
+                acc[req.department] = [];
+            }
+            acc[req.department].push(req);
+            return acc;
+        }, {} as Record<string, ApprovalRequest[]>);
+    }, []);
+
+    const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
+
 
     useEffect(() => {
       if (!loading && (!user || (role !== 'Executive' && role !== 'Administrator'))) {
@@ -223,32 +242,43 @@ export default function ApprovalsPage() {
 
             <div className="space-y-4">
                 <h3 className="text-lg font-semibold">All Requests</h3>
-                <div className="space-y-2 max-h-[calc(100vh-28rem)] overflow-y-auto pr-2">
-                    {approvalsData.map(req => (
-                        <Card 
-                            key={req.id} 
-                            className={cn("cursor-pointer transition-colors", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
-                            onClick={() => setSelectedRequestId(req.id)}
-                        >
-                            <CardContent className="p-3">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <p className="font-semibold">{req.id}</p>
-                                        <p className="text-sm text-muted-foreground font-medium">{req.department}</p>
-                                    </div>
-                                    {getStatusBadge(req.status)}
+                <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
+                    {departmentOrder.map(dept => (
+                        <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                             <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                                <div className="flex justify-between items-center w-full">
+                                    <span className="font-semibold">{dept}</span>
+                                    <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
                                 </div>
-                                <div className="flex justify-between items-end mt-2">
-                                    <div>
-                                        <p className="text-xs text-muted-foreground">{req.period}</p>
-                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                            </AccordionTrigger>
+                            <AccordionContent className="p-2 pt-0">
+                                <div className="space-y-2">
+                                    {requestsByDept[dept].map(req => (
+                                        <Card 
+                                            key={req.id} 
+                                            className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
+                                            onClick={() => setSelectedRequestId(req.id)}
+                                        >
+                                            <CardContent className="p-3">
+                                                <div className="flex justify-between items-start">
+                                                    <p className="font-semibold">{req.id}</p>
+                                                    {getStatusBadge(req.status)}
+                                                </div>
+                                                <div className="flex justify-between items-end mt-2">
+                                                     <div>
+                                                        <p className="text-xs text-muted-foreground">{req.period}</p>
+                                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
+                                                    </div>
+                                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    ))}
                                 </div>
-                            </CardContent>
-                        </Card>
+                            </AccordionContent>
+                        </AccordionItem>
                     ))}
-                </div>
+                </Accordion>
             </div>
         </div>
     </div>
