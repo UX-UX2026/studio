@@ -56,9 +56,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <SidebarHeader>
             <Link
               href="/"
-              className="p-2 text-xl font-bold tracking-tight text-foreground"
+              className="flex flex-col items-center justify-center p-2 text-center"
             >
-              UBUNTU PATHWAYS
+              <span className="text-xs font-medium uppercase tracking-widest text-sidebar-primary">ProcurePortal</span>
+              <span className="text-xl font-bold tracking-tight text-sidebar-foreground">UBUNTU PATHWAYS</span>
             </Link>
           </SidebarHeader>
           <SidebarBody>

@@ -14,7 +14,7 @@ body {
     --card-foreground: 222.2 47.4% 11.2%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 47.4% 11.2%;
-    --primary: 24 74% 43%;
+    --primary: 22 66% 57%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 210 40% 9%;
@@ -26,21 +26,23 @@ body {
     --destructive-foreground: 0 0% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 24 74% 43%;
+    --ring: 22 66% 57%;
     --chart-1: 12 76% 61%;
     --chart-2: 173 58% 39%;
     --chart-3: 197 37% 24%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
     --radius: 0.5rem;
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222.2 47.4% 11.2%;
-    --sidebar-primary: 24 74% 43%;
+
+    /* Sidebar - Dark Theme (fixed) */
+    --sidebar-background: 196 21% 18%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 22 66% 57%;
     --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 210 40% 96.1%;
-    --sidebar-accent-foreground: 210 40% 9%;
-    --sidebar-border: 214.3 31.8% 91.4%;
-    --sidebar-ring: 24 74% 43%;
+    --sidebar-accent: 196 21% 28%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 196 21% 25%;
+    --sidebar-ring: 22 66% 57%;
   }
   .dark {
     --background: 196 21% 21%;
@@ -67,14 +69,8 @@ body {
     --chart-3: 30 80% 55%;
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
-    --sidebar-background: 196 21% 18%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 22 66% 57%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 196 21% 28%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 196 21% 25%;
-    --sidebar-ring: 22 66% 57%;
+
+    /* Sidebar variables are inherited from :root and remain dark */
   }
 }
 

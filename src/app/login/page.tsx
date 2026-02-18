@@ -113,9 +113,9 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="text-center">
-                    <div className="mx-auto mb-4">
-                        <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
-                        <p className="text-xs text-muted-foreground mt-1 uppercase tracking-widest">Procurement Portal</p>
+                    <div className="mx-auto mb-4 text-center">
+                      <p className="text-sm font-medium uppercase tracking-widest text-primary">ProcurePortal</p>
+                      <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
                     </div>
                     <CardTitle className="text-2xl">Welcome</CardTitle>
                     <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
