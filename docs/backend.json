@@ -49,6 +49,60 @@
         "category",
         "department"
       ]
+    },
+    "userProfile": {
+      "title": "User Profile",
+      "description": "Stores public information about a user.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string"
+        },
+        "email": {
+          "type": "string",
+          "format": "email"
+        },
+        "photoURL": {
+          "type": "string",
+          "format": "uri"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "Administrator",
+            "Manager",
+            "Procurement Officer",
+            "Executive"
+          ]
+        },
+        "departmentId": {
+          "type": "string",
+          "description": "The ID of the department this user belongs to or manages."
+        }
+      },
+      "required": [
+        "displayName",
+        "email",
+        "role"
+      ]
+    },
+    "department": {
+      "title": "Department",
+      "description": "Represents a department within the organization.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the department."
+        },
+        "managerId": {
+          "type": "string",
+          "description": "The UID of the user who manages this department."
+        }
+      },
+      "required": [
+        "name"
+      ]
     }
   },
   "auth": {
@@ -69,5 +123,18 @@
       }
     }
   },
-  "firestore": {}
+  "firestore": {
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/userProfile"
+      },
+      "description": "Stores user profile information."
+    },
+    "/departments/{departmentId}": {
+      "schema": {
+        "$ref": "#/entities/department"
+      },
+      "description": "Collection of all departments."
+    }
+  }
 }

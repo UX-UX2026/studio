@@ -10,13 +10,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const mockUsers = [
-    { id: '1', name: 'Zukiswa N.', email: 'zukiswa@procurportal.com', role: 'Executive', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
-    { id: '2', name: 'Tarryn M.', email: 'tarryn@procurportal.com', role: 'Manager', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
-    { id: '3', name: 'Linda K.', email: 'linda@procurportal.com', role: 'Procurement Officer', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
-    { id: '4', name: 'Admin User', email: 'admin@procurportal.com', role: 'Administrator', avatar: '' },
+    { id: '1', name: 'Zukiswa N.', email: 'zukiswa@procurportal.com', role: 'Executive', department: 'Executive', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
+    { id: '2', name: 'Tarryn M.', email: 'tarryn@procurportal.com', role: 'Manager', department: 'Marketing', avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwyfHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
+    { id: '3', name: 'Linda K.', email: 'linda@procurportal.com', role: 'Procurement Officer', department: 'Procurement', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw0fHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
+    { id: '4', name: 'Admin User', email: 'admin@procurportal.com', role: 'Administrator', department: 'Administration', avatar: '' },
 ];
 
 const roles: (string | null)[] = ["Administrator", "Manager", "Procurement Officer", "Executive"];
+const departments = ["Executive", "Marketing", "Procurement", "Administration", "ICT", "HR", "Operations"];
 
 export default function UsersPage() {
     const { user, role, loading } = useUser();
@@ -56,6 +57,7 @@ export default function UsersPage() {
                             <TableHead>User</TableHead>
                             <TableHead>Email</TableHead>
                             <TableHead className="w-[200px]">Role</TableHead>
+                            <TableHead className="w-[200px]">Department</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -76,6 +78,16 @@ export default function UsersPage() {
                                         </SelectTrigger>
                                         <SelectContent>
                                             {roles.map(r => r && <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </TableCell>
+                                <TableCell>
+                                    <Select defaultValue={u.department}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Assign department" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {departments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </TableCell>

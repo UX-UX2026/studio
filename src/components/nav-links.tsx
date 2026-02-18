@@ -8,6 +8,7 @@ import {
   PenLine,
   ClipboardCheck,
   Users,
+  Settings,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -24,6 +25,7 @@ const allLinks = [
   { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive'] },
   { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
+  { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },
 ];
 
 export function NavLinks({ role }: { role: UserRole }) {
