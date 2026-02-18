@@ -10,6 +10,7 @@ import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/firebase";
+import { Loader2 } from "lucide-react";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -23,29 +24,42 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
     const router = useRouter();
     const { toast } = useToast();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const auth = useAuth();
+    
+    const [email, setEmail] = useState('admin@procurportal.com');
+    const [password, setPassword] = useState('admin');
+    const [isLoading, setIsLoading] = useState<null | 'google' | 'admin'>(null);
 
 
     const handleGoogleSignIn = async () => {
+        if (!auth) {
+            toast({ variant: "destructive", title: "Login Failed", description: "Firebase is not ready. Please try again." });
+            return;
+        }
+        setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
             router.push('/');
         } catch (error: any) {
-            console.error("Authentication error:", error);
+            console.error("Google authentication error:", error);
             toast({
                 variant: "destructive",
-                title: "Login Failed",
+                title: "Google Login Failed",
                 description: error.message,
             });
+        } finally {
+            setIsLoading(null);
         }
     };
 
     const handleAdminSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-
+        if (!auth) {
+            toast({ variant: "destructive", title: "Login Failed", description: "Firebase is not ready. Please try again." });
+            return;
+        }
+        setIsLoading('admin');
         try {
             await signInWithEmailAndPassword(auth, email, password);
             router.push('/');
@@ -57,17 +71,17 @@ export default function LoginPage() {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
                 case 'auth/invalid-credential':
-                    description = "Invalid email or password. Please double-check your credentials and try again.";
+                    description = "Invalid email or password. Please ensure the user `admin@procurportal.com` with password `admin` exists in your Firebase Authentication users list.";
                     break;
                 case 'auth/invalid-email':
-                    description = "The email address is not valid. Please check the format and try again.";
+                    description = "The email address format is not valid.";
                     break;
                 case 'auth/operation-not-allowed':
-                    description = "Email & Password sign-in is not enabled for this app. Please contact support.";
+                    description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
                     break;
-                case 'auth/invalid-api-key':
                 case 'auth/configuration-not-found':
-                    description = "Firebase configuration is invalid. The app is not set up correctly.";
+                case 'auth/invalid-api-key':
+                     description = "Firebase configuration is invalid. The app is not set up correctly.";
                     break;
                 default:
                     description = error.message;
@@ -78,6 +92,8 @@ export default function LoginPage() {
                 title: "Admin Login Failed",
                 description: description,
             });
+        } finally {
+            setIsLoading(null);
         }
     };
 
@@ -94,8 +110,8 @@ export default function LoginPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn}>
-                            <GoogleIcon className="mr-2"/>
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
+                             {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Login with Google
                         </Button>
                         <div className="relative">
@@ -119,6 +135,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
+                                    disabled={!!isLoading}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -130,9 +147,11 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
+                                    disabled={!!isLoading}
                                 />
                             </div>
-                            <Button type="submit" className="w-full h-12 text-base">
+                            <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
+                                 {isLoading === 'admin' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Login as Admin
                             </Button>
                         </form>
