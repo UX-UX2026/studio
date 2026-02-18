@@ -26,9 +26,13 @@ export function useUser(): UserState {
         const tokenResult = await user.getIdTokenResult();
         let role: UserRole = (tokenResult.claims.role as UserRole) || null;
         
-        // Fallback for default admin users to have Administrator role
-        if ((user.email === 'admin@procurportal.com' || user.email === 'heinrich@ubuntux.co.za') && !role) {
-            role = 'Administrator';
+        // Fallback for default users to have a role
+        if (!role) {
+            if (user.email === 'admin@procurportal.com' || user.email === 'heinrich@ubuntux.co.za') {
+                role = 'Administrator';
+            } else if (user.email === 'man@procurportal.com') {
+                role = 'Manager';
+            }
         }
 
         setUserState({
