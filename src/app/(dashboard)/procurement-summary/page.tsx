@@ -3,12 +3,12 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Loader } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { capitalData, cashExpensesData } from "@/lib/summary-mock-data";
-import { Badge } from "@/components/ui/badge";
+import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
+import { Input } from "@/components/ui/input";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -32,6 +32,10 @@ export default function ProcurementSummaryPage() {
     const { user, role, loading } = useUser();
     const router = useRouter();
 
+    // State for editable data
+    const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
+    const [capital, setCapital] = useState(initialCapitalData);
+
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
       if (!loading && (!user || !role || !allowedRoles.includes(role))) {
@@ -46,9 +50,21 @@ export default function ProcurementSummaryPage() {
             </div>
         );
     }
+
+    const handleCashCommentChange = (index: number, value: string) => {
+        const updatedData = [...cashExpenses];
+        updatedData[index].comments = value;
+        setCashExpenses(updatedData);
+    };
+
+    const handleCapitalCommentChange = (index: number, value: string) => {
+        const updatedData = [...capital];
+        updatedData[index].comments = value;
+        setCapital(updatedData);
+    };
     
-    const subtotalProcurement = cashExpensesData.reduce((sum, item) => sum + item.procurement, 0);
-    const subtotalForecast = cashExpensesData.reduce((sum, item) => sum + item.forecast, 0);
+    const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
+    const subtotalForecast = cashExpenses.reduce((sum, item) => sum + item.forecast, 0);
     const subtotalVsForecast = subtotalProcurement - subtotalForecast;
 
   return (
@@ -56,7 +72,7 @@ export default function ProcurementSummaryPage() {
        <Card>
         <CardHeader>
             <CardTitle>Procurement Line Items</CardTitle>
-            <CardDescription>Comparison of May procurement against forecast for cash expenses.</CardDescription>
+            <CardDescription>Comparison of May procurement against forecast for cash expenses. Over-budget items are highlighted.</CardDescription>
         </CardHeader>
         <CardContent>
             <Table>
@@ -70,17 +86,24 @@ export default function ProcurementSummaryPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {cashExpensesData.map(item => {
+                    {cashExpenses.map((item, index) => {
                         const vsForecast = item.procurement - item.forecast;
+                        const isOverBudget = vsForecast > 0;
                         return (
-                            <TableRow key={item.item}>
+                            <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10" : ""}>
                                 <TableCell className="font-medium">{item.item}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
-                                <TableCell className={`text-right font-mono ${vsForecast < 0 ? 'text-red-500' : ''}`}>
+                                <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
                                     {formatCurrency(vsForecast)}
                                 </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                                <TableCell>
+                                    <Input 
+                                        value={item.comments} 
+                                        onChange={(e) => handleCashCommentChange(index, e.target.value)}
+                                        className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                    />
+                                </TableCell>
                             </TableRow>
                         )
                     })}
@@ -89,7 +112,7 @@ export default function ProcurementSummaryPage() {
                     <TableHead>Subtotal cash expenses</TableHead>
                     <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
                     <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
-                    <TableHead className={`text-right font-mono ${subtotalVsForecast < 0 ? 'text-red-500' : ''}`}>
+                    <TableHead className={`text-right font-mono ${subtotalVsForecast > 0 ? 'text-red-500' : ''}`}>
                         {formatCurrency(subtotalVsForecast)}
                     </TableHead>
                     <TableHead></TableHead>
@@ -116,7 +139,7 @@ export default function ProcurementSummaryPage() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {capitalData.map(item => (
+                    {capital.map((item, index) => (
                         <TableRow key={item.item}>
                             <TableCell className="font-medium">{item.item}</TableCell>
                             <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
@@ -125,7 +148,13 @@ export default function ProcurementSummaryPage() {
                             <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
                                 {formatPercentage(item.vsBudget)}
                             </TableCell>
-                            <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                            <TableCell>
+                                <Input 
+                                    value={item.comments} 
+                                    onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
+                                    className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
+                                />
+                            </TableCell>
                         </TableRow>
                     ))}
                 </TableBody>
@@ -135,4 +164,5 @@ export default function ProcurementSummaryPage() {
     </div>
   );
 }
+
 
