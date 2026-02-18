@@ -183,7 +183,7 @@ export default function ApprovalsPage() {
                         <CardDescription>{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                       <Tabs defaultValue="workflow">
+                       <Tabs defaultValue="items">
                             <TabsList className="grid w-full grid-cols-3">
                                 <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
                                 <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
