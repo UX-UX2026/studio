@@ -6,10 +6,10 @@ import Link from "next/link";
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { useToast } from "@/hooks/use-toast";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/firebase";
+import { useAuth, useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -25,22 +25,24 @@ export default function LoginPage() {
     const router = useRouter();
     const { toast } = useToast();
     const auth = useAuth();
+    const { user, loading: userLoading } = useUser();
     
     const [email, setEmail] = useState('admin@procurportal.com');
     const [password, setPassword] = useState('admin');
-    const [isLoading, setIsLoading] = useState<null | 'google' | 'admin'>(null);
+    const [isLoading, setIsLoading] = useState(false);
 
+    useEffect(() => {
+      if (!userLoading && user) {
+        router.push('/');
+      }
+    }, [user, userLoading, router]);
 
     const handleGoogleSignIn = async () => {
-        if (!auth) {
-            toast({ variant: "destructive", title: "Login Failed", description: "Firebase is not ready. Please try again." });
-            return;
-        }
-        setIsLoading('google');
+        setIsLoading(true);
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            router.push('/');
+            // The useEffect will handle the redirect
         } catch (error: any) {
             console.error("Google authentication error:", error);
             toast({
@@ -49,24 +51,20 @@ export default function LoginPage() {
                 description: error.message,
             });
         } finally {
-            setIsLoading(null);
+            setIsLoading(false);
         }
     };
 
     const handleAdminSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!auth) {
-            toast({ variant: "destructive", title: "Login Failed", description: "Firebase is not ready. Please try again." });
-            return;
-        }
-        setIsLoading('admin');
+        setIsLoading(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            router.push('/');
+            // The useEffect will handle the redirect
         } catch (error: any) {
             console.error("Admin authentication error:", error);
             let description = "An unexpected error occurred. Please try again.";
-
+            // The error codes are useful for debugging
             switch (error.code) {
                 case 'auth/user-not-found':
                 case 'auth/wrong-password':
@@ -81,21 +79,28 @@ export default function LoginPage() {
                     break;
                 case 'auth/configuration-not-found':
                 case 'auth/invalid-api-key':
-                     description = "Firebase configuration is invalid. The app is not set up correctly.";
+                     description = "Firebase configuration is invalid. Please check your setup.";
                     break;
                 default:
                     description = error.message;
             }
-
             toast({
                 variant: "destructive",
                 title: "Admin Login Failed",
                 description: description,
             });
         } finally {
-            setIsLoading(null);
+            setIsLoading(false);
         }
     };
+
+    if (userLoading || user) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -110,8 +115,8 @@ export default function LoginPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
-                             {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
+                             {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Login with Google
                         </Button>
                         <div className="relative">
@@ -135,7 +140,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    disabled={!!isLoading}
+                                    disabled={isLoading}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -147,11 +152,11 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    disabled={!!isLoading}
+                                    disabled={isLoading}
                                 />
                             </div>
-                            <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
-                                 {isLoading === 'admin' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                            <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
+                                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Login as Admin
                             </Button>
                         </form>
