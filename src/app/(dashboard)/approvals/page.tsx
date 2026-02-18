@@ -3,11 +3,11 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader } from "lucide-react";
+import { Loader, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Check, MessageSquare, Paperclip, Send, User } from "lucide-react";
@@ -105,6 +105,13 @@ export default function ApprovalsPage() {
                         ))}
                     </ul>
                 </CardContent>
+                {activeRequest.status.startsWith('Pending') && (
+                    <CardFooter className="flex justify-end gap-2">
+                        <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                        <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
+                        <Button><Check className="mr-2 h-4 w-4" />Approve</Button>
+                    </CardFooter>
+                )}
             </Card>
             <Card>
                 <CardHeader>
