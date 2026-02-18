@@ -249,7 +249,7 @@ export default function VendorsPage() {
                                 <TableRow>
                                     <TableHead>Vendor Name</TableHead>
                                     <TableHead>Contact</TableHead>
-                                    <TableHead>Category</TableHead>
+                                    <TableHead>Line Item</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -310,7 +310,7 @@ export default function VendorsPage() {
                             <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} className="col-span-3" />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="category" className="text-right">Category</Label>
+                            <Label htmlFor="category" className="text-right">Line Item</Label>
                             <Select value={category} onValueChange={setCategory}>
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="Select a category" />

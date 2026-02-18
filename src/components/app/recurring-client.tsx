@@ -196,7 +196,7 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
                     <TableHeader>
                         <TableRow>
                             <TableHead>Name</TableHead>
-                            <TableHead>Category</TableHead>
+                            <TableHead>Line Item</TableHead>
                             <TableHead>Frequency</TableHead>
                             <TableHead>Next Auto-Load</TableHead>
                             <TableHead className="text-right">Amount</TableHead>

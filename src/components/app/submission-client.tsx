@@ -274,7 +274,7 @@ export function SubmissionClient() {
               <TableHead>Item / Service Description</TableHead>
               <TableHead className="w-[150px]">Brand</TableHead>
               <TableHead className="w-[80px]">Qty</TableHead>
-              <TableHead className="w-[250px]">Category</TableHead>
+              <TableHead className="w-[250px]">Line Item</TableHead>
               <TableHead className="w-[120px] text-right">Unit Price</TableHead>
               <TableHead className="w-[120px] text-right">Total</TableHead>
               <TableHead className="w-[80px] text-center">Actions</TableHead>

@@ -213,7 +213,7 @@ export default function ApprovalsPage() {
                                     <TableHeader>
                                         <TableRow>
                                             <TableHead>Description</TableHead>
-                                            <TableHead>Category</TableHead>
+                                            <TableHead>Line Item</TableHead>
                                             <TableHead className="text-right">Qty</TableHead>
                                             <TableHead className="text-right">Unit Price</TableHead>
                                             <TableHead className="text-right">Total</TableHead>
