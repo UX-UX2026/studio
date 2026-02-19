@@ -47,7 +47,7 @@ export function useUser(): UserState {
                 role = 'Manager';
             } else if (user.email === 'sam@procurportal.com') {
                 role = 'Requester';
-            } else if (user.email === 'zukiswa@procurportal.com') {
+            } else if (user.email === 'zukiswa@procurportal.com' || user.email === 'ex@procurportal.com') {
                 role = 'Executive';
             }
         }

@@ -5,4 +5,5 @@ export const mockUsers = [
     { id: '4', name: 'Admin User', email: 'admin@procurportal.com', role: 'Administrator', department: 'Administration', avatar: '' },
     { id: '5', name: 'Manager User', email: 'man@procurportal.com', role: 'Manager', department: 'ICT', avatar: '' },
     { id: '6', name: 'Sam J.', email: 'sam@procurportal.com', role: 'Requester', department: 'ICT', avatar: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHw1fHxwZW9wbGV8ZW58MHx8fHwxNzE2NDYyOTc5fDA&ixlib=rb-4.0.3&q=80&w=1080' },
+    { id: '7', name: 'Executive User', email: 'ex@procurportal.com', role: 'Executive', department: 'Executive', avatar: '' }
 ];
