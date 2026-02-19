@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
@@ -16,7 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 
-type FulfillmentItem = (typeof allFulfillmentItems)[0];
+export type FulfillmentItem = (typeof allFulfillmentItems)[0];
 
 export default function FulfillmentPage() {
     const { user, role, department, loading } = useUser();
@@ -98,7 +98,7 @@ export default function FulfillmentPage() {
                         </div>
                     </AccordionTrigger>
                     <AccordionContent className="p-2 pt-0">
-                        <FulfillmentClient items={fulfillmentItemsByDept[dept]} />
+                        <FulfillmentClient items={fulfillmentItemsByDept[dept]} role={role}/>
                     </AccordionContent>
                 </AccordionItem>
             ))}

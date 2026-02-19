@@ -8,66 +8,62 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wand2, Loader, CheckCircle, Truck, ShoppingCart } from "lucide-react";
+import { Wand2, Loader, CheckCircle, Truck, ShoppingCart, MessageSquare } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { RecommendFulfillmentStrategyInput, RecommendFulfillmentStrategyOutput } from "@/ai/flows/recommend-fulfillment-strategy";
 import { recommendFulfillmentStrategy } from "@/ai/flows/recommend-fulfillment-strategy";
-import type { fulfillmentItems } from "@/app/(dashboard)/fulfillment/page";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { type UserRole } from "@/firebase/auth/use-user";
+import { type fulfillmentItems as allFulfillmentItems } from "@/lib/mock-data";
 
-type FulfillmentItem = (typeof fulfillmentItems)[0];
+
+type FulfillmentItem = (typeof allFulfillmentItems)[0];
+const fulfillmentStatuses = ["Sourcing", "Quoted", "Ordered", "Completed"];
 
 const getStatusBadge = (status: string) => {
   switch (status) {
     case "Sourcing":
-      return (
-        <Badge variant="outline" className="bg-yellow-100 text-yellow-800">
-          {status}
-        </Badge>
-      );
+      return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
     case "Quoted":
-      return (
-        <Badge variant="outline" className="bg-blue-100 text-blue-800">
-          {status}
-        </Badge>
-      );
+      return <Badge variant="outline" className="text-blue-500 border-blue-500">{status}</Badge>;
     case "Ordered":
-      return (
-        <Badge variant="outline" className="bg-purple-100 text-purple-800">
-          {status}
-        </Badge>
-      );
+      return <Badge variant="outline" className="text-purple-500 border-purple-500">{status}</Badge>;
     case "Completed":
-      return (
-        <Badge variant="default" className="bg-green-600 hover:bg-green-700">
-          {status}
-        </Badge>
-      );
+      return <Badge variant="outline" className="text-green-500 border-green-500">{status}</Badge>;
     default:
       return <Badge variant="secondary">{status}</Badge>;
   }
 };
 
-export function FulfillmentClient({ items }: { items: FulfillmentItem[] }) {
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+export function FulfillmentClient({ items: initialItems, role }: { items: FulfillmentItem[], role: UserRole }) {
+  const [items, setItems] = useState(initialItems);
+  const [isRecommendDialogOpen, setIsRecommendDialogOpen] = useState(false);
+  const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FulfillmentItem | null>(null);
   const [recommendation, setRecommendation] = useState<RecommendFulfillmentStrategyOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [newComment, setNewComment] = useState("");
   const { toast } = useToast();
+
+  const canEdit = role === 'Procurement Assistant' || role === 'Procurement Officer' || role === 'Administrator';
 
   const handleRecommendClick = async (item: FulfillmentItem) => {
     setSelectedItem(item);
-    setIsDialogOpen(true);
+    setIsRecommendDialogOpen(true);
     setIsLoading(true);
     setRecommendation(null);
 
@@ -81,10 +77,37 @@ export function FulfillmentClient({ items }: { items: FulfillmentItem[] }) {
         title: "AI Recommendation Failed",
         description: "Could not fetch fulfillment strategy.",
       });
-      setIsDialogOpen(false);
+      setIsRecommendDialogOpen(false);
     } finally {
       setIsLoading(false);
     }
+  };
+  
+  const handleItemUpdate = (itemId: string, field: keyof FulfillmentItem, value: any) => {
+      setItems(currentItems =>
+          currentItems.map(item =>
+              item.id === itemId ? { ...item, [field]: value } : item
+          )
+      );
+  };
+  
+  const handleOpenCommentDialog = (item: FulfillmentItem) => {
+      setSelectedItem(item);
+      setIsCommentDialogOpen(true);
+  };
+
+  const handleAddComment = () => {
+      if (!selectedItem || !newComment.trim()) return;
+
+      const newCommentText = `${role}: ${newComment}`;
+      const updatedComments = [...(selectedItem.comments || []), newCommentText];
+      
+      handleItemUpdate(selectedItem.id, 'comments', updatedComments);
+
+      toast({ title: "Comment added successfully." });
+      setNewComment("");
+      setIsCommentDialogOpen(false);
+      setSelectedItem(null);
   };
 
   return (
@@ -93,44 +116,74 @@ export function FulfillmentClient({ items }: { items: FulfillmentItem[] }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[50px]">
-                <Checkbox />
-              </TableHead>
               <TableHead>Item</TableHead>
-              <TableHead>Department</TableHead>
-              <TableHead>Qty</TableHead>
+              <TableHead>Total Qty</TableHead>
+              <TableHead>Rcvd Qty</TableHead>
               <TableHead>Outstanding</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
-              <TableRow key={item.id} className={item.outstandingDays > 10 ? "bg-red-500/10" : ""}>
-                <TableCell>
-                  <Checkbox />
-                </TableCell>
-                <TableCell className="font-medium">{item.item}</TableCell>
-                <TableCell>{item.department}</TableCell>
-                <TableCell>{item.qty}</TableCell>
-                <TableCell>{item.outstandingDays} days</TableCell>
-                <TableCell>{getStatusBadge(item.status)}</TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleRecommendClick(item)}
-                  >
-                    <Wand2 className="h-4 w-4 mr-2" />
-                    Recommend
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {items.map((item) => {
+              const outstandingQty = item.qty - item.receivedQty;
+              return (
+                <TableRow key={item.id} className={outstandingQty > 0 && item.outstandingDays > 10 ? "bg-red-500/10" : ""}>
+                  <TableCell className="font-medium">{item.item}</TableCell>
+                  <TableCell>{item.qty}</TableCell>
+                  <TableCell>
+                      <Input
+                          type="number"
+                          value={item.receivedQty}
+                          onChange={(e) => handleItemUpdate(item.id, 'receivedQty', parseInt(e.target.value) || 0)}
+                          className="w-20"
+                          disabled={!canEdit}
+                      />
+                  </TableCell>
+                  <TableCell className={outstandingQty > 0 ? 'font-bold' : ''}>{outstandingQty}</TableCell>
+                  <TableCell>
+                      {canEdit ? (
+                           <Select value={item.status} onValueChange={(value) => handleItemUpdate(item.id, 'status', value)}>
+                              <SelectTrigger className="w-[120px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {fulfillmentStatuses.map(status => (
+                                  <SelectItem key={status} value={status}>{status}</SelectItem>
+                                ))}
+                              </SelectContent>
+                          </Select>
+                      ) : (
+                          getStatusBadge(item.status)
+                      )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleOpenCommentDialog(item)}
+                      className="mr-2"
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Comments ({item.comments?.length || 0})
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRecommendClick(item)}
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Recommend
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       </div>
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+
+      <Dialog open={isRecommendDialogOpen} onOpenChange={setIsRecommendDialogOpen}>
         <DialogContent className="sm:max-w-[625px]">
           <DialogHeader>
             <DialogTitle>AI Fulfillment Strategy</DialogTitle>
@@ -165,6 +218,32 @@ export function FulfillmentClient({ items }: { items: FulfillmentItem[] }) {
             </div>
           )}
         </DialogContent>
+      </Dialog>
+      
+      <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
+          <DialogContent>
+              <DialogHeader>
+                  <DialogTitle>Feedback for {selectedItem?.item}</DialogTitle>
+                  <DialogDescription>View history and add new comments.</DialogDescription>
+              </DialogHeader>
+              <div className="max-h-[300px] overflow-y-auto space-y-4 p-1">
+                  {selectedItem?.comments && selectedItem.comments.length > 0 ? (
+                      selectedItem.comments.map((comment, index) => (
+                           <div key={index} className="text-sm p-3 rounded-md bg-muted">{comment}</div>
+                      ))
+                  ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">No comments yet.</p>
+                  )}
+              </div>
+              <div className="grid gap-2 pt-4">
+                  <Label htmlFor="comment">Add Comment</Label>
+                  <Textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} disabled={!canEdit}/>
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleAddComment} disabled={!canEdit}>Save Comment</Button>
+              </DialogFooter>
+          </DialogContent>
       </Dialog>
     </>
   );
