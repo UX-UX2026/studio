@@ -62,28 +62,18 @@ export default function LoginPage() {
           // If user is authenticated but has no profile, create one.
           if (status === null) {
             try {
-              const batch = writeBatch(firestore);
-
-              const metadataRef = doc(firestore, 'app', 'metadata');
               const userRef = doc(firestore, 'users', user.uid);
-              
-              const metadataSnap = await getDoc(metadataRef);
-              const adminIsSetUp = metadataSnap.exists() && metadataSnap.data()?.adminIsSetUp;
 
               let role = 'Requester'; // Default role
               let department = 'Unassigned';
 
-              // Hardcode admin role for specific user, otherwise use first-user logic
+              // Hardcode admin role for specific user
               if (user.email === 'heinrich@ubuntux.co.za') {
                   role = 'Administrator';
                   department = 'Executive';
-              } else if (!adminIsSetUp) {
-                  role = 'Administrator';
-                  department = 'Executive';
               }
-
-              // Set up the user document write
-              batch.set(userRef, {
+              
+              await setDoc(userRef, {
                 displayName: user.displayName || user.email?.split('@')[0],
                 email: user.email,
                 photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
@@ -92,14 +82,6 @@ export default function LoginPage() {
                 status: 'Active',
               });
 
-              // If we just created the first admin, update the metadata flag
-              if (role === 'Administrator' && !adminIsSetUp) {
-                 batch.set(metadataRef, { adminIsSetUp: true });
-              }
-
-              // Commit the atomic batch
-              await batch.commit();
-              
               // The useUser hook will now pick up the new profile and status will become 'Active',
               // which will trigger the redirect on the next render.
             } catch (error: any) {
