@@ -5,6 +5,9 @@ export type ApprovalItem = {
     category: string;
     qty: number;
     unitPrice: number;
+    fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
+    receivedQty: number;
+    fulfillmentComments: string[];
 };
 
 export type ApprovalRequest = {
@@ -12,7 +15,7 @@ export type ApprovalRequest = {
     department: string;
     period: string;
     total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft';
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
     submittedBy: string;
     timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];

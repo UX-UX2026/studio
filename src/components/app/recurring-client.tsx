@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LayoutGrid, List, Plus, Trash2, Upload, Download } from "lucide-react";
+import { LayoutGrid, List, Plus, Trash2, Upload, Download, Loader } from "lucide-react";
 import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, addDoc, doc, setDoc, deleteDoc } from "firebase/firestore";
 
 type RecurringItem = {
     id: string;
@@ -26,37 +28,35 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-export function RecurringClient({ items: initialItems }: { items: RecurringItem[] }) {
-    const [items, setItems] = useState<RecurringItem[]>(initialItems);
+export function RecurringClient() {
+    const firestore = useFirestore();
+    const recurringItemsQuery = useMemo(() => collection(firestore, 'recurringItems'), [firestore]);
+    const { data: items, loading } = useCollection<RecurringItem>(recurringItemsQuery);
+    
     const [view, setView] = useState<'grid' | 'list'>('grid');
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-
-    const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
-        setItems((prevItems) =>
-            prevItems.map((item) =>
-              item.id === id ? { ...item, [field]: value } : item
-            )
-        );
+    const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
+        const itemRef = doc(firestore, 'recurringItems', id);
+        await setDoc(itemRef, { [field]: value }, { merge: true });
     };
 
-    const handleAddItem = () => {
-        const newItem: RecurringItem = {
-          id: `rec-${Date.now()}`,
-          name: "",
-          category: "",
+    const handleAddItem = async () => {
+        const newItem: Omit<RecurringItem, 'id'> = {
+          name: "New Item",
+          category: "Uncategorized",
           amount: 0,
-          nextLoad: "",
+          nextLoad: "TBD",
           frequency: "Monthly",
           active: true,
         };
-        setItems([...items, newItem]);
+        await addDoc(collection(firestore, 'recurringItems'), newItem);
         setView('list'); // Switch to list view for easier editing
     };
     
-    const handleRemoveItem = (id: string) => {
-        setItems(items.filter((item) => item.id !== id));
+    const handleRemoveItem = async (id: string) => {
+        await deleteDoc(doc(firestore, 'recurringItems', id));
     };
 
     const handleImportClick = () => {
@@ -64,7 +64,7 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
     };
 
     const handleExport = () => {
-        if (items.length === 0) {
+        if (!items || items.length === 0) {
             toast({ title: "No Data to Export", description: "There are no recurring items to export." });
             return;
         }
@@ -93,7 +93,7 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -101,7 +101,7 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
 
                 const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
                 
-                const newItems: RecurringItem[] = rows.slice(1).map(row => {
+                const newItems: Omit<RecurringItem, 'id'>[] = rows.slice(1).map(row => {
                     const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
                     let item: any = {};
                     headers.forEach((header, index) => {
@@ -113,7 +113,6 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
                     }
 
                     return {
-                        id: item.id || `rec-${Date.now()}-${Math.random()}`,
                         name: item.name,
                         category: item.category,
                         frequency: item.frequency || 'Monthly',
@@ -123,7 +122,9 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
                     };
                 });
                 
-                setItems(prev => [...prev, ...newItems]);
+                for (const item of newItems) {
+                    await addDoc(collection(firestore, 'recurringItems'), item);
+                }
 
                 toast({ title: "Import Successful", description: `${newItems.length} items were added.` });
             } catch (error: any) {
@@ -165,9 +166,13 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
                 </div>
             </div>
 
-            {view === 'grid' ? (
+            {loading ? (
+                <div className="flex justify-center items-center h-64">
+                    <Loader className="h-8 w-8 animate-spin" />
+                </div>
+            ) : view === 'grid' ? (
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {items.map(item => (
+                    {items && items.map(item => (
                         <Card key={item.id} className="flex flex-col justify-between hover:shadow-lg transition-shadow">
                             <CardHeader>
                                 <div className="flex justify-between items-start">
@@ -205,22 +210,22 @@ export function RecurringClient({ items: initialItems }: { items: RecurringItem[
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {items.map(item => (
+                        {items && items.map(item => (
                             <TableRow key={item.id}>
                                 <TableCell>
-                                    <Input value={item.name} onChange={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" />
+                                    <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" />
                                 </TableCell>
                                 <TableCell>
-                                    <Input value={item.category} onChange={e => handleItemChange(item.id, 'category', e.target.value)} className="bg-transparent border-0" />
+                                    <Input defaultValue={item.category} onBlur={e => handleItemChange(item.id, 'category', e.target.value)} className="bg-transparent border-0" />
                                 </TableCell>
                                 <TableCell>
-                                    <Input value={item.frequency} onChange={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" />
+                                    <Input defaultValue={item.frequency} onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" />
                                 </TableCell>
                                 <TableCell>
-                                    <Input value={item.nextLoad} onChange={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" />
+                                    <Input defaultValue={item.nextLoad} onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" />
                                 </TableCell>
                                 <TableCell className="text-right">
-                                    <Input type="number" value={item.amount} onChange={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" />
+                                    <Input type="number" defaultValue={item.amount} onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" />
                                 </TableCell>
                                 <TableCell className="flex justify-center">
                                     <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status"/>

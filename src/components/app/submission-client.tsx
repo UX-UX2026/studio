@@ -27,7 +27,6 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 import { Label } from "@/components/ui/label";
 import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
@@ -43,6 +42,17 @@ type Item = {
   qty: number;
   category: string;
   unitPrice: number;
+  fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
+  receivedQty: number;
+  fulfillmentComments: string[];
+};
+
+type RecurringItem = {
+    id: string;
+    category: string;
+    name: string;
+    amount: number;
+    active: boolean;
 };
 
 type Department = {
@@ -55,31 +65,13 @@ type ApprovalRequest = {
     department: string;
     period: string;
     total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft';
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
     submittedBy: string;
     timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: Item[];
 };
 
-
-// Map recurring items to the submission item format
-const recurringSubmissionItems: Item[] = recurringItems
-  .filter(item => item.active)
-  .map(item => ({
-    id: item.id,
-    type: "Recurring",
-    description: item.name,
-    brand: item.name.split(" ")[0], // Simple brand extraction
-    qty: 1,
-    category: item.category,
-    unitPrice: item.amount,
-  }));
-
-const initialItems: Item[] = [
-    ...recurringSubmissionItems,
-    ...oneOffSubmissionItems
-];
 
 const categories = [
   "Operational Lease/Rental - SA",
@@ -104,13 +96,35 @@ const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock
 
 
 export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
-  const [items, setItems] = useState<Item[]>(initialItems);
+  const [items, setItems] = useState<Item[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
   const { user } = useUser();
   
   const firestore = useFirestore();
   const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
   const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+  const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), where('active', '==', true)), [firestore]);
+  const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
+
+  useEffect(() => {
+    if (recurringItems) {
+        const recurringSubmissionItems: Item[] = recurringItems.map(item => ({
+            id: item.id,
+            type: "Recurring",
+            description: item.name,
+            brand: item.name.split(" ")[0], // Simple brand extraction
+            qty: 1,
+            category: item.category,
+            unitPrice: item.amount,
+            fulfillmentStatus: 'Pending',
+            receivedQty: 0,
+            fulfillmentComments: [],
+        }));
+        setItems(recurringSubmissionItems);
+    }
+  }, [recurringItems]);
+
 
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
 
@@ -169,7 +183,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       const { status } = periodStatusInfo;
       
       // Lock if completed or pending at executive level
-      if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved') {
+      if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
           return true;
       }
       // Lock for requesters once submitted to manager
@@ -206,6 +220,9 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       qty: 1,
       category: "",
       unitPrice: 0,
+      fulfillmentStatus: 'Pending',
+      receivedQty: 0,
+      fulfillmentComments: [],
     };
     setItems([...items, newItem]);
   };
@@ -303,6 +320,9 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     qty: parseInt(item.qty, 10) || 1,
                     category: item.category || '',
                     unitPrice: parseFloat(item.unitPrice) || 0,
+                    fulfillmentStatus: 'Pending',
+                    receivedQty: 0,
+                    fulfillmentComments: [],
                 };
             }).filter((item): item is Item => item !== null);
             

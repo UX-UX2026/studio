@@ -27,6 +27,7 @@
             "Pending Manager Approval",
             "Pending Executive",
             "Approved",
+            "In Fulfillment",
             "Completed",
             "Queries Raised",
             "Rejected",
@@ -128,6 +129,25 @@
               },
               "unitPrice": {
                 "type": "number"
+              },
+              "fulfillmentStatus": {
+                "type": "string",
+                "enum": [
+                  "Pending",
+                  "Sourcing",
+                  "Quoted",
+                  "Ordered",
+                  "Completed"
+                ]
+              },
+              "receivedQty": {
+                "type": "number"
+              },
+              "fulfillmentComments": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -320,6 +340,38 @@
         "category",
         "status"
       ]
+    },
+    "recurringItem": {
+      "title": "Recurring Item",
+      "description": "Defines a procurement item that recurs on a schedule.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "amount": {
+          "type": "number"
+        },
+        "nextLoad": {
+          "type": "string"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "frequency": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "category",
+        "amount",
+        "active",
+        "frequency"
+      ]
     }
   },
   "auth": {
@@ -370,6 +422,12 @@
         "$ref": "#/entities/vendor"
       },
       "description": "Collection of all approved vendors and suppliers."
+    },
+    "/recurringItems/{recurringItemId}": {
+      "schema": {
+        "$ref": "#/entities/recurringItem"
+      },
+      "description": "Collection of all recurring procurement items."
     }
   }
 }

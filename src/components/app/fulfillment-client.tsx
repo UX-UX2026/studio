@@ -27,11 +27,20 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { type UserRole } from "@/firebase/auth/use-user";
-import { type fulfillmentItems as allFulfillmentItems } from "@/lib/mock-data";
+import { type UserRole, useUser } from "@/firebase/auth/use-user";
+import { useFirestore } from "@/firebase";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 
 
-type FulfillmentItem = (typeof allFulfillmentItems)[0];
+type FulfillmentItem = ApprovalItem & {
+  procurementRequestId: string;
+  department: string;
+  item: string; // This is item.description
+  approvedOn: string;
+  request: any;
+};
+
 const fulfillmentStatuses = ["Sourcing", "Quoted", "Ordered", "Completed"];
 
 const getStatusBadge = (status: string) => {
@@ -58,6 +67,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   const [isLoading, setIsLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const { toast } = useToast();
+  const firestore = useFirestore();
 
   const canEdit = role === 'Procurement Assistant' || role === 'Procurement Officer' || role === 'Administrator';
 
@@ -83,12 +93,36 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     }
   };
   
-  const handleItemUpdate = (itemId: string, field: keyof FulfillmentItem, value: any) => {
-      setItems(currentItems =>
-          currentItems.map(item =>
-              item.id === itemId ? { ...item, [field]: value } : item
-          )
-      );
+  const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
+      const itemToUpdate = items.find(i => i.id === itemId);
+      if (!itemToUpdate) return;
+      
+      const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
+
+      try {
+          const requestSnap = await getDoc(requestRef);
+          if (!requestSnap.exists()) throw new Error("Procurement request not found");
+          
+          const requestData = requestSnap.data() as ApprovalRequest;
+          const updatedItems = requestData.items.map(i => {
+              if (i.id === itemId) {
+                  return { ...i, [field]: value };
+              }
+              return i;
+          });
+          
+          await updateDoc(requestRef, { items: updatedItems });
+
+          // Also update local state for immediate UI feedback
+          setItems(currentItems =>
+              currentItems.map(item =>
+                  item.id === itemId ? { ...item, [field]: value } : item
+              )
+          );
+
+      } catch (error: any) {
+          toast({ variant: 'destructive', title: 'Update failed', description: error.message });
+      }
   };
   
   const handleOpenCommentDialog = (item: FulfillmentItem) => {
@@ -96,13 +130,13 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setIsCommentDialogOpen(true);
   };
 
-  const handleAddComment = () => {
-      if (!selectedItem || !newComment.trim()) return;
+  const handleAddComment = async () => {
+      if (!selectedItem || !newComment.trim() || !role) return;
 
       const newCommentText = `${role}: ${newComment}`;
-      const updatedComments = [...(selectedItem.comments || []), newCommentText];
+      const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      handleItemUpdate(selectedItem.id, 'comments', updatedComments);
+      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
 
       toast({ title: "Comment added successfully." });
       setNewComment("");
@@ -128,7 +162,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
             {items.map((item) => {
               const outstandingQty = item.qty - item.receivedQty;
               return (
-                <TableRow key={item.id} className={outstandingQty > 0 && item.outstandingDays > 10 ? "bg-red-500/10" : ""}>
+                <TableRow key={item.id} className={outstandingQty > 0 && item.approvedOn > '10' ? "bg-red-500/10" : ""}>
                   <TableCell className="font-medium">{item.item}</TableCell>
                   <TableCell>{item.qty}</TableCell>
                   <TableCell>
@@ -143,7 +177,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                   <TableCell className={outstandingQty > 0 ? 'font-bold' : ''}>{outstandingQty}</TableCell>
                   <TableCell>
                       {canEdit ? (
-                           <Select value={item.status} onValueChange={(value) => handleItemUpdate(item.id, 'status', value)}>
+                           <Select value={item.fulfillmentStatus} onValueChange={(value) => handleItemUpdate(item.id, 'fulfillmentStatus', value)}>
                               <SelectTrigger className="w-[120px]">
                                 <SelectValue />
                               </SelectTrigger>
@@ -154,7 +188,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                               </SelectContent>
                           </Select>
                       ) : (
-                          getStatusBadge(item.status)
+                          getStatusBadge(item.fulfillmentStatus)
                       )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -165,7 +199,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                       className="mr-2"
                     >
                       <MessageSquare className="h-4 w-4 mr-2" />
-                      Comments ({item.comments?.length || 0})
+                      Comments ({item.fulfillmentComments?.length || 0})
                     </Button>
                     <Button
                       size="sm"
@@ -227,8 +261,8 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                   <DialogDescription>View history and add new comments.</DialogDescription>
               </DialogHeader>
               <div className="max-h-[300px] overflow-y-auto space-y-4 p-1">
-                  {selectedItem?.comments && selectedItem.comments.length > 0 ? (
-                      selectedItem.comments.map((comment, index) => (
+                  {selectedItem?.fulfillmentComments && selectedItem.fulfillmentComments.length > 0 ? (
+                      selectedItem.fulfillmentComments.map((comment, index) => (
                            <div key={index} className="text-sm p-3 rounded-md bg-muted">{comment}</div>
                       ))
                   ) : (

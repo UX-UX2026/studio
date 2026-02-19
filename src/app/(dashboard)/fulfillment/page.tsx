@@ -6,7 +6,6 @@ import { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FulfillmentClient } from "@/components/app/fulfillment-client";
-import { fulfillmentItems as allFulfillmentItems } from "@/lib/mock-data";
 import {
   Accordion,
   AccordionContent,
@@ -15,19 +14,59 @@ import {
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, query, where } from "firebase/firestore";
+import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 
-export type FulfillmentItem = (typeof allFulfillmentItems)[0];
+
+export type FulfillmentItem = ApprovalItem & {
+  procurementRequestId: string;
+  department: string;
+  item: string;
+  approvedOn: string;
+  request: any;
+};
 
 export default function FulfillmentPage() {
-    const { user, role, department, loading } = useUser();
+    const { user, role, department, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
+
+    const fulfillmentQuery = useMemo(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'procurementRequests'), where('status', '==', 'In Fulfillment'));
+    }, [firestore]);
+
+    const { data: fulfillmentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
+
+    const allFulfillmentItems = useMemo(() => {
+        if (!fulfillmentRequests) return [];
+        return fulfillmentRequests.flatMap(req => 
+            req.items.map(item => ({
+                ...item,
+                procurementRequestId: req.id,
+                department: req.department,
+                item: item.description,
+                approvedOn: req.timeline.find(t => t.stage === 'Executive Review')?.date || new Date().toISOString(),
+                 request: {
+                    itemName: item.description,
+                    itemDescription: item.description,
+                    quantity: item.qty,
+                    category: item.category,
+                    unitPrice: item.unitPrice,
+                    department: req.department,
+                }
+            }))
+        )
+    }, [fulfillmentRequests]);
+
 
     useEffect(() => {
       const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'];
-      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
+      if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
-    }, [user, role, loading, router]);
+    }, [user, role, userLoading, router]);
     
     const fulfillmentItemsByDept = useMemo(() => {
         return allFulfillmentItems.reduce((acc, item) => {
@@ -37,14 +76,14 @@ export default function FulfillmentPage() {
             acc[item.department].push(item);
             return acc;
         }, {} as Record<string, FulfillmentItem[]>);
-    }, []);
+    }, [allFulfillmentItems]);
 
     const fulfillmentStatsByDept = useMemo(() => {
         const stats: Record<string, { total: number, completed: number, percentage: number }> = {};
         for (const dept in fulfillmentItemsByDept) {
             const items = fulfillmentItemsByDept[dept];
             const total = items.length;
-            const completed = items.filter(item => item.status === 'Completed').length;
+            const completed = items.filter(item => item.fulfillmentStatus === 'Completed').length;
             stats[dept] = {
                 total,
                 completed,
@@ -62,6 +101,8 @@ export default function FulfillmentPage() {
         }
         return departmentOrder;
     }, [role, department, departmentOrder]);
+    
+    const loading = userLoading || requestsLoading;
 
     if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'].includes(role)) {
         return (

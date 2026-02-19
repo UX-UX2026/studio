@@ -24,27 +24,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
-
-type ApprovalItem = {
-    id: number | string;
-    type: "Recurring" | "One-Off";
-    description: string;
-    category: string;
-    qty: number;
-    unitPrice: number;
-};
-
-type ApprovalRequest = {
-    id: string;
-    department: string;
-    period: string;
-    total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft';
-    submittedBy: string;
-    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
-    comments: { actor: string; actorId: string; text: string; timestamp: string }[];
-    items: ApprovalItem[];
-};
+import type { ApprovalItem, ApprovalRequest } from "@/lib/approvals-mock-data";
 
 
 const getStatusBadge = (status: string) => {
@@ -52,6 +32,7 @@ const getStatusBadge = (status: string) => {
         case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
         case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
         case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
+        case 'In Fulfillment': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">In Fulfillment</Badge>;
         case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
         case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
         default: return <Badge variant="secondary">{status}</Badge>
@@ -198,12 +179,6 @@ export default function ApprovalsPage() {
         setCapital(updatedData);
     };
 
-    // Placeholder for PDF generation and Google Drive upload
-    async function archiveRequestToDrive(request: ApprovalRequest) {
-        console.log("Simulating PDF generation and upload for request:", request.id);
-        return Promise.resolve();
-    }
-
     const handleApprove = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
@@ -247,10 +222,10 @@ export default function ApprovalsPage() {
                 return step;
             });
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
-            newStatus = 'Completed';
+            newStatus = 'In Fulfillment';
             toastMessage = {
-                title: "Request Processed & Archived",
-                description: `A PDF for ${activeRequest.id.substring(0,8)}... has been generated and saved to Google Drive. (Simulation)`,
+                title: "Request Acknowledged",
+                description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.`,
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Procurement Ack.') {
@@ -258,8 +233,6 @@ export default function ApprovalsPage() {
                 }
                 return step;
             });
-            
-            await archiveRequestToDrive(activeRequest);
         }
 
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
