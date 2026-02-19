@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Check, MessageSquare, Paperclip, Send, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type ApprovalRequest, approvalsData } from "@/lib/approvals-mock-data";
+import { type ApprovalRequest, approvalsData as initialApprovalsData } from "@/lib/approvals-mock-data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -24,6 +24,7 @@ import {
 import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { useToast } from "@/hooks/use-toast";
 
 
 const getStatusBadge = (status: string) => {
@@ -56,31 +57,33 @@ const formatPercentage = (value: number) => {
 export default function ApprovalsPage() {
     const { user, role, department, loading } = useUser();
     const router = useRouter();
+    const { toast } = useToast();
 
+    const [approvals, setApprovals] = useState(initialApprovalsData);
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
     const filteredRequests = useMemo(() => {
         if (!role) return [];
         if (role === 'Manager') {
-            return approvalsData.filter(req => 
+            return approvals.filter(req => 
                 req.status === 'Pending Manager Approval' && req.department === department
             );
         }
         if (role === 'Executive') {
-            return approvalsData.filter(req => req.status === 'Pending Executive' || req.status === 'Pending Manager Approval');
+            return approvals.filter(req => req.status === 'Pending Executive' || req.status === 'Pending Manager Approval');
         }
         if (role === 'Administrator') {
-            return approvalsData;
+            return approvals;
         }
         return [];
-    }, [role, department]);
+    }, [role, department, approvals]);
 
     useEffect(() => {
         const firstPending = filteredRequests.find(a => a.status.startsWith('Pending'));
         setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
     }, [filteredRequests]);
 
-    const activeRequest = useMemo(() => approvalsData.find((req) => req.id === selectedRequestId), [selectedRequestId]);
+    const activeRequest = useMemo(() => approvals.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
 
     // State for summary tables
     const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
@@ -148,6 +151,64 @@ export default function ApprovalsPage() {
         const updatedData = [...capital];
         updatedData[index].comments = value;
         setCapital(updatedData);
+    };
+
+    // Placeholder for PDF generation and Google Drive upload
+    async function archiveRequestToDrive(request: ApprovalRequest) {
+        /*
+        This is a placeholder function to demonstrate how you would implement
+        PDF generation and Google Drive upload. A developer would need to integrate
+        the necessary libraries and APIs.
+        */
+        console.log("Simulating PDF generation and upload for request:", request.id);
+        return Promise.resolve();
+    }
+
+    const handleApprove = () => {
+        if (!activeRequest || !selectedRequestId) return;
+
+        let newStatus: ApprovalRequest['status'] = activeRequest.status;
+        let newTimeline = [...activeRequest.timeline];
+        let toastMessage = {};
+
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+
+        if (role === 'Manager' && activeRequest.status === 'Pending Manager Approval') {
+            newStatus = 'Pending Executive';
+            toastMessage = {
+                title: "Request Approved",
+                description: `${activeRequest.id} has been forwarded for executive approval.`,
+            };
+            newTimeline = newTimeline.map(step => {
+                if (step.stage === 'Manager Review') {
+                    return { ...step, status: 'completed' as const, date: currentDate };
+                }
+                if (step.stage === 'Executive Review') {
+                    return { ...step, status: 'pending' as const };
+                }
+                return step;
+            });
+        } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+            newStatus = 'Completed';
+            toastMessage = {
+                title: "Request Approved & Archived",
+                description: `A PDF for ${activeRequest.id} has been generated and saved to Google Drive. (Simulation)`,
+            };
+            newTimeline = newTimeline.map(step => {
+                if (step.status !== 'completed') {
+                     return { ...step, status: 'completed' as const, date: currentDate };
+                }
+                return step;
+            });
+            
+            archiveRequestToDrive(activeRequest);
+        }
+
+        const updatedApprovals = approvals.map(req =>
+            req.id === selectedRequestId ? { ...req, status: newStatus, timeline: newTimeline } : req
+        );
+        setApprovals(updatedApprovals);
+        toast(toastMessage);
     };
     
     const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
@@ -404,7 +465,7 @@ export default function ApprovalsPage() {
                                     <CardFooter className="flex justify-end gap-2 border-t pt-6">
                                         <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
                                         <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
-                                        <Button><Check className="mr-2 h-4 w-4" />Approve</Button>
+                                        <Button onClick={handleApprove}><Check className="mr-2 h-4 w-4" />Approve</Button>
                                     </CardFooter>
                                 )}
                             </AccordionContent>
