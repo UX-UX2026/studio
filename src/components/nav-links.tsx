@@ -12,6 +12,7 @@ import {
   ChevronDown,
   FilePieChart,
   History,
+  Banknote,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -50,6 +51,7 @@ const allLinks = [
         { href: '/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
         { href: '/settings/departments', label: 'Departments', roles: ['Administrator'] },
         { href: '/settings/roles', label: 'Roles', roles: ['Administrator'] },
+        { href: '/settings/budget', label: 'Budget', roles: ['Administrator'] },
         { href: '/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
     ]
   },
@@ -68,7 +70,8 @@ export function NavLinks({ role }: { role: UserRole }) {
             const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
             if (visibleSubLinks.length === 0) return null;
             
-            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
+            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href) && sublink.href !== '/settings' || pathname === '/settings' && sublink.href === '/settings');
+
 
             return (
               <Collapsible key={link.label} defaultOpen={isParentActive}>

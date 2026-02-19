@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, Banknote } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -72,9 +72,11 @@ export default function SettingsPage() {
                      <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Budget Integration</h3>
                         <p className="text-sm text-muted-foreground">
-                           Connect to a Google Sheet to sync approved budget data. This feature is a placeholder and requires backend development and Google API configuration.
+                           Import, view, and manage budget data from an external sheet.
                         </p>
-                        <Button disabled>Connect to Google Sheets</Button>
+                        <Button asChild>
+                           <Link href="/settings/budget">Manage Budget</Link>
+                        </Button>
                     </div>
                     <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Backup & Restore</h3>

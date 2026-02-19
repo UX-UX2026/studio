@@ -72,6 +72,10 @@ service cloud.firestore {
       // This should be locked down further with cloud functions in a real app
       allow create: if isSignedIn();
     }
+    
+    match /budgets/{budgetId} {
+      allow read, write: if isAdmin();
+    }
 
     match /procurementRequests/{requestId} {
       // Anyone involved in the request can read it. Admins, Executives, and POs can read all.

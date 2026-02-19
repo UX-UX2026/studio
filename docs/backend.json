@@ -416,6 +416,33 @@
         "action",
         "timestamp"
       ]
+    },
+    "budgetItem": {
+      "title": "Budget Item",
+      "description": "Represents a single budget line item from an external sheet.",
+      "type": "object",
+      "properties": {
+        "category": {
+          "type": "string",
+          "description": "The expense category (e.g., 'Salaries - SA')."
+        },
+        "forecasts": {
+          "type": "array",
+          "description": "Monthly forecast values for the budget year.",
+          "items": {
+            "type": "number"
+          }
+        },
+        "yearTotal": {
+          "type": "number",
+          "description": "The total budgeted amount for the year."
+        }
+      },
+      "required": [
+        "category",
+        "forecasts",
+        "yearTotal"
+      ]
     }
   },
   "auth": {
@@ -478,6 +505,12 @@
         "$ref": "#/entities/auditEvent"
       },
       "description": "Collection of all audit trail events for tracking user actions."
+    },
+    "/budgets/{budgetId}": {
+      "schema": {
+        "$ref": "#/entities/budgetItem"
+      },
+      "description": "Collection of all imported budget line items."
     }
   }
 }
