@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -152,7 +153,7 @@ export default function ApprovalsPage() {
     
     const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
     const subtotalForecast = cashExpenses.reduce((sum, item) => sum + item.forecast, 0);
-    const subtotalVsForecast = subtotalForecast - subtotalProcurement;
+    const subtotalVsForecast = subtotalProcurement - subtotalForecast;
 
   return (
     <div className="grid lg:grid-cols-3 gap-8">
