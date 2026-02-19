@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { collection, doc, getDocs, getDoc, setDoc, query, limit, writeBatch } from "firebase/firestore";
+import { collection, doc, getDocs, getDoc, setDoc, query, limit } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -34,7 +34,7 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, loading: userLoading, status } = useUser();
+    const { user, loading: userLoading, status, role } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -43,48 +43,77 @@ export default function LoginPage() {
 
 
     useEffect(() => {
-      const handleAuthRedirect = async () => {
-        if (!userLoading && user) {
-          if (status === 'Active') {
-            router.push('/');
-            return;
-          }
+      const handleAdminAndRedirect = async () => {
+        // Wait until all user data is loaded
+        if (userLoading || !user) {
+          return;
+        }
 
-          if (status === 'Invited') {
-            setErrorDialog({
-              title: "Account Pending Activation",
-              description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
-            });
-            await signOut(auth);
-            return;
-          }
-          
-          // If user is authenticated but has no profile, create one.
-          if (status === null) {
+        // --- Start Admin Check ---
+        // If this is the special admin user, ensure their role is correct.
+        if (user.email === 'heinrich@ubuntux.co.za') {
+          // If the profile is loaded and the role is not Administrator, fix it.
+          if (status !== null && role !== 'Administrator') {
             try {
               const userRef = doc(firestore, 'users', user.uid);
-
-              let role = 'Requester'; // Default role
-              let department = 'Unassigned';
-
-              // Hardcode admin role for specific user
-              if (user.email === 'heinrich@ubuntux.co.za') {
-                  role = 'Administrator';
-                  department = 'Executive';
-              }
-              
-              await setDoc(userRef, {
-                displayName: user.displayName || user.email?.split('@')[0],
-                email: user.email,
-                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                role: role,
-                department: department,
-                status: 'Active',
-              });
-
-              // The useUser hook will now pick up the new profile and status will become 'Active',
-              // which will trigger the redirect on the next render.
+              await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
+              // The useUser hook will re-fetch and update the role. We don't redirect yet,
+              // we let the hook re-run with the correct role.
+              return; 
             } catch (error: any) {
+               console.error("Failed to upgrade to admin:", error);
+               setErrorDialog({
+                  title: "Admin Setup Failed",
+                  description: "Could not grant you Administrator privileges. Please contact support.",
+              });
+              await signOut(auth);
+              return;
+            }
+          }
+        }
+        // --- End Admin Check ---
+
+        // --- Redirection and New User Logic ---
+        if (status === 'Active') {
+          router.push('/');
+          return;
+        }
+
+        if (status === 'Invited') {
+          setErrorDialog({
+            title: "Account Pending Activation",
+            description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
+          });
+          await signOut(auth);
+          return;
+        }
+        
+        // If user is authenticated but has no profile (status is null), create one.
+        if (status === null) {
+          try {
+            const userRef = doc(firestore, 'users', user.uid);
+
+            let newRole = 'Requester';
+            let newDepartment = 'Unassigned';
+
+            if (user.email === 'heinrich@ubuntux.co.za') {
+              newRole = 'Administrator';
+              newDepartment = 'Executive';
+            }
+            
+            await setDoc(userRef, {
+              displayName: user.displayName || user.email?.split('@')[0],
+              email: user.email,
+              photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+              role: newRole,
+              department: newDepartment,
+              status: 'Active',
+            });
+
+            // After creation, the useUser hook will update `status` to 'Active',
+            // which will trigger this useEffect again and handle the redirect.
+            
+          } catch (error: any) {
               console.error("Account setup error:", error);
               let description = "An unexpected error occurred. Please try again.";
 
@@ -101,13 +130,12 @@ export default function LoginPage() {
                   description: description,
               });
               await signOut(auth);
-            }
           }
         }
       };
 
-      handleAuthRedirect();
-    }, [user, userLoading, status, router, auth, firestore]);
+      handleAdminAndRedirect();
+    }, [user, userLoading, status, role, router, auth, firestore]);
 
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
