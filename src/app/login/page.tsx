@@ -1,4 +1,3 @@
-
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { collection, doc, getDocs, query, limit, setDoc } from "firebase/firestore";
+import { collection, doc, getDocs, query, limit, setDoc, where } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -62,10 +61,10 @@ export default function LoginPage() {
           
           if (status === null) { // No user profile in Firestore
             const usersCollection = collection(firestore, 'users');
-            const q = query(usersCollection, limit(1));
-            const existingUsersSnapshot = await getDocs(q);
+            const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
+            const adminSnapshot = await getDocs(adminQuery);
 
-            if (existingUsersSnapshot.empty) {
+            if (adminSnapshot.empty) {
               // This is the first user, let's make them an administrator
               const userRef = doc(firestore, 'users', user.uid);
               try {
