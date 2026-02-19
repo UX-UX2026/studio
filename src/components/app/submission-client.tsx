@@ -403,7 +403,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     type="number"
                     value={item.qty}
                     onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
-                    readOnly={isLocked || item.type === "Recurring"}
+                    readOnly={isLocked || (item.type === 'Recurring' && userRole !== 'Manager' && userRole !== 'Administrator')}
                     className="w-16 bg-transparent border-0"
                   />
                 </TableCell>
