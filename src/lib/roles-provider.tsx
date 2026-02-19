@@ -1,8 +1,8 @@
 'use client';
 
-import { createContext, useContext, ReactNode, useMemo } from 'react';
+import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
 
 export type Role = {
   id: string;
@@ -23,6 +23,35 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
   const rolesCollection = useMemo(() => collection(firestore, 'roles'), [firestore]);
   const { data: roles, loading } = useCollection<Role>(rolesCollection);
+
+  useEffect(() => {
+    if (!loading && roles && roles.length === 0 && firestore) {
+      const seedRoles = async () => {
+        const defaultRoles = [
+          'Administrator', 
+          'Manager', 
+          'Procurement Officer', 
+          'Executive', 
+          'Requester', 
+          'Procurement Assistant'
+        ];
+        
+        try {
+          const rolesCol = collection(firestore, 'roles');
+          for (const roleName of defaultRoles) {
+            const q = query(rolesCol, where('name', '==', roleName));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+              await addDoc(rolesCol, { name: roleName });
+            }
+          }
+        } catch (error) {
+            console.error("Error seeding roles:", error);
+        }
+      };
+      seedRoles();
+    }
+  }, [roles, loading, firestore]);
 
   const addRole = async (roleData: { name: string }) => {
     await addDoc(collection(firestore, 'roles'), roleData);
