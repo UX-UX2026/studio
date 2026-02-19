@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -68,7 +67,7 @@ export default function ApprovalsPage() {
             );
         }
         if (role === 'Executive') {
-            return approvalsData.filter(req => req.status === 'Pending Executive');
+            return approvalsData.filter(req => req.status === 'Pending Executive' || req.status === 'Pending Manager Approval');
         }
         if (role === 'Administrator') {
             return approvalsData;
