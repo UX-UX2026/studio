@@ -45,31 +45,31 @@ export default function LoginPage() {
     useEffect(() => {
       const handleAuthRedirect = async () => {
         if (!userLoading && user) {
-          if (status === 'Active') {
-            router.push('/');
-            return;
-          }
+          try {
+            if (status === 'Active') {
+              router.push('/');
+              return;
+            }
 
-          if (status === 'Invited') {
-            setErrorDialog({
-              title: "Account Pending Activation",
-              description: "Your account has been invited but not yet activated. Please check your email for an activation link to complete your registration.",
-            });
-            await signOut(auth);
-            return;
-          }
-          
-          if (status === null) { // No user profile in Firestore
-            const usersCollection = collection(firestore, 'users');
-            const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
-            const adminSnapshot = await getDocs(adminQuery);
+            if (status === 'Invited') {
+              setErrorDialog({
+                title: "Account Pending Activation",
+                description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
+              });
+              await signOut(auth);
+              return;
+            }
+            
+            if (status === null) { // No user profile in Firestore
+              const usersCollection = collection(firestore, 'users');
+              const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
+              const adminSnapshot = await getDocs(adminQuery);
 
-            if (adminSnapshot.empty) {
-              // This is the first user, let's make them an administrator
-              const userRef = doc(firestore, 'users', user.uid);
-              try {
+              if (adminSnapshot.empty) {
+                // This is the first user, let's make them an administrator
+                const userRef = doc(firestore, 'users', user.uid);
                 await setDoc(userRef, {
-                  displayName: user.displayName || user.email,
+                  displayName: user.displayName || user.email?.split('@')[0],
                   email: user.email,
                   photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
                   role: 'Administrator',
@@ -77,22 +77,31 @@ export default function LoginPage() {
                   status: 'Active',
                 });
                 // The useUser hook will now pick up the new profile and the status will become 'Active'
-                // which will trigger the redirect on the next render.
-              } catch (e) {
-                 setErrorDialog({
-                    title: "Setup Failed",
-                    description: "We tried to set you up as the first administrator, but something went wrong. Please try logging in again.",
+                // on the next render, which will trigger the redirect.
+              } else {
+                // Other users exist, so this user needs to be invited by an admin.
+                setErrorDialog({
+                  title: "Access Denied",
+                  description: "Your account is not recognized by the system. If you believe this is an error, please contact an administrator to be invited to the portal.",
                 });
                 await signOut(auth);
               }
-            } else {
-              // Other users exist, so this user needs to be invited by an admin.
-              setErrorDialog({
-                title: "Access Denied",
-                description: "Your account is not recognized by the system or has not been fully configured. Please contact an administrator for assistance.",
-              });
-              await signOut(auth);
             }
+          } catch (error: any) {
+            console.error("Auth redirect error:", error);
+            let description = error.message;
+
+            if (error.code === 'failed-precondition') {
+                description = "The query for checking admin users requires a database index. Please go to the link in the developer console to create it in Firebase, then try logging in again.";
+            } else if (error.code === 'permission-denied') {
+                description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured to allow new user creation."
+            }
+
+            setErrorDialog({
+                title: "Login Setup Failed",
+                description: `An error occurred during login: ${description}`,
+            });
+            await signOut(auth);
           }
         }
       };
@@ -140,14 +149,14 @@ export default function LoginPage() {
             let description = "An unexpected error occurred. Please try again.";
 
             if (adminSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
-                description = "It looks like you're setting up the first admin account. Please create this user in the Firebase Authentication console first, then come back here to log in. This will establish them as the site administrator.";
+                description = "This seems to be the first login for a local admin. To complete setup, please go to your Firebase project's Authentication console and create a new user with the email and password you're trying to use. Once created, you can log in here.";
             } else {
                 // The error codes are useful for debugging
                 switch (error.code) {
                     case 'auth/user-not-found':
                     case 'auth/wrong-password':
                     case 'auth/invalid-credential':
-                        description = "Invalid email or password. Please double-check your credentials and try again. Note: users must be created in the Firebase Authentication console before they can sign in with an email and password.";
+                        description = "Invalid email or password. Please double-check your credentials. Note: new email/password users must first be created in the Firebase Authentication console by an administrator.";
                         break;
                     case 'auth/invalid-email':
                         description = "The email address format is not valid.";
@@ -216,7 +225,7 @@ export default function LoginPage() {
                                     <Input
                                         id="email"
                                         type="email"
-                                        placeholder="your-email@example.com"
+                                        placeholder="admin@procurportal.local"
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required

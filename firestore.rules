@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function getRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getRole() == 'Administrator';
+    }
+
+    // Rules for collections
+    match /users/{userId} {
+      // Any authenticated user can create their own profile document.
+      // This is crucial for the first admin sign-up flow.
+      allow create: if isOwner(userId);
+
+      // Once created, only the user or an admin can modify it.
+      allow read, update, delete: if isOwner(userId) || isAdmin();
+
+      // Any authenticated user can query the users collection to see if an admin exists.
+      allow list: if isSignedIn();
+    }
+
+    match /roles/{roleId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /vendors/{vendorId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || getRole() == 'Procurement Officer';
+    }
+
+    match /recurringItems/{recurringItemId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() || getRole() == 'Procurement Officer' || getRole() == 'Manager';
+    }
+    
+    match /procurementRequests/{requestId} {
+      // Anyone involved in the request can read it. Admins, Executives, and POs can read all.
+      allow get: if isSignedIn() && (
+        isOwner(resource.data.submittedById) ||
+        getRole() == 'Administrator' ||
+        getRole() == 'Executive' ||
+        getRole() == 'Procurement Officer' ||
+        (getRole() == 'Manager' && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department == resource.data.department)
+      );
+      
+      // Broader list access for main pages
+      allow list: if isSignedIn();
+
+      // Users can create their own requests.
+      allow create: if isOwner(request.resource.data.submittedById);
+      
+      // Rules for updating requests based on role and status
+      allow update: if isSignedIn() && (
+        isAdmin() ||
+        getRole() == 'Executive' ||
+        // Managers can approve for their department
+        (getRole() == 'Manager' && request.resource.data.department == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.department && resource.data.status == 'Pending Manager Approval') ||
+        // POs can move it to fulfillment
+        (getRole() == 'Procurement Officer' && resource.data.status == 'Approved') ||
+        // POs and assistants can update items during fulfillment
+        ((getRole() == 'Procurement Officer' || getRole() == 'Procurement Assistant') && resource.data.status == 'In Fulfillment')
+      );
+    }
+  }
+}
