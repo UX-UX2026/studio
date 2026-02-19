@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -27,6 +27,13 @@ export default function SettingsPage() {
         );
     }
 
+    const settingLinks = [
+        { href: '/settings/workflow', label: 'Approval Workflow', description: "Define the stages, roles, and permissions for the procurement approval process.", icon: Workflow },
+        { href: '/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building },
+        { href: '/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield },
+        { href: '/settings/audit-log', label: 'Audit Log', description: 'A chronological log of all significant actions performed within the application.', icon: History }
+    ]
+
     return (
         <div className="space-y-6">
             <Card>
@@ -36,39 +43,33 @@ export default function SettingsPage() {
                         Application Settings
                     </CardTitle>
                     <CardDescription>
-                        Manage application-wide settings. Note: Some features require backend implementation.
+                        Manage application-wide settings, configurations, and user access.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
                      <ThemeSwitcher />
+
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {settingLinks.map(link => (
+                            <Card key={link.href} className="flex flex-col">
+                                <CardHeader>
+                                    <CardTitle className="flex items-center gap-3 text-base">
+                                        <link.icon className="h-5 w-5 text-muted-foreground" />
+                                        {link.label}
+                                    </CardTitle>
+                                    <CardDescription className="!mt-3">{link.description}</CardDescription>
+                                </CardHeader>
+                                <CardContent className="flex-grow" />
+                                <div className="p-6 pt-0">
+                                    <Button asChild className="w-full">
+                                        <Link href={link.href}>Manage {link.label.split(' ')[0]}</Link>
+                                    </Button>
+                                </div>
+                            </Card>
+                        ))}
+                     </div>
+                     
                      <div className="space-y-2">
-                        <h3 className="text-lg font-semibold">Approval Workflow</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Define the stages, roles, and permissions for the procurement approval process.
-                        </p>
-                        <Button asChild>
-                           <Link href="/settings/workflow">Manage Workflows</Link>
-                        </Button>
-                    </div>
-                     <div className="space-y-2">
-                        <h3 className="text-lg font-semibold">Departments</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Manage departments, assign managers, and set budgets.
-                        </p>
-                        <Button asChild>
-                           <Link href="/settings/departments">Manage Departments</Link>
-                        </Button>
-                    </div>
-                     <div className="space-y-2">
-                        <h3 className="text-lg font-semibold">User Roles</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Define and manage the roles and permissions for users in the application.
-                        </p>
-                        <Button asChild>
-                           <Link href="/settings/roles">Manage Roles</Link>
-                        </Button>
-                    </div>
-                    <div className="space-y-2">
                         <h3 className="text-lg font-semibold">Budget Integration</h3>
                         <p className="text-sm text-muted-foreground">
                            Connect to a Google Sheet to sync approved budget data. This feature is a placeholder and requires backend development and Google API configuration.

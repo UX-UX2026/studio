@@ -46,6 +46,7 @@ const allLinks = [
     icon: Settings, 
     roles: ['Administrator'],
     subLinks: [
+        { href: '/settings', label: 'General', roles: ['Administrator'] },
         { href: '/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
         { href: '/settings/departments', label: 'Departments', roles: ['Administrator'] },
         { href: '/settings/roles', label: 'Roles', roles: ['Administrator'] },
@@ -84,7 +85,7 @@ export function NavLinks({ role }: { role: UserRole }) {
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-1 flex flex-col gap-1 pl-8">
                   {visibleSubLinks.map(subLink => {
-                     const isActive = pathname === subLink.href || (subLink.href !== '/' && pathname.startsWith(subLink.href));
+                     const isActive = pathname === subLink.href;
                      return (
                         <SidebarNavLink key={subLink.href} href={subLink.href} active={isActive} asChild>
                             <Link href={subLink.href}>{subLink.label}</Link>
