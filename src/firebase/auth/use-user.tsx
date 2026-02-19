@@ -6,11 +6,13 @@ import { useAuth } from '../provider';
 import { mockUsers } from '@/lib/users-mock-data';
 
 export type UserRole = string | null;
+export type UserStatus = 'Active' | 'Invited' | null;
 
 interface UserState {
   user: User | null;
   role: UserRole;
   department: string | null;
+  status: UserStatus;
   loading: boolean;
 }
 
@@ -20,6 +22,7 @@ export function useUser(): UserState {
     user: null,
     role: null,
     department: null,
+    status: null,
     loading: true,
   });
 
@@ -29,6 +32,7 @@ export function useUser(): UserState {
         const tokenResult = await user.getIdTokenResult();
         let role: UserRole = (tokenResult.claims.role as UserRole) || null;
         let department: string | null = null;
+        let status: UserStatus = null;
         
         // Use mock data as the primary source of truth for roles and departments in this demo app
         if (user.email) {
@@ -36,6 +40,7 @@ export function useUser(): UserState {
             if (mockUser) {
                 role = mockUser.role as UserRole;
                 department = mockUser.department;
+                status = mockUser.status as UserStatus;
             }
         }
 
@@ -56,14 +61,19 @@ export function useUser(): UserState {
             }
         }
 
+        if (role && !status) {
+            status = 'Active';
+        }
+
         setUserState({
           user,
           role,
           department,
+          status,
           loading: false,
         });
       } else {
-        setUserState({ user: null, role: null, department: null, loading: false });
+        setUserState({ user: null, role: null, department: null, status: null, loading: false });
       }
     });
 

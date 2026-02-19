@@ -3,7 +3,7 @@
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
-import { Loader, Shield, Plus, Trash2, Edit, Upload, Download } from "lucide-react";
+import { Loader, Shield, Plus, Trash2, Edit, Upload, Download, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,6 +24,7 @@ import { mockUsers as initialMockUsers } from "@/lib/users-mock-data";
 import { mockDepartments } from "@/lib/departments-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
 
 
 type MockUser = typeof initialMockUsers[0];
@@ -83,19 +84,24 @@ export default function UsersPage() {
     }
     
     const handleSave = () => {
+        const isEditing = !!editingUser;
+
         const userData: MockUser = {
             id: editingUser?.id || `user-${Date.now()}`,
             name,
             email,
             role: userRole as any, // Cast because MockUser['role'] is string
             department,
-            avatar: avatar || `https://i.pravatar.cc/150?u=${email}`
+            avatar: avatar || `https://i.pravatar.cc/150?u=${email}`,
+            status: isEditing ? editingUser.status : 'Invited',
         };
 
-        if (editingUser) {
+        if (isEditing) {
             setUsers(users.map(u => u.id === userData.id ? userData : u));
+            toast({ title: "User Updated", description: "User details have been successfully updated." });
         } else {
             setUsers([...users, userData]);
+            toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
         }
         setEditingUser(null);
         setIsDialogOpen(false);
@@ -131,7 +137,7 @@ export default function UsersPage() {
             return;
         }
 
-        const headers: (keyof MockUser)[] = ['id', 'name', 'email', 'role', 'department', 'avatar'];
+        const headers = ['id', 'name', 'email', 'role', 'department', 'avatar', 'status'];
         const csvContent = [
             headers.join(','),
             ...users.map(user =>
@@ -181,6 +187,7 @@ export default function UsersPage() {
                         role: user.role as any,
                         department: user.department,
                         avatar: user.avatar || `https://i.pravatar.cc/150?u=${user.email}`,
+                        status: (user.status === 'Active' || user.status === 'Invited') ? user.status : 'Active',
                     };
                 });
                 
@@ -214,9 +221,7 @@ export default function UsersPage() {
                         User & Permission Management
                     </CardTitle>
                     <CardDescription>
-                        Assign roles to users to control their access. You can also add, edit, or remove users.
-                        <br />
-                        <span className="text-xs text-orange-500 font-medium">Note: User changes are for demonstration and not saved. Creating roles requires code changes.</span>
+                        Invite new users and manage roles and departments for existing users.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -229,7 +234,7 @@ export default function UsersPage() {
                         </Button>
                         <Button onClick={openAddDialog}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Add User
+                            Invite User
                         </Button>
                     </div>
                     <Table>
@@ -239,6 +244,7 @@ export default function UsersPage() {
                                 <TableHead>Email</TableHead>
                                 <TableHead className="w-[200px]">Role</TableHead>
                                 <TableHead className="w-[200px]">Department</TableHead>
+                                <TableHead className="w-[120px]">Status</TableHead>
                                 <TableHead className="text-right w-[120px]">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -273,6 +279,11 @@ export default function UsersPage() {
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
+                                    <TableCell>
+                                        <Badge variant={u.status === 'Active' ? 'default' : 'secondary'} className={u.status === 'Active' ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'}>
+                                            {u.status}
+                                        </Badge>
+                                    </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
                                             <Edit className="h-4 w-4" />
@@ -291,9 +302,9 @@ export default function UsersPage() {
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>{editingUser ? 'Edit' : 'Add'} User</DialogTitle>
+                        <DialogTitle>{editingUser ? 'Edit User' : 'Invite New User'}</DialogTitle>
                         <DialogDescription>
-                            Fill in the details for the user.
+                            {editingUser ? "Edit the user's details below." : "An invitation link will be sent to the user to complete their registration. This is a simulation."}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -332,7 +343,9 @@ export default function UsersPage() {
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSave}>Save</Button>
+                        <Button onClick={handleSave}>
+                            {editingUser ? 'Save Changes' : <><Send className="mr-2 h-4 w-4" /> Send Invitation</>}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

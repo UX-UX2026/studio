@@ -4,7 +4,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -33,7 +33,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
-    const { user, loading: userLoading } = useUser();
+    const { user, loading: userLoading, status } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -43,9 +43,24 @@ export default function LoginPage() {
 
     useEffect(() => {
       if (!userLoading && user) {
-        router.push('/');
+        if (status === 'Invited') {
+            setErrorDialog({
+                title: "Account Pending Activation",
+                description: "Your account has been invited but not yet activated. Please check your email for an activation link to complete your registration.",
+            });
+            signOut(auth);
+        } else if (status === 'Active') {
+            router.push('/');
+        } else {
+            // User exists in Auth but not in our mock system (status is null)
+            setErrorDialog({
+                title: "Access Denied",
+                description: "Your account is not recognized by the system or has not been fully configured. Please contact an administrator for assistance.",
+            });
+            signOut(auth);
+        }
       }
-    }, [user, userLoading, router]);
+    }, [user, userLoading, status, router, auth]);
 
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
@@ -109,7 +124,7 @@ export default function LoginPage() {
         }
     };
 
-    if (userLoading || user) {
+    if (userLoading || (user && status === 'Active')) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
