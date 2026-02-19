@@ -49,6 +49,10 @@ export function useUser(): UserState {
                 role = 'Requester';
             } else if (user.email === 'zukiswa@procurportal.com' || user.email === 'ex@procurportal.com') {
                 role = 'Executive';
+            } else if (user.email === 'proc@procurportal.com') {
+                role = 'Procurement Officer';
+            } else if (user.email === 'proca@procurportal.com') {
+                role = 'Procurement Assistant';
             }
         }
 
