@@ -11,6 +11,7 @@ import {
   Building2,
   ChevronDown,
   FilePieChart,
+  History,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -40,7 +41,17 @@ const allLinks = [
   { href: '/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
-  { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },
+  { 
+    label: 'Settings', 
+    icon: Settings, 
+    roles: ['Administrator'],
+    subLinks: [
+        { href: '/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
+        { href: '/settings/departments', label: 'Departments', roles: ['Administrator'] },
+        { href: '/settings/roles', label: 'Roles', roles: ['Administrator'] },
+        { href: '/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
+    ]
+  },
 ];
 
 export function NavLinks({ role }: { role: UserRole }) {

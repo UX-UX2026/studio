@@ -369,6 +369,53 @@
           "description": "Flag to indicate if the first administrator has been created."
         }
       }
+    },
+    "auditEvent": {
+      "title": "Audit Event",
+      "description": "Records a single significant action taken by a user within the application.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who performed the action."
+        },
+        "userName": {
+          "type": "string",
+          "description": "The display name of the user."
+        },
+        "action": {
+          "type": "string",
+          "description": "A key identifying the action, e.g., 'user.login', 'request.create'."
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "description": "The type of entity affected, e.g., 'procurementRequest'."
+            },
+            "id": {
+              "type": "string",
+              "description": "The ID of the affected entity document."
+            }
+          }
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The server timestamp when the event was recorded."
+        },
+        "details": {
+          "type": "string",
+          "description": "A human-readable description of the action."
+        }
+      },
+      "required": [
+        "userId",
+        "userName",
+        "action",
+        "timestamp"
+      ]
     }
   },
   "auth": {
@@ -425,6 +472,12 @@
         "$ref": "#/entities/appMetadata"
       },
       "description": "Global application metadata."
+    },
+    "/auditLogs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/auditEvent"
+      },
+      "description": "Collection of all audit trail events for tracking user actions."
     }
   }
 }
