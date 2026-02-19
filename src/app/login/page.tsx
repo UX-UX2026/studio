@@ -99,12 +99,16 @@ export default function LoginPage() {
               // which will trigger the redirect on the next render.
             } catch (error: any) {
               console.error("Account setup error:", error);
-              let description = "An error occurred while setting up your account. Please try again.";
-              if (error.code === 'permission-denied') {
-                description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured correctly."
+              let description = "An unexpected error occurred. Please try again.";
+
+              if (error.code === 'unavailable') {
+                  description = "Could not connect to the database to set up your account. This can happen due to restrictive network policies or if the database is not correctly configured. Please check your network and Firebase project setup.";
+              } else if (error.code === 'permission-denied') {
+                  description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured correctly to allow new users to be created.";
               } else {
-                description = `An error occurred while setting up your account: ${error.message || 'Unknown error'}. Please try again.`
+                  description = error.message || "An unknown error occurred during account setup.";
               }
+
               setErrorDialog({
                   title: "Account Setup Failed",
                   description: description,

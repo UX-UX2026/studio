@@ -22,16 +22,17 @@ service cloud.firestore {
 
     // Rules for collections
     match /app/metadata {
-      // Anyone can read if an admin is set up
-      allow read: if isSignedIn();
-      // Allow writing to this document only if the user is authenticated, and either the document
-      // doesn't exist yet, or it's being set to `adminIsSetUp: true`. This prevents it from being maliciously flipped back to false.
+      // Allow anyone to read this document to check if an admin is set up.
+      // This is safe as it only contains a boolean flag.
+      allow read: if true;
+      
+      // Secure the write operation. Only allow it to be created if it doesn't exist,
+      // and only allow it to be set to `true`.
       allow write: if isSignedIn() && (!exists(path(resource.id)) || request.resource.data.adminIsSetUp == true);
     }
     
     match /users/{userId} {
       // Allow user to create their own profile document.
-      // This is essential for the first-time admin setup.
       allow create: if request.auth.uid == userId;
 
       // Allow user to read/update their own profile, or if user is an admin
