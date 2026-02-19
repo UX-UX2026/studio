@@ -14,12 +14,13 @@ export default function RecurringPage() {
     const router = useRouter();
 
     useEffect(() => {
-      if (!loading && (!user || (role !== 'Procurement Officer' && role !== 'Administrator' && role !== 'Manager'))) {
+      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive'];
+      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
     }, [user, role, loading, router]);
     
-    if (loading || !user || (role !== 'Procurement Officer' && role !== 'Administrator' && role !== 'Manager')) {
+    if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

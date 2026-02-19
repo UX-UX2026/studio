@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -31,12 +30,12 @@ const allLinks = [
     roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
     subLinks: [
       { href: '/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester'] },
-      { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager'] },
+      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
+      { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
     ]
   },
   { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager'] },
-  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager'] },
+  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },
