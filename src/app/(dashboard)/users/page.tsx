@@ -147,6 +147,13 @@ export default function UsersPage() {
     const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
         const userRef = doc(firestore, 'users', userId);
         await setDoc(userRef, { [field]: value }, { merge: true });
+        if (field === 'status' && value === 'Active') {
+            const user = users?.find(u => u.id === userId);
+            toast({
+                title: "User Activated",
+                description: `${user?.displayName || 'The user'} has been activated.`,
+            });
+        }
     };
 
     const handleImportClick = () => {
@@ -303,9 +310,20 @@ export default function UsersPage() {
                                         </Select>
                                     </TableCell>
                                     <TableCell>
-                                        <Badge variant={u.status === 'Active' ? 'default' : 'secondary'} className={u.status === 'Active' ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-500 hover:bg-yellow-600'}>
-                                            {u.status}
-                                        </Badge>
+                                        {u.status === 'Active' ? (
+                                            <Badge variant={'default'} className={'bg-green-600 hover:bg-green-700'}>
+                                                Active
+                                            </Badge>
+                                        ) : (
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => handleUserUpdate(u.id, 'status', 'Active')}
+                                                className="text-yellow-600 border-yellow-500 hover:bg-yellow-100 hover:text-yellow-700"
+                                            >
+                                                Activate User
+                                            </Button>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-right">
                                         <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
