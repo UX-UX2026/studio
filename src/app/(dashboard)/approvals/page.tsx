@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser, UserRole } from "@/firebase/auth/use-user";
+import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, X } from "lucide-react";
@@ -9,10 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Check, MessageSquare, Paperclip, Send, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { type ApprovalRequest, approvalsData as initialApprovalsData } from "@/lib/approvals-mock-data";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -23,8 +21,30 @@ import {
 } from "@/components/ui/accordion";
 import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, query, where, doc, updateDoc, arrayUnion } from "firebase/firestore";
+
+type ApprovalItem = {
+    id: number | string;
+    type: "Recurring" | "One-Off";
+    description: string;
+    category: string;
+    qty: number;
+    unitPrice: number;
+};
+
+type ApprovalRequest = {
+    id: string;
+    department: string;
+    period: string;
+    total: number;
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft';
+    submittedBy: string;
+    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
+    comments: { actor: string; actorId: string; text: string; timestamp: string }[];
+    items: ApprovalItem[];
+};
 
 
 const getStatusBadge = (status: string) => {
@@ -56,38 +76,53 @@ const formatPercentage = (value: number) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, role, department, loading } = useUser();
+    const { user, role, department, loading: userLoading } = useUser();
     const router = useRouter();
     const { toast } = useToast();
+    const firestore = useFirestore();
 
-    const [approvals, setApprovals] = useState(initialApprovalsData);
-    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+    const requestsQuery = useMemo(() => {
+        if (!firestore || !role) return null;
 
-    const filteredRequests = useMemo(() => {
-        if (!role) return [];
-        if (role === 'Manager') {
-            return approvals.filter(req => 
-                req.status === 'Pending Manager Approval' && req.department === department
-            );
+        const baseQuery = collection(firestore, 'procurementRequests');
+
+        if (role === 'Administrator') {
+            return query(baseQuery); // All requests
         }
         if (role === 'Executive') {
-            return approvals.filter(req => req.status === 'Pending Executive' || req.status === 'Pending Manager Approval');
+            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval']));
+        }
+        if (role === 'Manager') {
+            if (!department) return null; // Manager must have a department
+            return query(baseQuery, where('status', '==', 'Pending Manager Approval'), where('department', '==', department));
         }
         if (role === 'Procurement Officer') {
-            return approvals.filter(req => req.status === 'Approved');
+            return query(baseQuery, where('status', '==', 'Approved'));
         }
-        if (role === 'Administrator') {
-            return approvals;
-        }
-        return [];
-    }, [role, department, approvals]);
+
+        return null; // No requests for other roles on this page
+    }, [firestore, role, department]);
+
+    const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    
+    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+    const [newComment, setNewComment] = useState("");
+
+    const loading = userLoading || approvalsLoading;
+
+    const filteredRequests = useMemo(() => {
+        if (!approvals) return [];
+        return approvals;
+    }, [approvals]);
 
     useEffect(() => {
-        const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
-        setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
-    }, [filteredRequests]);
+        if (!selectedRequestId && filteredRequests.length > 0) {
+            const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
+            setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
+        }
+    }, [filteredRequests, selectedRequestId]);
 
-    const activeRequest = useMemo(() => approvals.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
 
     // State for summary tables
     const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
@@ -129,13 +164,11 @@ export default function ApprovalsPage() {
 
     useEffect(() => {
       const allowedRoles = ['Executive', 'Administrator', 'Manager', 'Procurement Officer'];
-      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
+      if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
-    }, [user, role, loading, router]);
+    }, [user, role, userLoading, router]);
     
-    const userAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-1');
-
     if (loading || !user || !role || !['Executive', 'Administrator', 'Manager', 'Procurement Officer'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -159,17 +192,12 @@ export default function ApprovalsPage() {
 
     // Placeholder for PDF generation and Google Drive upload
     async function archiveRequestToDrive(request: ApprovalRequest) {
-        /*
-        This is a placeholder function to demonstrate how you would implement
-        PDF generation and Google Drive upload. A developer would need to integrate
-        the necessary libraries and APIs.
-        */
         console.log("Simulating PDF generation and upload for request:", request.id);
         return Promise.resolve();
     }
 
-    const handleApprove = () => {
-        if (!activeRequest || !selectedRequestId) return;
+    const handleApprove = async () => {
+        if (!activeRequest || !selectedRequestId || !user) return;
 
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
@@ -185,7 +213,7 @@ export default function ApprovalsPage() {
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Manager Review') {
-                    return { ...step, status: 'completed' as const, date: currentDate };
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Manager' };
                 }
                 if (step.stage === 'Executive Review') {
                     return { ...step, status: 'pending' as const };
@@ -200,7 +228,7 @@ export default function ApprovalsPage() {
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Executive Review') {
-                    return { ...step, status: 'completed' as const, date: currentDate };
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
                 }
                 if (step.stage === 'Manager Review' && step.status !== 'completed') {
                     return { ...step, status: 'completed' as const, date: currentDate };
@@ -218,19 +246,45 @@ export default function ApprovalsPage() {
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Procurement Ack.') {
-                    return { ...step, status: 'completed' as const, date: currentDate };
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Procurement Officer' };
                 }
                 return step;
             });
             
-            archiveRequestToDrive(activeRequest);
+            await archiveRequestToDrive(activeRequest);
         }
 
-        const updatedApprovals = approvals.map(req =>
-            req.id === selectedRequestId ? { ...req, status: newStatus, timeline: newTimeline } : req
-        );
-        setApprovals(updatedApprovals);
+        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        await updateDoc(requestRef, {
+            status: newStatus,
+            timeline: newTimeline
+        });
         toast(toastMessage);
+    };
+
+    const handleAddComment = async () => {
+        if (!activeRequest || !user || !newComment.trim()) return;
+
+        const commentData = {
+            actor: user.displayName || "User",
+            actorId: user.uid,
+            text: newComment,
+            timestamp: new Date().toLocaleString("en-GB", {
+                dateStyle: "medium",
+                timeStyle: "short",
+            }),
+        };
+
+        try {
+            const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
+            await updateDoc(requestRef, {
+                comments: arrayUnion(commentData),
+            });
+            setNewComment("");
+            toast({ title: "Comment added" });
+        } catch (error: any) {
+            toast({ variant: "destructive", title: "Failed to add comment", description: error.message });
+        }
     };
     
     const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
@@ -295,7 +349,7 @@ export default function ApprovalsPage() {
                                         >
                                             <CardContent className="p-3">
                                                 <div className="flex justify-between items-start">
-                                                    <p className="font-semibold">{req.id}</p>
+                                                    <p className="font-semibold">{req.id.substring(0,8)}...</p>
                                                     {getStatusBadge(req.status)}
                                                 </div>
                                                 <div className="flex justify-between items-end mt-2">
@@ -322,7 +376,7 @@ export default function ApprovalsPage() {
                         <Card>
                             <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                 <div className="flex-1">
-                                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Approval Request: {activeRequest.id}</h3>
+                                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
                                     <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</p>
                                 </div>
                             </AccordionTrigger>
@@ -456,7 +510,6 @@ export default function ApprovalsPage() {
                                                     {activeRequest.comments?.map((comment, i) => (
                                                         <div key={i} className="flex items-start gap-3">
                                                             <Avatar>
-                                                                <AvatarImage src={userAvatar?.imageUrl} data-ai-hint={userAvatar?.imageHint}/>
                                                                 <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
                                                             </Avatar>
                                                             <div className="flex-1 p-3 rounded-lg bg-muted">
@@ -473,10 +526,10 @@ export default function ApprovalsPage() {
                                                     )}
                                                 </div>
                                                 <div className="relative">
-                                                    <Textarea placeholder="Respond to queries or add a comment..." className="pr-24"/>
+                                                    <Textarea placeholder="Respond to queries or add a comment..." className="pr-24" value={newComment} onChange={(e) => setNewComment(e.target.value)}/>
                                                     <div className="absolute top-2 right-2 flex items-center gap-1">
                                                         <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
-                                                        <Button size="icon"><Send className="h-4 w-4"/></Button>
+                                                        <Button size="icon" onClick={handleAddComment}><Send className="h-4 w-4"/></Button>
                                                     </div>
                                                 </div>
                                             </div>

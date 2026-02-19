@@ -29,11 +29,10 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 import { Label } from "@/components/ui/label";
-import { type UserRole } from "@/firebase/auth/use-user";
-import { approvalsData, type ApprovalRequest } from "@/lib/approvals-mock-data";
+import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection } from "firebase/firestore";
+import { collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
 
 
 type Item = {
@@ -50,6 +49,19 @@ type Department = {
     id: string;
     name: string;
 };
+
+type ApprovalRequest = {
+    id: string;
+    department: string;
+    period: string;
+    total: number;
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft';
+    submittedBy: string;
+    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
+    comments: { actor: string; actorId: string; text: string; timestamp: string }[];
+    items: Item[];
+};
+
 
 // Map recurring items to the submission item format
 const recurringSubmissionItems: Item[] = recurringItems
@@ -94,6 +106,7 @@ const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock
 export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
+  const { user } = useUser();
   
   const firestore = useFirestore();
   const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -128,17 +141,26 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       return departments?.find(d => d.id === selectedDepartment)?.name || '';
   }, [selectedDepartment, departments]);
 
-  const periodStatuses = useMemo(() => {
-    const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
-    if (departmentName) {
-        approvalsData
-            .filter(req => req.department === departmentName)
-            .forEach(req => {
+   const procurementRequestsQuery = useMemo(() => {
+        if (!firestore || !departmentName) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('department', '==', departmentName)
+        );
+    }, [firestore, departmentName]);
+
+    const { data: procurementRequests } = useCollection<ApprovalRequest>(procurementRequestsQuery);
+
+    const periodStatuses = useMemo(() => {
+        const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
+        if (procurementRequests) {
+            procurementRequests.forEach(req => {
                 statuses[req.period] = { status: req.status, id: req.id };
             });
-    }
-    return statuses;
-  }, [departmentName]);
+        }
+        return statuses;
+  }, [procurementRequests]);
+
 
   const isLocked = useMemo(() => {
       const periodStatusInfo = periodStatuses[selectedPeriod];
@@ -147,7 +169,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       const { status } = periodStatusInfo;
       
       // Lock if completed or pending at executive level
-      if (status === 'Completed' || status === 'Pending Executive') {
+      if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved') {
           return true;
       }
       // Lock for requesters once submitted to manager
@@ -303,6 +325,41 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       description: "Your manager has been notified of your request to edit this submission. This is a placeholder action.",
     });
   };
+
+  const handleSubmitRequest = async () => {
+    if (!user || !departmentName || !selectedDepartment) {
+        toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
+        return;
+    }
+
+    const newRequest = {
+        department: departmentName,
+        departmentId: selectedDepartment,
+        period: selectedPeriod,
+        total,
+        status: 'Pending Manager Approval',
+        submittedBy: user.displayName,
+        submittedById: user.uid,
+        createdAt: serverTimestamp(),
+        timeline: [
+            { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
+            { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
+            { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
+            { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
+        ],
+        comments: [],
+        items,
+    };
+
+    try {
+        await addDoc(collection(firestore, 'procurementRequests'), newRequest);
+        toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
+    } catch (error: any) {
+        console.error("Error submitting request:", error);
+        toast({ variant: 'destructive', title: 'Submission Failed', description: error.message });
+    }
+  };
+
 
   return (
     <div className="space-y-6">
@@ -521,7 +578,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
           ): (
             <>
               <Button variant="ghost">Save as Draft</Button>
-              <Button className="shadow-lg shadow-primary/20">Submit Period Request</Button>
+              <Button className="shadow-lg shadow-primary/20" onClick={handleSubmitRequest}>Submit Period Request</Button>
             </>
           )}
         </div>

@@ -2,52 +2,147 @@
   "entities": {
     "procurementRequest": {
       "title": "Procurement Request",
-      "description": "Represents a request for procuring goods or services.",
+      "description": "Represents a request for procuring goods or services for a specific period.",
       "type": "object",
       "properties": {
-        "itemName": {
-          "type": "string",
-          "description": "The name of the item to be procured."
-        },
-        "itemDescription": {
-          "type": "string",
-          "description": "A detailed description of the item."
-        },
-        "quantity": {
-          "type": "number",
-          "description": "The quantity of the item requested."
-        },
-        "category": {
-          "type": "string",
-          "description": "The procurement category of the item."
-        },
-        "unitPrice": {
-          "type": "number",
-          "description": "The estimated or last known unit price of the item."
-        },
         "department": {
           "type": "string",
-          "description": "The department requesting the item."
+          "description": "The department name requesting the procurement."
         },
-        "historicalPreviousVendors": {
+        "departmentId": {
+          "type": "string",
+          "description": "The ID of the department requesting the procurement."
+        },
+        "period": {
+          "type": "string",
+          "description": "The period for which the procurement is requested (e.g., 'Feb 2026')."
+        },
+        "total": {
+          "type": "number",
+          "description": "The total value of the procurement request."
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "Pending Manager Approval",
+            "Pending Executive",
+            "Approved",
+            "Completed",
+            "Queries Raised",
+            "Rejected",
+            "Draft"
+          ],
+          "description": "The current status of the approval workflow."
+        },
+        "submittedBy": {
+          "type": "string",
+          "description": "The name of the user who submitted the request."
+        },
+        "submittedById": {
+          "type": "string",
+          "description": "The UID of the user who submitted the request."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the request was created."
+        },
+        "timeline": {
           "type": "array",
+          "description": "An ordered list of stages and their status in the approval process.",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "stage": {
+                "type": "string"
+              },
+              "actor": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string",
+                "nullable": true
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "completed",
+                  "pending",
+                  "waiting"
+                ]
+              }
+            }
           }
         },
-        "historicalAverageLeadTimeDays": {
-          "type": "number"
+        "comments": {
+          "type": "array",
+          "description": "A log of comments and queries related to the request.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "actor": {
+                "type": "string"
+              },
+              "actorId": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "timestamp": {
+                "type": "string"
+              }
+            }
+          }
         },
-        "historicalAverageCost": {
-          "type": "number"
+        "items": {
+          "type": "array",
+          "description": "The list of individual items being procured.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Recurring",
+                  "One-Off"
+                ]
+              },
+              "description": {
+                "type": "string"
+              },
+              "brand": {
+                "type": "string"
+              },
+              "qty": {
+                "type": "number"
+              },
+              "category": {
+                "type": "string"
+              },
+              "unitPrice": {
+                "type": "number"
+              }
+            }
+          }
         }
       },
       "required": [
-        "itemName",
-        "itemDescription",
-        "quantity",
-        "category",
-        "department"
+        "department",
+        "departmentId",
+        "period",
+        "total",
+        "status",
+        "submittedById",
+        "timeline",
+        "items",
+        "createdAt"
       ]
     },
     "userProfile": {
@@ -70,14 +165,17 @@
           "type": "string",
           "description": "The user's role in the application, which determines their permissions."
         },
-        "departmentId": {
+        "department": {
           "type": "string",
-          "description": "The ID of the department this user belongs to or manages."
+          "description": "The name of the department this user belongs to or manages."
         },
         "status": {
-            "type": "string",
-            "enum": ["Active", "Invited"],
-            "description": "The current status of the user account."
+          "type": "string",
+          "enum": [
+            "Active",
+            "Invited"
+          ],
+          "description": "The current status of the user account."
         }
       },
       "required": [
@@ -101,8 +199,8 @@
           "description": "The UID of the user who manages this department."
         },
         "budget": {
-            "type": "number",
-            "description": "The approved budget for the department."
+          "type": "number",
+          "description": "The approved budget for the department."
         }
       },
       "required": [
@@ -110,16 +208,18 @@
       ]
     },
     "role": {
-        "title": "Role",
-        "description": "Defines a user role within the application.",
-        "type": "object",
-        "properties": {
-            "name": {
-                "type": "string",
-                "description": "The name of the role."
-            }
-        },
-        "required": ["name"]
+      "title": "Role",
+      "description": "Defines a user role within the application.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the role."
+        }
+      },
+      "required": [
+        "name"
+      ]
     },
     "workflow": {
       "title": "Approval Workflow",
@@ -207,11 +307,19 @@
         },
         "status": {
           "type": "string",
-          "enum": ["Active", "Inactive"],
+          "enum": [
+            "Active",
+            "Inactive"
+          ],
           "description": "The current status of the vendor."
         }
       },
-      "required": ["name", "email", "category", "status"]
+      "required": [
+        "name",
+        "email",
+        "category",
+        "status"
+      ]
     }
   },
   "auth": {
@@ -240,10 +348,10 @@
       "description": "Collection of all departments."
     },
     "/roles/{roleId}": {
-        "schema": {
-            "$ref": "#/entities/role"
-        },
-        "description": "Collection of all user roles."
+      "schema": {
+        "$ref": "#/entities/role"
+      },
+      "description": "Collection of all user roles."
     },
     "/procurementRequests/{procurementRequestId}": {
       "schema": {
