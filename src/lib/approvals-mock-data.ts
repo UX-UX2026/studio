@@ -12,7 +12,7 @@ export type ApprovalRequest = {
     department: string;
     period: string;
     total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval";
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved";
     submittedBy: string;
     timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
     comments: { actor: string; avatarId: string; text: string; timestamp: string }[];
@@ -101,12 +101,12 @@ export const approvalsData: ApprovalRequest[] = [
     department: "ICT",
     period: "Jan 2026",
     total: 45000.0,
-    status: "Completed",
+    status: "Approved",
     submittedBy: "Tarryn M.",
     timeline: [
         { stage: "Manager Sign-off", actor: "Tarryn M.", date: "15 Jan 2026", status: "completed" },
         { stage: "Executive Review", actor: "Zukiswa N.", date: "16 Jan 2026", status: "completed" },
-        { stage: "Procurement Ack.", actor: "Linda K.", date: "17 Jan 2026", status: "completed" },
+        { stage: "Procurement Ack.", actor: "Linda K.", date: null, status: "pending" },
     ],
     comments: [],
     items: [

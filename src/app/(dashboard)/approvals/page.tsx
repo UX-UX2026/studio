@@ -31,6 +31,7 @@ const getStatusBadge = (status: string) => {
     switch (status) {
         case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
         case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
+        case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
         case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
         case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
         default: return <Badge variant="secondary">{status}</Badge>
@@ -72,6 +73,9 @@ export default function ApprovalsPage() {
         if (role === 'Executive') {
             return approvals.filter(req => req.status === 'Pending Executive' || req.status === 'Pending Manager Approval');
         }
+        if (role === 'Procurement Officer') {
+            return approvals.filter(req => req.status === 'Approved');
+        }
         if (role === 'Administrator') {
             return approvals;
         }
@@ -79,7 +83,7 @@ export default function ApprovalsPage() {
     }, [role, department, approvals]);
 
     useEffect(() => {
-        const firstPending = filteredRequests.find(a => a.status.startsWith('Pending'));
+        const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
         setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
     }, [filteredRequests]);
 
@@ -92,7 +96,7 @@ export default function ApprovalsPage() {
 
 
     const approvalSummary = useMemo(() => {
-        const pending = filteredRequests.filter(req => req.status.startsWith('Pending'));
+        const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved');
         const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
         const byDept = pending.reduce((acc, req) => {
             if (!acc[req.department]) {
@@ -124,7 +128,7 @@ export default function ApprovalsPage() {
 
 
     useEffect(() => {
-      const allowedRoles = ['Executive', 'Administrator', 'Manager'];
+      const allowedRoles = ['Executive', 'Administrator', 'Manager', 'Procurement Officer'];
       if (!loading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
@@ -132,7 +136,7 @@ export default function ApprovalsPage() {
     
     const userAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-1');
 
-    if (loading || !user || !role || !['Executive', 'Administrator', 'Manager'].includes(role)) {
+    if (loading || !user || !role || !['Executive', 'Administrator', 'Manager', 'Procurement Officer'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -189,14 +193,32 @@ export default function ApprovalsPage() {
                 return step;
             });
         } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+            newStatus = 'Approved';
+            toastMessage = {
+                title: "Request Approved",
+                description: `${activeRequest.id} has been approved and sent for processing.`,
+            };
+            newTimeline = newTimeline.map(step => {
+                if (step.stage === 'Executive Review') {
+                    return { ...step, status: 'completed' as const, date: currentDate };
+                }
+                if (step.stage === 'Manager Review' && step.status !== 'completed') {
+                    return { ...step, status: 'completed' as const, date: currentDate };
+                }
+                if (step.stage === 'Procurement Ack.') {
+                    return { ...step, status: 'pending' as const };
+                }
+                return step;
+            });
+        } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'Completed';
             toastMessage = {
-                title: "Request Approved & Archived",
+                title: "Request Processed & Archived",
                 description: `A PDF for ${activeRequest.id} has been generated and saved to Google Drive. (Simulation)`,
             };
             newTimeline = newTimeline.map(step => {
-                if (step.status !== 'completed') {
-                     return { ...step, status: 'completed' as const, date: currentDate };
+                if (step.stage === 'Procurement Ack.') {
+                    return { ...step, status: 'completed' as const, date: currentDate };
                 }
                 return step;
             });
@@ -461,11 +483,11 @@ export default function ApprovalsPage() {
                                         </TabsContent>
                                 </Tabs>
                                 </CardContent>
-                                {activeRequest.status.startsWith('Pending') && (
+                                {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved') && (
                                     <CardFooter className="flex justify-end gap-2 border-t pt-6">
                                         <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
                                         <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
-                                        <Button onClick={handleApprove}><Check className="mr-2 h-4 w-4" />Approve</Button>
+                                        <Button onClick={handleApprove}><Check className="mr-2 h-4 w-4" />{role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}</Button>
                                     </CardFooter>
                                 )}
                             </AccordionContent>

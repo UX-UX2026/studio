@@ -46,6 +46,7 @@ export default function DashboardPage() {
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
+            case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
             case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
             case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
             default: return <Badge variant="secondary">{status}</Badge>

@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 import React from 'react';
 
 const allLinks = [
-  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
+  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'] },
   { 
     label: 'Procurement', 
     icon: FileText, 
@@ -35,7 +35,7 @@ const allLinks = [
       { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
     ]
   },
-  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager'] },
+  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager', 'Procurement Officer'] },
   { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive', 'Procurement Assistant'] },
   { href: '/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
