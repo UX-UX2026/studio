@@ -14,6 +14,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 
 type FulfillmentItem = (typeof allFulfillmentItems)[0];
 
@@ -38,15 +39,29 @@ export default function FulfillmentPage() {
         }, {} as Record<string, FulfillmentItem[]>);
     }, []);
 
+    const fulfillmentStatsByDept = useMemo(() => {
+        const stats: Record<string, { total: number, completed: number, percentage: number }> = {};
+        for (const dept in fulfillmentItemsByDept) {
+            const items = fulfillmentItemsByDept[dept];
+            const total = items.length;
+            const completed = items.filter(item => item.status === 'Completed').length;
+            stats[dept] = {
+                total,
+                completed,
+                percentage: total > 0 ? (completed / total) * 100 : 0
+            };
+        }
+        return stats;
+    }, [fulfillmentItemsByDept]);
+
     const departmentOrder = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
     
-    const itemsForUser = useMemo(() => {
+    const departmentsForUser = useMemo(() => {
         if (role === 'Manager' && department) {
-            return allFulfillmentItems.filter(item => item.department === department);
+            return departmentOrder.filter(d => d === department);
         }
-        // Admins, Executives, and Procurement Officers see all items
-        return allFulfillmentItems;
-    }, [role, department]);
+        return departmentOrder;
+    }, [role, department, departmentOrder]);
 
     if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive'].includes(role)) {
         return (
@@ -55,40 +70,39 @@ export default function FulfillmentPage() {
             </div>
         );
     }
-    
-    const showDepartmentBreakdown = role === 'Executive' || role === 'Administrator';
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Procurement Fulfillment</CardTitle>
         <p className="text-sm text-muted-foreground">
-            {showDepartmentBreakdown 
-                ? "Track and manage all outstanding procurement items, grouped by department."
-                : "Track and manage your department's outstanding procurement items from approval to completion."
-            }
+            Track and manage outstanding procurement items, grouped by department. View completion progress for each.
         </p>
       </CardHeader>
       <CardContent>
-        {showDepartmentBreakdown ? (
-            <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
-                {departmentOrder.map(dept => (
-                    <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                            <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
-                            <div className="flex justify-between items-center w-full">
-                                <span className="font-semibold">{dept}</span>
-                                <Badge variant="secondary" className="mr-4">{fulfillmentItemsByDept[dept].length}</Badge>
+        <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentsForUser}>
+            {departmentsForUser.map(dept => (
+                <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                    <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                        <div className="flex justify-between items-center w-full">
+                            <span className="font-semibold">{dept}</span>
+                            <div className="flex items-center gap-4 mr-4">
+                                {fulfillmentStatsByDept[dept] && (
+                                    <div className="flex items-center gap-2 text-sm text-muted-foreground w-32">
+                                        <Progress value={fulfillmentStatsByDept[dept].percentage} className="w-full h-2" />
+                                        <span className="font-semibold text-foreground">{Math.round(fulfillmentStatsByDept[dept].percentage)}%</span>
+                                    </div>
+                                )}
+                                <Badge variant="secondary">{fulfillmentItemsByDept[dept].length}</Badge>
                             </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="p-2 pt-0">
-                            <FulfillmentClient items={fulfillmentItemsByDept[dept]} />
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-        ) : (
-            <FulfillmentClient items={itemsForUser} />
-        )}
+                        </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="p-2 pt-0">
+                        <FulfillmentClient items={fulfillmentItemsByDept[dept]} />
+                    </AccordionContent>
+                </AccordionItem>
+            ))}
+        </Accordion>
       </CardContent>
     </Card>
   );
