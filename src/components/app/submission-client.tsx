@@ -30,6 +30,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 import { Label } from "@/components/ui/label";
 import { mockDepartments } from "@/lib/departments-mock-data";
+import { type UserRole } from "@/firebase/auth/use-user";
 
 
 type Item = {
@@ -82,10 +83,23 @@ const currentYear = new Date().getFullYear();
 const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock data year format
 
 
-export function SubmissionClient() {
+export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
-  const [selectedDepartment, setSelectedDepartment] = useState(mockDepartments.find(d => d.name === 'ICT')?.id || mockDepartments[0].id);
+  const [selectedDepartment, setSelectedDepartment] = useState(() => {
+    if ((userRole === 'Manager' || userRole === 'Requester') && userDepartment) {
+        const departmentFromMock = mockDepartments.find(d => d.name === userDepartment);
+        if (departmentFromMock) {
+            return departmentFromMock.id;
+        }
+    }
+    // Default for admin or if department not found
+    return mockDepartments.find(d => d.name === 'ICT')?.id || mockDepartments[0].id;
+  });
+
+  const departmentName = useMemo(() => {
+      return mockDepartments.find(d => d.id === selectedDepartment)?.name || 'Unknown Department';
+  }, [selectedDepartment]);
 
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
@@ -248,17 +262,24 @@ export function SubmissionClient() {
                     </SelectContent>
                 </Select>
             </div>
-            <div className="grid w-full md:max-w-xs items-center gap-1.5">
-                <Label htmlFor="department">Department</Label>
-                 <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
-                    <SelectTrigger id="department">
-                        <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {mockDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                    </SelectContent>
-                </Select>
-            </div>
+            {userRole === 'Administrator' ? (
+                <div className="grid w-full md:max-w-xs items-center gap-1.5">
+                    <Label htmlFor="department">Department</Label>
+                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                        <SelectTrigger id="department">
+                            <SelectValue placeholder="Select department" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {mockDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            ) : (
+                <div className="grid w-full md:max-w-xs items-center gap-1.5">
+                    <Label>Department</Label>
+                    <Input type="text" value={departmentName} readOnly className="bg-muted/50 border-0" />
+                </div>
+            )}
         </div>
         <div className="p-4 text-right rounded-lg bg-primary/10 border-primary/20 border shrink-0">
             <p className="text-xs font-bold uppercase text-primary">Estimated Period Total</p>

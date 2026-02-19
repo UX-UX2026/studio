@@ -8,7 +8,7 @@ import { SubmissionClient } from "@/components/app/submission-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function SubmissionPage() {
-    const { user, role, loading } = useUser();
+    const { user, role, department, loading } = useUser();
     const router = useRouter();
 
     useEffect(() => {
@@ -36,7 +36,7 @@ export default function SubmissionPage() {
         </p>
       </CardHeader>
       <CardContent>
-        <SubmissionClient />
+        <SubmissionClient userRole={role} userDepartment={department}/>
       </CardContent>
     </Card>
   );
