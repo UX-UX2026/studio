@@ -21,15 +21,30 @@ import {
   TrendingUp,
   TrendingDown,
   ClipboardCheck,
+  Loader,
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { fulfillmentItems } from '@/lib/mock-data';
-import { approvalsData } from '@/lib/approvals-mock-data';
+import { type ApprovalRequest } from '@/lib/approvals-mock-data';
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, query, orderBy, limit } from 'firebase/firestore';
 
 export default function DashboardPage() {
   const router = useRouter();
+  const firestore = useFirestore();
+
+  const requestsQuery = useMemo(() => {
+      if (!firestore) return null;
+      return query(
+          collection(firestore, 'procurementRequests'),
+          orderBy('createdAt', 'desc'),
+          limit(5)
+      );
+  }, [firestore]);
+
+  const { data: recentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
   
   const fulfillmentSummary = useMemo(() => fulfillmentItems.reduce((acc, item) => {
     acc[item.status] = (acc[item.status] || 0) + 1;
@@ -45,6 +60,7 @@ export default function DashboardPage() {
 
     const getStatusBadge = (status: string) => {
         switch (status) {
+            case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
             case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
             case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
             case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
@@ -147,19 +163,33 @@ export default function DashboardPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {approvalsData.slice(0, 5).map((req) => (
-                  <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push('/approvals')}>
-                    <TableCell className="font-medium">
-                      <Link href="/approvals" className="hover:underline text-primary">{req.id}</Link>
-                    </TableCell>
-                    <TableCell>{req.period}</TableCell>
-                    <TableCell>{req.submittedBy}</TableCell>
-                    <TableCell>{getStatusBadge(req.status)}</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(req.total)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {requestsLoading ? (
+                    <TableRow>
+                        <TableCell colSpan={5} className="text-center">
+                            <Loader className="h-6 w-6 animate-spin mx-auto" />
+                        </TableCell>
+                    </TableRow>
+                ) : recentRequests && recentRequests.length > 0 ? (
+                  recentRequests.map((req) => (
+                    <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/approvals?id=${req.id}`)}>
+                      <TableCell className="font-medium">
+                        <Link href={`/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
+                      </TableCell>
+                      <TableCell>{req.period}</TableCell>
+                      <TableCell>{req.submittedBy}</TableCell>
+                      <TableCell>{getStatusBadge(req.status)}</TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(req.total)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                    <TableRow>
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
+                            No procurement requests found.
+                        </TableCell>
+                    </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>

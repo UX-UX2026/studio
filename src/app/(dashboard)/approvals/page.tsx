@@ -1,7 +1,7 @@
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, X } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -23,7 +23,7 @@ import { capitalData as initialCapitalData, cashExpensesData as initialCashExpen
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 
 type ApprovalItem = {
     id: number | string;
@@ -78,6 +78,7 @@ const formatPercentage = (value: number) => {
 export default function ApprovalsPage() {
     const { user, role, department, loading: userLoading } = useUser();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const { toast } = useToast();
     const firestore = useFirestore();
 
@@ -109,6 +110,13 @@ export default function ApprovalsPage() {
     const [newComment, setNewComment] = useState("");
 
     const loading = userLoading || approvalsLoading;
+
+    useEffect(() => {
+        const reqId = searchParams.get('id');
+        if (reqId) {
+            setSelectedRequestId(reqId);
+        }
+    }, [searchParams]);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -197,7 +205,7 @@ export default function ApprovalsPage() {
     }
 
     const handleApprove = async () => {
-        if (!activeRequest || !selectedRequestId || !user) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
@@ -209,7 +217,7 @@ export default function ApprovalsPage() {
             newStatus = 'Pending Executive';
             toastMessage = {
                 title: "Request Approved",
-                description: `${activeRequest.id} has been forwarded for executive approval.`,
+                description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.`,
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Manager Review') {
@@ -224,14 +232,14 @@ export default function ApprovalsPage() {
             newStatus = 'Approved';
             toastMessage = {
                 title: "Request Approved",
-                description: `${activeRequest.id} has been approved and sent for processing.`,
+                description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.`,
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Executive Review') {
                     return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
                 }
                 if (step.stage === 'Manager Review' && step.status !== 'completed') {
-                    return { ...step, status: 'completed' as const, date: currentDate };
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
                 }
                 if (step.stage === 'Procurement Ack.') {
                     return { ...step, status: 'pending' as const };
@@ -242,7 +250,7 @@ export default function ApprovalsPage() {
             newStatus = 'Completed';
             toastMessage = {
                 title: "Request Processed & Archived",
-                description: `A PDF for ${activeRequest.id} has been generated and saved to Google Drive. (Simulation)`,
+                description: `A PDF for ${activeRequest.id.substring(0,8)}... has been generated and saved to Google Drive. (Simulation)`,
             };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Procurement Ack.') {
@@ -263,7 +271,7 @@ export default function ApprovalsPage() {
     };
 
     const handleAddComment = async () => {
-        if (!activeRequest || !user || !newComment.trim()) return;
+        if (!activeRequest || !user || !newComment.trim() || !firestore) return;
 
         const commentData = {
             actor: user.displayName || "User",
