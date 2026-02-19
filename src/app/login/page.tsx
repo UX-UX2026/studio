@@ -72,9 +72,14 @@ export default function LoginPage() {
 
               let role = 'Requester'; // Default role
               let department = 'Unassigned';
-              if (!adminIsSetUp) {
-                role = 'Administrator';
-                department = 'Executive';
+
+              // Hardcode admin role for specific user, otherwise use first-user logic
+              if (user.email === 'heinrich@ubuntux.co.za') {
+                  role = 'Administrator';
+                  department = 'Executive';
+              } else if (!adminIsSetUp) {
+                  role = 'Administrator';
+                  department = 'Executive';
               }
 
               // Set up the user document write
@@ -88,7 +93,7 @@ export default function LoginPage() {
               });
 
               // If we just created the first admin, update the metadata flag
-              if (role === 'Administrator') {
+              if (role === 'Administrator' && !adminIsSetUp) {
                  batch.set(metadataRef, { adminIsSetUp: true });
               }
 
