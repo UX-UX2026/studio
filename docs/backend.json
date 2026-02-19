@@ -221,6 +221,46 @@
         "budget": {
           "type": "number",
           "description": "The approved budget for the department."
+        },
+        "workflow": {
+          "type": "array",
+          "description": "An ordered list of stages and their permissions for this department's approval process.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "capture",
+                    "submit",
+                    "review",
+                    "comment",
+                    "approve",
+                    "lock",
+                    "process",
+                    "monitor"
+                  ]
+                }
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "role",
+              "permissions"
+            ]
+          }
         }
       },
       "required": [
@@ -239,60 +279,6 @@
       },
       "required": [
         "name"
-      ]
-    },
-    "workflow": {
-      "title": "Approval Workflow",
-      "description": "Defines the stages and permissions for the procurement approval process.",
-      "type": "object",
-      "properties": {
-        "name": {
-          "type": "string",
-          "description": "The name of the workflow."
-        },
-        "stages": {
-          "type": "array",
-          "description": "An ordered list of stages in the workflow.",
-          "items": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string",
-                "description": "The name of the stage (e.g., 'Manager Review')."
-              },
-              "role": {
-                "type": "string",
-                "description": "The user role responsible for this stage."
-              },
-              "permissions": {
-                "type": "array",
-                "description": "A list of actions the user can perform at this stage.",
-                "items": {
-                  "type": "string",
-                  "enum": [
-                    "capture",
-                    "submit",
-                    "review",
-                    "comment",
-                    "approve",
-                    "lock",
-                    "process",
-                    "monitor"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "name",
-              "role",
-              "permissions"
-            ]
-          }
-        }
-      },
-      "required": [
-        "name",
-        "stages"
       ]
     },
     "vendor": {
@@ -421,12 +407,6 @@
         "$ref": "#/entities/procurementRequest"
       },
       "description": "Collection of all procurement requests."
-    },
-    "/workflows/{workflowId}": {
-      "schema": {
-        "$ref": "#/entities/workflow"
-      },
-      "description": "Stores defined approval workflows."
     },
     "/vendors/{vendorId}": {
       "schema": {

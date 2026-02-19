@@ -55,9 +55,17 @@ type RecurringItem = {
     active: boolean;
 };
 
+type WorkflowStage = {
+    id: string;
+    name: string;
+    role: any;
+    permissions: string[];
+};
+
 type Department = {
     id: string;
     name: string;
+    workflow?: WorkflowStage[];
 };
 
 type ApprovalRequest = {
@@ -197,6 +205,11 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
 
       return false;
   }, [selectedPeriod, periodStatuses, userRole]);
+
+  const departmentWorkflow = useMemo(() => {
+    const dept = departments?.find(d => d.id === selectedDepartment);
+    return dept?.workflow;
+  }, [selectedDepartment, departments]);
 
 
   const total = useMemo(() => {
@@ -351,6 +364,28 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
         return;
     }
+    
+    const defaultTimeline = [
+        { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
+        { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
+        { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
+        { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
+    ];
+    
+    const timeline = departmentWorkflow && departmentWorkflow.length > 0
+      ? departmentWorkflow.map((stage, index) => ({
+          stage: stage.name,
+          actor: stage.role || 'System',
+          date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
+          status: index === 0 ? 'completed' as const : (index === 1 ? 'pending' as const : 'waiting' as const),
+      }))
+      : defaultTimeline;
+    
+    // The first stage is always submission, so let's ensure the actor is the current user.
+    if (timeline.length > 0) {
+        timeline[0].actor = user.displayName || 'Requester';
+    }
+
 
     const newRequest = {
         department: departmentName,
@@ -361,12 +396,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         submittedBy: user.displayName,
         submittedById: user.uid,
         createdAt: serverTimestamp(),
-        timeline: [
-            { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
-            { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
-            { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
-            { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
-        ],
+        timeline: timeline,
         comments: [],
         items,
     };

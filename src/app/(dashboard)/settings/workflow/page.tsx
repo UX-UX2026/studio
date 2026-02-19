@@ -2,8 +2,8 @@
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Loader, Workflow, Plus, Trash2, ArrowUp, ArrowDown, Settings, Check, GripVertical } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { Loader, Workflow as WorkflowIcon, Plus, Trash2, ArrowUp, ArrowDown, GripVertical, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +18,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/lib/roles-provider";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, doc, setDoc } from "firebase/firestore";
 
 
 const allPermissions = [
@@ -38,27 +40,56 @@ type WorkflowStage = {
     permissions: string[];
 };
 
+type Department = {
+  id: string;
+  name: string;
+  workflow?: WorkflowStage[];
+};
+
 const initialWorkflow: WorkflowStage[] = [
-    { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit'] },
+    { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit', 'comment'] },
     { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'] },
     { id: 'stage-2', name: 'Executive Approval', role: 'Executive', permissions: ['review', 'comment', 'approve', 'lock'] },
-    { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor'] },
+    { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor', 'comment'] },
 ];
 
 export default function WorkflowPage() {
-    const { user, role, loading } = useUser();
+    const { user, role: adminRole, loading: userLoading } = useUser();
     const router = useRouter();
     const { toast } = useToast();
-    const [workflow, setWorkflow] = useState<WorkflowStage[]>(initialWorkflow);
     const { roles: allRoles } = useRoles();
+    const firestore = useFirestore();
+
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+    const [workflow, setWorkflow] = useState<WorkflowStage[]>([]);
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'Administrator')) {
+        if (!userLoading && (!user || adminRole !== 'Administrator')) {
             router.push('/');
         }
-    }, [user, role, loading, router]);
+    }, [user, adminRole, userLoading, router]);
+
+    useEffect(() => {
+        // Set a default department if none is selected
+        if (departments && departments.length > 0 && !selectedDepartmentId) {
+            setSelectedDepartmentId(departments[0].id);
+        }
+    }, [departments, selectedDepartmentId]);
     
-    if (loading || !user || role !== 'Administrator') {
+    useEffect(() => {
+        // Update workflow state when department changes
+        if (selectedDepartmentId && departments) {
+            const department = departments.find(d => d.id === selectedDepartmentId);
+            setWorkflow(department?.workflow || initialWorkflow);
+        }
+    }, [selectedDepartmentId, departments]);
+    
+    const loading = userLoading || deptsLoading;
+    
+    if (loading || !user || adminRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -111,113 +142,153 @@ export default function WorkflowPage() {
         setWorkflow(newWorkflow);
     };
 
-    const handleSaveWorkflow = () => {
-        // In a real application, you would save this to your backend.
-        console.log("Saving workflow:", workflow);
-        toast({
-            title: "Workflow Saved",
-            description: "Your approval workflow has been updated. This is a mock action.",
-        });
+    const handleSaveWorkflow = async () => {
+        if (!selectedDepartmentId) {
+             toast({
+                variant: "destructive",
+                title: "No Department Selected",
+                description: "Please select a department to save the workflow.",
+            });
+            return;
+        }
+        
+        const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
+        try {
+            await setDoc(departmentRef, { workflow }, { merge: true });
+            toast({
+                title: "Workflow Saved",
+                description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
+            });
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Save Failed",
+                description: error.message || "An error occurred while saving the workflow.",
+            });
+        }
     };
 
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Workflow className="h-6 w-6 text-primary" />
+                    <WorkflowIcon className="h-6 w-6 text-primary" />
                     Workflow Management
                 </CardTitle>
                 <CardDescription>
-                    Design your procurement approval process by adding, ordering, and configuring stages.
+                    Design your procurement approval process by adding, ordering, and configuring stages for each department.
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="mb-4 flex justify-between items-center">
-                    <Button onClick={handleAddStage}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Stage
-                    </Button>
-                     <Button onClick={handleSaveWorkflow}>
-                        Save Workflow
-                    </Button>
+                <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+                    <div className="flex items-center gap-4">
+                        <Label htmlFor="department-select">Department:</Label>
+                        <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                            <SelectTrigger className="w-[250px]" id="department-select">
+                                <SelectValue placeholder="Select a department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {departments?.map(d => (
+                                    <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <div className="flex items-center gap-2">
+                         <Button onClick={handleAddStage} disabled={!selectedDepartmentId}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Stage
+                        </Button>
+                        <Button onClick={handleSaveWorkflow} disabled={!selectedDepartmentId}>
+                            <Save className="h-4 w-4 mr-2" />
+                            Save Workflow
+                        </Button>
+                     </div>
                 </div>
-                <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[60px]"></TableHead>
-                                <TableHead>Stage Name</TableHead>
-                                <TableHead className="w-[200px]">Assigned Role</TableHead>
-                                <TableHead className="w-[200px]">Permissions</TableHead>
-                                <TableHead className="text-right w-[120px]">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {workflow.map((stage, index) => (
-                                <TableRow key={stage.id}>
-                                    <TableCell className="text-center text-muted-foreground font-bold cursor-grab">
-                                        <GripVertical className="h-5 w-5 mx-auto" />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input
-                                            value={stage.name}
-                                            onChange={e => handleUpdateStage(stage.id, 'name', e.target.value)}
-                                            className="font-semibold"
-                                        />
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Select a role" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <Button variant="outline" className="w-full justify-start text-left font-normal">
-                                                    {stage.permissions.length} permissions selected
-                                                </Button>
-                                            </PopoverTrigger>
-                                            <PopoverContent className="w-64 p-4" align="start">
-                                                 <div className="space-y-2 mb-4">
-                                                    <h4 className="font-medium leading-none">Permissions</h4>
-                                                    <p className="text-sm text-muted-foreground">Select actions allowed at this stage.</p>
-                                                </div>
-                                                <div className="grid gap-2">
-                                                    {allPermissions.map(p => (
-                                                        <Label key={p.id} className="flex items-center gap-2 font-normal">
-                                                            <Checkbox
-                                                                id={`${stage.id}-${p.id}`}
-                                                                checked={stage.permissions.includes(p.id)}
-                                                                onCheckedChange={checked => handlePermissionChange(stage.id, p.id, checked)}
-                                                            />
-                                                           {p.label}
-                                                        </Label>
-                                                    ))}
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleMoveStage(index, 'up')} disabled={index === 0}>
-                                            <ArrowUp className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleMoveStage(index, 'down')} disabled={index === workflow.length - 1}>
-                                            <ArrowDown className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveStage(stage.id)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    </TableCell>
+
+                {selectedDepartmentId ? (
+                    <div className="overflow-x-auto rounded-lg border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="w-[60px]"></TableHead>
+                                    <TableHead>Stage Name</TableHead>
+                                    <TableHead className="w-[200px]">Assigned Role</TableHead>
+                                    <TableHead>Permissions</TableHead>
+                                    <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                            </TableHeader>
+                            <TableBody>
+                                {workflow.map((stage, index) => (
+                                    <TableRow key={stage.id}>
+                                        <TableCell className="text-center text-muted-foreground font-bold cursor-grab">
+                                            <GripVertical className="h-5 w-5 mx-auto" />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input
+                                                value={stage.name}
+                                                onChange={e => handleUpdateStage(stage.id, 'name', e.target.value)}
+                                                className="font-semibold"
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a role" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="outline" className="w-full justify-start text-left font-normal">
+                                                        {stage.permissions.length} permissions selected
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-64 p-4" align="start">
+                                                    <div className="space-y-2 mb-4">
+                                                        <h4 className="font-medium leading-none">Permissions for "{stage.name}"</h4>
+                                                        <p className="text-sm text-muted-foreground">Select actions allowed at this stage.</p>
+                                                    </div>
+                                                    <div className="grid gap-2">
+                                                        {allPermissions.map(p => (
+                                                            <Label key={p.id} className="flex items-center gap-2 font-normal">
+                                                                <Checkbox
+                                                                    id={`${stage.id}-${p.id}`}
+                                                                    checked={stage.permissions.includes(p.id)}
+                                                                    onCheckedChange={checked => handlePermissionChange(stage.id, p.id, checked)}
+                                                                />
+                                                               {p.label}
+                                                            </Label>
+                                                        ))}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleMoveStage(index, 'up')} disabled={index === 0}>
+                                                <ArrowUp className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleMoveStage(index, 'down')} disabled={index === workflow.length - 1}>
+                                                <ArrowDown className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleRemoveStage(stage.id)}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                ) : (
+                    <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
+                        <p className="text-muted-foreground">Please select a department to manage its workflow.</p>
+                    </div>
+                )}
             </CardContent>
         </Card>
     );
