@@ -30,7 +30,16 @@ export function useUser(): UserState {
         let role: UserRole = (tokenResult.claims.role as UserRole) || null;
         let department: string | null = null;
         
-        // Fallback for default users to have a role
+        // Use mock data as the primary source of truth for roles and departments in this demo app
+        if (user.email) {
+            const mockUser = mockUsers.find(u => u.email === user.email);
+            if (mockUser) {
+                role = mockUser.role as UserRole;
+                department = mockUser.department;
+            }
+        }
+
+        // Fallback for default users if not in mock data or claims are not set
         if (!role) {
             if (user.email === 'admin@procurportal.com' || user.email === 'heinrich@ubuntux.co.za') {
                 role = 'Administrator';
@@ -38,17 +47,10 @@ export function useUser(): UserState {
                 role = 'Manager';
             } else if (user.email === 'sam@procurportal.com') {
                 role = 'Requester';
+            } else if (user.email === 'zukiswa@procurportal.com') {
+                role = 'Executive';
             }
         }
-        
-        // Get department from mock data
-        if (user.email) {
-            const mockUser = mockUsers.find(u => u.email === user.email);
-            if (mockUser) {
-                department = mockUser.department;
-            }
-        }
-
 
         setUserState({
           user,
