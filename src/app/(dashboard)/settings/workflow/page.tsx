@@ -39,7 +39,8 @@ type WorkflowStage = {
 };
 
 const initialWorkflow: WorkflowStage[] = [
-    { id: 'stage-1', name: 'Request Submission', role: 'Manager', permissions: ['capture', 'submit', 'comment'] },
+    { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit'] },
+    { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'] },
     { id: 'stage-2', name: 'Executive Approval', role: 'Executive', permissions: ['review', 'comment', 'approve', 'lock'] },
     { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor'] },
 ];

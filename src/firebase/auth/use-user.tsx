@@ -3,12 +3,14 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth } from '../provider';
+import { mockUsers } from '@/lib/users-mock-data';
 
 export type UserRole = string | null;
 
 interface UserState {
   user: User | null;
   role: UserRole;
+  department: string | null;
   loading: boolean;
 }
 
@@ -17,6 +19,7 @@ export function useUser(): UserState {
   const [userState, setUserState] = useState<UserState>({
     user: null,
     role: null,
+    department: null,
     loading: true,
   });
 
@@ -25,6 +28,7 @@ export function useUser(): UserState {
       if (user) {
         const tokenResult = await user.getIdTokenResult();
         let role: UserRole = (tokenResult.claims.role as UserRole) || null;
+        let department: string | null = null;
         
         // Fallback for default users to have a role
         if (!role) {
@@ -32,16 +36,28 @@ export function useUser(): UserState {
                 role = 'Administrator';
             } else if (user.email === 'man@procurportal.com') {
                 role = 'Manager';
+            } else if (user.email === 'sam@procurportal.com') {
+                role = 'Requester';
             }
         }
+        
+        // Get department from mock data
+        if (user.email) {
+            const mockUser = mockUsers.find(u => u.email === user.email);
+            if (mockUser) {
+                department = mockUser.department;
+            }
+        }
+
 
         setUserState({
           user,
           role,
+          department,
           loading: false,
         });
       } else {
-        setUserState({ user: null, role: null, loading: false });
+        setUserState({ user: null, role: null, department: null, loading: false });
       }
     });
 

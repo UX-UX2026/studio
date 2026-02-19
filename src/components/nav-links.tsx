@@ -24,19 +24,19 @@ import { cn } from '@/lib/utils';
 import React from 'react';
 
 const allLinks = [
-  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
+  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
   { 
     label: 'Procurement', 
     icon: FileText, 
-    roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'],
+    roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
     subLinks: [
       { href: '/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager'] },
+      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester'] },
       { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer'] },
     ]
   },
-  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive'] },
-  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer'] },
+  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager'] },
+  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },

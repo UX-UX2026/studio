@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, X } from "lucide-react";
@@ -28,6 +28,7 @@ import { Separator } from "@/components/ui/separator";
 
 const getStatusBadge = (status: string) => {
     switch (status) {
+        case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
         case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
         case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
         case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
@@ -53,12 +54,31 @@ const formatPercentage = (value: number) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, role, loading } = useUser();
+    const { user, role, department, loading } = useUser();
     const router = useRouter();
 
-    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
-      approvalsData.find(a => a.status.startsWith('Pending'))?.id || approvalsData[0]?.id || null
-    );
+    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+
+    const filteredRequests = useMemo(() => {
+        if (!role) return [];
+        if (role === 'Manager') {
+            return approvalsData.filter(req => 
+                req.status === 'Pending Manager Approval' && req.department === department
+            );
+        }
+        if (role === 'Executive') {
+            return approvalsData.filter(req => req.status === 'Pending Executive');
+        }
+        if (role === 'Administrator') {
+            return approvalsData;
+        }
+        return [];
+    }, [role, department]);
+
+    useEffect(() => {
+        const firstPending = filteredRequests.find(a => a.status.startsWith('Pending'));
+        setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
+    }, [filteredRequests]);
 
     const activeRequest = useMemo(() => approvalsData.find((req) => req.id === selectedRequestId), [selectedRequestId]);
 
@@ -69,7 +89,7 @@ export default function ApprovalsPage() {
 
 
     const approvalSummary = useMemo(() => {
-        const pending = approvalsData.filter(req => req.status.startsWith('Pending'));
+        const pending = filteredRequests.filter(req => req.status.startsWith('Pending'));
         const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
         const byDept = pending.reduce((acc, req) => {
             if (!acc[req.department]) {
@@ -85,30 +105,31 @@ export default function ApprovalsPage() {
             totalValue,
             byDept: Object.entries(byDept).sort((a, b) => b[1].total - a[1].total),
         }
-    }, []);
+    }, [filteredRequests]);
 
     const requestsByDept = useMemo(() => {
-        return approvalsData.reduce((acc, req) => {
+        return filteredRequests.reduce((acc, req) => {
             if (!acc[req.department]) {
                 acc[req.department] = [];
             }
             acc[req.department].push(req);
             return acc;
         }, {} as Record<string, ApprovalRequest[]>);
-    }, []);
+    }, [filteredRequests]);
 
     const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
 
 
     useEffect(() => {
-      if (!loading && (!user || (role !== 'Executive' && role !== 'Administrator'))) {
+      const allowedRoles = ['Executive', 'Administrator', 'Manager'];
+      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
     }, [user, role, loading, router]);
     
     const userAvatar = PlaceHolderImages.find((img) => img.id === 'avatar-1');
 
-    if (loading || !user || (role !== 'Executive' && role !== 'Administrator')) {
+    if (loading || !user || !role || !['Executive', 'Administrator', 'Manager'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -139,7 +160,7 @@ export default function ApprovalsPage() {
              <Card>
                 <CardHeader className="pb-2">
                     <CardTitle>Approvals Overview</CardTitle>
-                    <CardDescription>Summary of requests awaiting action.</CardDescription>
+                    <CardDescription>Summary of requests awaiting your action.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">

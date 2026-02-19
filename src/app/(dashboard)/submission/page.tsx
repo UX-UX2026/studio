@@ -12,12 +12,13 @@ export default function SubmissionPage() {
     const router = useRouter();
 
     useEffect(() => {
-      if (!loading && (!user || (role !== 'Manager' && role !== 'Administrator'))) {
+      const allowedRoles = ['Manager', 'Administrator', 'Requester'];
+      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
     }, [user, role, loading, router]);
 
-    if (loading || !user || (role !== 'Manager' && role !== 'Administrator')) {
+    if (loading || !user || !role || !['Manager', 'Administrator', 'Requester'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

@@ -12,7 +12,7 @@ export type ApprovalRequest = {
     department: string;
     period: string;
     total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised";
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval";
     submittedBy: string;
     timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
     comments: { actor: string; avatarId: string; text: string; timestamp: string }[];
@@ -21,6 +21,24 @@ export type ApprovalRequest = {
 
 
 export const approvalsData: ApprovalRequest[] = [
+  {
+    id: "REQ-00126",
+    department: "ICT",
+    period: "Mar 2026",
+    total: 15000.00,
+    status: "Pending Manager Approval",
+    submittedBy: "Sam J.",
+    timeline: [
+      { stage: "Request Submission", actor: "Sam J.", date: "01 Mar 2026", status: "completed" },
+      { stage: "Manager Review", actor: "Manager User", date: null, status: "pending" },
+      { stage: "Executive Review", actor: "Zukiswa N.", date: null, status: "waiting" },
+      { stage: "Procurement Ack.", actor: "Linda K.", date: null, status: "waiting" },
+    ],
+    comments: [],
+    items: [
+        { id: 9, type: 'One-Off', description: 'New Monitors for Dev Team', category: 'Hardware Purchase', qty: 5, unitPrice: 3000.00 }
+    ]
+  },
   {
     id: "REQ-00124",
     department: "ICT",
