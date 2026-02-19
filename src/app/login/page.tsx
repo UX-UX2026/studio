@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth, useUser } from "@/firebase";
+import { useAuth, useUser, useFirestore } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { collection, doc, getDocs, query, limit, setDoc } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -33,6 +34,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
+    const firestore = useFirestore();
     const { user, loading: userLoading, status } = useUser();
     
     const [email, setEmail] = useState('');
@@ -42,25 +44,62 @@ export default function LoginPage() {
 
 
     useEffect(() => {
-      if (!userLoading && user) {
-        if (status === 'Invited') {
-            setErrorDialog({
-                title: "Account Pending Activation",
-                description: "Your account has been invited but not yet activated. Please check your email for an activation link to complete your registration.",
-            });
-            signOut(auth);
-        } else if (status === 'Active') {
+      const handleAuthRedirect = async () => {
+        if (!userLoading && user) {
+          if (status === 'Active') {
             router.push('/');
-        } else {
-            // User exists in Auth but not in our mock system (status is null)
+            return;
+          }
+
+          if (status === 'Invited') {
             setErrorDialog({
+              title: "Account Pending Activation",
+              description: "Your account has been invited but not yet activated. Please check your email for an activation link to complete your registration.",
+            });
+            await signOut(auth);
+            return;
+          }
+          
+          if (status === null) { // No user profile in Firestore
+            const usersCollection = collection(firestore, 'users');
+            const q = query(usersCollection, limit(1));
+            const existingUsersSnapshot = await getDocs(q);
+
+            if (existingUsersSnapshot.empty) {
+              // This is the first user, let's make them an administrator
+              const userRef = doc(firestore, 'users', user.uid);
+              try {
+                await setDoc(userRef, {
+                  displayName: user.displayName || user.email,
+                  email: user.email,
+                  photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                  role: 'Administrator',
+                  department: 'Executive', // A sensible default for the first admin
+                  status: 'Active',
+                });
+                // The useUser hook will now pick up the new profile and the status will become 'Active'
+                // which will trigger the redirect on the next render.
+              } catch (e) {
+                 setErrorDialog({
+                    title: "Setup Failed",
+                    description: "We tried to set you up as the first administrator, but something went wrong. Please try logging in again.",
+                });
+                await signOut(auth);
+              }
+            } else {
+              // Other users exist, so this user needs to be invited by an admin.
+              setErrorDialog({
                 title: "Access Denied",
                 description: "Your account is not recognized by the system or has not been fully configured. Please contact an administrator for assistance.",
-            });
-            signOut(auth);
+              });
+              await signOut(auth);
+            }
+          }
         }
-      }
-    }, [user, userLoading, status, router, auth]);
+      };
+
+      handleAuthRedirect();
+    }, [user, userLoading, status, router, auth, firestore]);
 
     const handleGoogleSignIn = async () => {
         setIsLoading('google');

@@ -28,11 +28,11 @@ import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 type UserProfile = {
     id: string;
-    name: string;
+    displayName: string;
     email: string;
     role: string;
     department: string;
-    avatar: string;
+    photoURL: string;
     status: 'Active' | 'Invited';
 };
 
@@ -76,7 +76,7 @@ export default function UsersPage() {
     useEffect(() => {
         if (isDialogOpen) {
             if (editingUser) {
-                setName(editingUser.name);
+                setName(editingUser.displayName);
                 setEmail(editingUser.email);
                 setUserRole(editingUser.role);
                 setDepartment(editingUser.department);
@@ -104,11 +104,11 @@ export default function UsersPage() {
         const isEditing = !!editingUser;
 
         const userData = {
-            name,
+            displayName: name,
             email,
             role: userRole,
             department,
-            avatar: editingUser?.avatar || `https://i.pravatar.cc/150?u=${email}`,
+            photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
             status: isEditing ? editingUser.status : 'Invited',
         };
 
@@ -159,7 +159,7 @@ export default function UsersPage() {
             return;
         }
 
-        const headers = ['id', 'name', 'email', 'role', 'department', 'avatar', 'status'];
+        const headers = ['id', 'displayName', 'email', 'role', 'department', 'photoURL', 'status'];
         const csvContent = [
             headers.join(','),
             ...users.map(user =>
@@ -198,16 +198,16 @@ export default function UsersPage() {
                         user[header] = values[index];
                     });
 
-                    if (!user.name || !user.email || !user.role || !user.department) {
-                        throw new Error("CSV is missing required columns: name, email, role, department.");
+                    if (!user.displayName || !user.email || !user.role || !user.department) {
+                        throw new Error("CSV is missing required columns: displayName, email, role, department.");
                     }
 
                     return {
-                        name: user.name,
+                        displayName: user.displayName,
                         email: user.email,
                         role: user.role,
                         department: user.department,
-                        avatar: user.avatar || `https://i.pravatar.cc/150?u=${user.email}`,
+                        photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
                         status: (user.status === 'Active' || user.status === 'Invited') ? user.status : 'Active',
                     };
                 });
@@ -276,10 +276,10 @@ export default function UsersPage() {
                                 <TableRow key={u.id}>
                                     <TableCell className="font-medium flex items-center gap-3">
                                         <Avatar>
-                                            <AvatarImage src={u.avatar} />
-                                            <AvatarFallback>{u.name.charAt(0)}</AvatarFallback>
+                                            <AvatarImage src={u.photoURL} />
+                                            <AvatarFallback>{u.displayName.charAt(0)}</AvatarFallback>
                                         </Avatar>
-                                        {u.name}
+                                        {u.displayName}
                                     </TableCell>
                                     <TableCell>{u.email}</TableCell>
                                     <TableCell>
