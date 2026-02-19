@@ -23,7 +23,7 @@ export default function FulfillmentPage() {
     const router = useRouter();
 
     useEffect(() => {
-      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive'];
+      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'];
       if (!loading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
@@ -63,7 +63,7 @@ export default function FulfillmentPage() {
         return departmentOrder;
     }, [role, department, departmentOrder]);
 
-    if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive'].includes(role)) {
+    if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
