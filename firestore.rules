@@ -21,15 +21,25 @@ service cloud.firestore {
     }
 
     // Rules for collections
+    match /app/metadata {
+      // Anyone can read if an admin is set up
+      allow read: if isSignedIn();
+      // Only allow setting adminIsSetUp to true. Do not allow it to be flipped back to false.
+      // This can be done by a user who is about to become an admin.
+      allow write: if isSignedIn() && (!exists(path('/databases/$(database)/documents/app/metadata')) || resource.data.adminIsSetUp == false);
+    }
+    
     match /users/{userId} {
-      // Any authenticated user can create their own profile document.
-      // This is crucial for the first admin sign-up flow.
+      // Allow user to create their own profile.
       allow create: if isOwner(userId);
 
-      // Once created, only the user or an admin can modify it.
-      allow read, update, delete: if isOwner(userId) || isAdmin();
+      // Allow user to read their own profile, or if user is an admin
+      allow read, update: if isOwner(userId) || isAdmin();
+      
+      // Only admins should delete users
+      allow delete: if isAdmin();
 
-      // Any authenticated user can query the users collection to see if an admin exists.
+      // Allow authenticated users to query the user list
       allow list: if isSignedIn();
     }
 

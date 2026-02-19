@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { collection, doc, getDocs, query, limit, setDoc, where } from "firebase/firestore";
+import { collection, doc, getDocs, getDoc, setDoc, query, limit } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -45,63 +45,64 @@ export default function LoginPage() {
     useEffect(() => {
       const handleAuthRedirect = async () => {
         if (!userLoading && user) {
-          try {
-            if (status === 'Active') {
-              router.push('/');
-              return;
-            }
+          if (status === 'Active') {
+            router.push('/');
+            return;
+          }
 
-            if (status === 'Invited') {
-              setErrorDialog({
-                title: "Account Pending Activation",
-                description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
-              });
-              await signOut(auth);
-              return;
-            }
-            
-            if (status === null) { // No user profile in Firestore
-              const usersCollection = collection(firestore, 'users');
-              const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
-              const adminSnapshot = await getDocs(adminQuery);
-
-              if (adminSnapshot.empty) {
-                // This is the first user, let's make them an administrator
-                const userRef = doc(firestore, 'users', user.uid);
-                await setDoc(userRef, {
-                  displayName: user.displayName || user.email?.split('@')[0],
-                  email: user.email,
-                  photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                  role: 'Administrator',
-                  department: 'Executive', // A sensible default for the first admin
-                  status: 'Active',
-                });
-                // The useUser hook will now pick up the new profile and the status will become 'Active'
-                // on the next render, which will trigger the redirect.
-              } else {
-                // Other users exist, so this user needs to be invited by an admin.
-                setErrorDialog({
-                  title: "Access Denied",
-                  description: "Your account is not recognized by the system. If you believe this is an error, please contact an administrator to be invited to the portal.",
-                });
-                await signOut(auth);
-              }
-            }
-          } catch (error: any) {
-            console.error("Auth redirect error:", error);
-            let description = error.message;
-
-            if (error.code === 'failed-precondition') {
-                description = "The query for checking admin users requires a database index. Please go to the link in the developer console to create it in Firebase, then try logging in again.";
-            } else if (error.code === 'permission-denied') {
-                description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured to allow new user creation."
-            }
-
+          if (status === 'Invited') {
             setErrorDialog({
-                title: "Login Setup Failed",
-                description: `An error occurred during login: ${description}`,
+              title: "Account Pending Activation",
+              description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
             });
             await signOut(auth);
+            return;
+          }
+          
+          // If user is authenticated but has no profile, create one.
+          if (status === null) {
+            try {
+              const metadataRef = doc(firestore, 'app', 'metadata');
+              const userRef = doc(firestore, 'users', user.uid);
+              
+              const metadataSnap = await getDoc(metadataRef);
+              const adminIsSetUp = metadataSnap.exists() && metadataSnap.data()?.adminIsSetUp;
+
+              let role = 'Requester'; // Default role
+              let department = 'Unassigned';
+              if (!adminIsSetUp) {
+                role = 'Administrator';
+                department = 'Executive';
+              }
+
+              // Create the user document
+              await setDoc(userRef, {
+                displayName: user.displayName || user.email?.split('@')[0],
+                email: user.email,
+                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                role: role,
+                department: department,
+                status: 'Active',
+              });
+
+              // If we just created the first admin, update the metadata flag
+              if (role === 'Administrator') {
+                await setDoc(metadataRef, { adminIsSetUp: true });
+              }
+              // The useUser hook will now pick up the new profile and status will become 'Active',
+              // which will trigger the redirect on the next render.
+            } catch (error: any) {
+              console.error("Account setup error:", error);
+              let description = "An error occurred while setting up your account. Please try again.";
+              if (error.code === 'permission-denied') {
+                description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured correctly."
+              }
+              setErrorDialog({
+                  title: "Account Setup Failed",
+                  description: description,
+              });
+              await signOut(auth);
+            }
           }
         }
       };
@@ -143,13 +144,13 @@ export default function LoginPage() {
             console.error("Email/Password authentication error:", error);
             
             const usersCollection = collection(firestore, 'users');
-            const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
-            const adminSnapshot = await getDocs(adminQuery);
+            const q = query(usersCollection, limit(1));
+            const userSnapshot = await getDocs(q);
 
             let description = "An unexpected error occurred. Please try again.";
 
-            if (adminSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
-                description = "This seems to be the first login for a local admin. To complete setup, please go to your Firebase project's Authentication console and create a new user with the email and password you're trying to use. Once created, you can log in here.";
+            if (userSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
+                description = "This seems to be the first login. To use a local admin account, you must first create it in your Firebase project's Authentication console. Use the email and password you're trying to log in with, then sign in here.";
             } else {
                 // The error codes are useful for debugging
                 switch (error.code) {
@@ -237,7 +238,7 @@ export default function LoginPage() {
                                     <Input
                                         id="password"
                                         type="password"
-                                        placeholder="••••••••"
+                                        placeholder="P@ssword123!"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
