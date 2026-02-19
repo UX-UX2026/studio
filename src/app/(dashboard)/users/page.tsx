@@ -1,8 +1,8 @@
 'use client';
 
-import { useUser, UserRole } from "@/firebase/auth/use-user";
+import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader, Shield, Plus, Trash2, Edit, Upload, Download, Send } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -20,62 +20,79 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { mockUsers as initialMockUsers } from "@/lib/users-mock-data";
-import { mockDepartments } from "@/lib/departments-mock-data";
-import { useRoles } from "@/lib/roles-provider";
+import { useRoles, type Role } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
 
+type UserProfile = {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    department: string;
+    avatar: string;
+    status: 'Active' | 'Invited';
+};
 
-type MockUser = typeof initialMockUsers[0];
-const allDepartments = mockDepartments.map(d => d.name);
+type Department = {
+    id: string;
+    name: string;
+};
+
 
 export default function UsersPage() {
-    const { user, role, loading } = useUser();
+    const { user, role: adminRole, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
 
-    const [users, setUsers] = useState<MockUser[]>(initialMockUsers);
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+    
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const { roles, loading: rolesLoading } = useRoles();
+
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [editingUser, setEditingUser] = useState<MockUser | null>(null);
-
-    const { roles: allRoles } = useRoles();
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
 
     // Form state for dialog
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [userRole, setUserRole] = useState<UserRole>('Manager');
+    const [userRole, setUserRole] = useState('');
     const [department, setDepartment] = useState('');
-    const [avatar, setAvatar] = useState('');
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'Administrator')) {
+        if (!userLoading && (!user || adminRole !== 'Administrator')) {
             router.push('/');
         }
-    }, [user, role, loading, router]);
+    }, [user, adminRole, userLoading, router]);
     
     useEffect(() => {
         if (isDialogOpen) {
             if (editingUser) {
                 setName(editingUser.name);
                 setEmail(editingUser.email);
-                setUserRole(editingUser.role as UserRole);
+                setUserRole(editingUser.role);
                 setDepartment(editingUser.department);
-                setAvatar(editingUser.avatar);
             } else {
                 // Reset for new user
                 setName('');
                 setEmail('');
-                setUserRole(allRoles.length > 0 ? allRoles[0].name as UserRole : 'Manager');
-                setDepartment(allDepartments[0] || '');
-                setAvatar('');
+                setUserRole(roles.length > 0 ? roles[0].name : '');
+                setDepartment(departments?.[0]?.name || '');
             }
         }
-    }, [editingUser, isDialogOpen, allRoles]);
+    }, [editingUser, isDialogOpen, roles, departments]);
 
-    if (loading || !user || role !== 'Administrator') {
+    const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
+
+    if (loading || !user || adminRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -83,37 +100,43 @@ export default function UsersPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         const isEditing = !!editingUser;
 
-        const userData: MockUser = {
-            id: editingUser?.id || `user-${Date.now()}`,
+        const userData = {
             name,
             email,
-            role: userRole as any, // Cast because MockUser['role'] is string
+            role: userRole,
             department,
-            avatar: avatar || `https://i.pravatar.cc/150?u=${email}`,
+            avatar: editingUser?.avatar || `https://i.pravatar.cc/150?u=${email}`,
             status: isEditing ? editingUser.status : 'Invited',
         };
 
-        if (isEditing) {
-            setUsers(users.map(u => u.id === userData.id ? userData : u));
-            toast({ title: "User Updated", description: "User details have been successfully updated." });
-        } else {
-            setUsers([...users, userData]);
-            toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
+        try {
+            if (isEditing) {
+                const userRef = doc(firestore, 'users', editingUser.id);
+                await setDoc(userRef, userData, { merge: true });
+                toast({ title: "User Updated", description: "User details have been successfully updated." });
+            } else {
+                // In a real app, you would call a Cloud Function to create the Firebase Auth user.
+                // Here we just add them to the users collection.
+                await addDoc(collection(firestore, 'users'), userData);
+                toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
+            }
+            setEditingUser(null);
+            setIsDialogOpen(false);
+        } catch (error: any) {
+             toast({ variant: 'destructive', title: 'Error saving user', description: error.message });
         }
-        setEditingUser(null);
-        setIsDialogOpen(false);
     };
 
-    const handleEdit = (userToEdit: MockUser) => {
+    const handleEdit = (userToEdit: UserProfile) => {
         setEditingUser(userToEdit);
         setIsDialogOpen(true);
     };
 
-    const handleDelete = (id: string) => {
-        setUsers(users.filter(u => u.id !== id));
+    const handleDelete = async (id: string) => {
+        await deleteDoc(doc(firestore, 'users', id));
     };
 
     const openAddDialog = () => {
@@ -121,10 +144,9 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     }
 
-    const handleUserUpdate = (userId: string, field: keyof MockUser, value: any) => {
-        setUsers(currentUsers => 
-            currentUsers.map(u => u.id === userId ? { ...u, [field]: value } : u)
-        );
+    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
+        const userRef = doc(firestore, 'users', userId);
+        await setDoc(userRef, { [field]: value }, { merge: true });
     };
 
     const handleImportClick = () => {
@@ -132,7 +154,7 @@ export default function UsersPage() {
     };
 
     const handleExport = () => {
-        if (users.length === 0) {
+        if (!users || users.length === 0) {
             toast({ title: "No Data to Export", description: "There are no users to export." });
             return;
         }
@@ -161,7 +183,7 @@ export default function UsersPage() {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -169,11 +191,11 @@ export default function UsersPage() {
 
                 const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
                 
-                const newUsers: MockUser[] = rows.slice(1).map(row => {
+                const newUsers = rows.slice(1).map(row => {
                     const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
-                    let user = {} as Partial<MockUser>;
+                    let user: any = {};
                     headers.forEach((header, index) => {
-                        (user as any)[header] = values[index];
+                        user[header] = values[index];
                     });
 
                     if (!user.name || !user.email || !user.role || !user.department) {
@@ -181,17 +203,18 @@ export default function UsersPage() {
                     }
 
                     return {
-                        id: user.id || `user-${Date.now()}-${Math.random()}`,
                         name: user.name,
                         email: user.email,
-                        role: user.role as any,
+                        role: user.role,
                         department: user.department,
                         avatar: user.avatar || `https://i.pravatar.cc/150?u=${user.email}`,
                         status: (user.status === 'Active' || user.status === 'Invited') ? user.status : 'Active',
                     };
                 });
                 
-                setUsers(prev => [...prev, ...newUsers]);
+                for (const user of newUsers) {
+                    await addDoc(collection(firestore, 'users'), user);
+                }
 
                 toast({ title: "Import Successful", description: `${newUsers.length} users were added.` });
             } catch (error: any) {
@@ -249,7 +272,7 @@ export default function UsersPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {users.map((u) => (
+                            {users && users.map((u) => (
                                 <TableRow key={u.id}>
                                     <TableCell className="font-medium flex items-center gap-3">
                                         <Avatar>
@@ -265,7 +288,7 @@ export default function UsersPage() {
                                                 <SelectValue placeholder="Assign role" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -275,7 +298,7 @@ export default function UsersPage() {
                                                 <SelectValue placeholder="Assign department" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {allDepartments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                                {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                                             </SelectContent>
                                         </Select>
                                     </TableCell>
@@ -318,12 +341,12 @@ export default function UsersPage() {
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="role" className="text-right">Role</Label>
-                            <Select value={userRole || ''} onValueChange={(value) => setUserRole(value as UserRole)}>
+                            <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="Assign a role" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -334,7 +357,7 @@ export default function UsersPage() {
                                     <SelectValue placeholder="Assign a department" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {allDepartments.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

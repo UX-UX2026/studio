@@ -1,35 +1,45 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
-import { mockRoles as initialMockRoles, type Role } from '@/lib/roles-mock-data';
+import { createContext, useContext, ReactNode, useMemo } from 'react';
+import { useFirestore, useCollection } from '@/firebase';
+import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+
+export type Role = {
+  id: string;
+  name: string;
+};
 
 interface RolesContextValue {
   roles: Role[];
-  addRole: (roleData: { name: string }) => void;
-  updateRole: (role: Role) => void;
-  deleteRole: (roleId: string) => void;
+  loading: boolean;
+  addRole: (roleData: { name: string }) => Promise<void>;
+  updateRole: (role: Role) => Promise<void>;
+  deleteRole: (roleId: string) => Promise<void>;
 }
 
 const RolesContext = createContext<RolesContextValue | undefined>(undefined);
 
 export function RolesProvider({ children }: { children: ReactNode }) {
-  const [roles, setRoles] = useState<Role[]>(initialMockRoles);
+  const firestore = useFirestore();
+  const rolesCollection = useMemo(() => collection(firestore, 'roles'), [firestore]);
+  const { data: roles, loading } = useCollection<Role>(rolesCollection);
 
-  const addRole = (roleData: { name: string }) => {
-    const newRole: Role = { id: `role-${Date.now()}`, name: roleData.name };
-    setRoles(prevRoles => [...prevRoles, newRole]);
+  const addRole = async (roleData: { name: string }) => {
+    await addDoc(collection(firestore, 'roles'), roleData);
   };
 
-  const updateRole = (updatedRole: Role) => {
-    setRoles(prevRoles => prevRoles.map(role => (role.id === updatedRole.id ? updatedRole : role)));
+  const updateRole = async (updatedRole: Role) => {
+    const roleRef = doc(firestore, 'roles', updatedRole.id);
+    await setDoc(roleRef, { name: updatedRole.name }, { merge: true });
   };
 
-  const deleteRole = (roleId: string) => {
-    setRoles(prevRoles => prevRoles.filter(role => role.id !== roleId));
+  const deleteRole = async (roleId: string) => {
+    const roleRef = doc(firestore, 'roles', roleId);
+    await deleteDoc(roleRef);
   };
 
   return (
-    <RolesContext.Provider value={{ roles, addRole, updateRole, deleteRole }}>
+    <RolesContext.Provider value={{ roles: roles || [], loading, addRole, updateRole, deleteRole }}>
       {children}
     </RolesContext.Provider>
   );

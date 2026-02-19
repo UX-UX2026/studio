@@ -19,14 +19,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRoles } from "@/lib/roles-provider";
-import type { Role } from "@/lib/roles-mock-data";
+import type { Role } from "@/lib/roles-provider";
 
 
 export default function RolesPage() {
-    const { user, role, loading } = useUser();
+    const { user, role: userRole, loading: userLoading } = useUser();
     const router = useRouter();
 
-    const { roles, addRole, updateRole, deleteRole } = useRoles();
+    const { roles, loading: rolesLoading, addRole, updateRole, deleteRole } = useRoles();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<Role | null>(null);
     
@@ -34,10 +34,10 @@ export default function RolesPage() {
     const [name, setName] = useState('');
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'Administrator')) {
+        if (!userLoading && (!user || userRole !== 'Administrator')) {
             router.push('/');
         }
-    }, [user, role, loading, router]);
+    }, [user, userRole, userLoading, router]);
     
     useEffect(() => {
         if (isDialogOpen) {
@@ -49,7 +49,7 @@ export default function RolesPage() {
         }
     }, [editingRole, isDialogOpen]);
 
-    if (loading || !user || role !== 'Administrator') {
+    if (userLoading || rolesLoading || !user || userRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -57,13 +57,13 @@ export default function RolesPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!name) return;
 
         if (editingRole) {
-            updateRole({ ...editingRole, name });
+            await updateRole({ ...editingRole, name });
         } else {
-            addRole({ name });
+            await addRole({ name });
         }
         setEditingRole(null);
         setIsDialogOpen(false);

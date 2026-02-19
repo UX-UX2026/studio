@@ -73,12 +73,18 @@
         "departmentId": {
           "type": "string",
           "description": "The ID of the department this user belongs to or manages."
+        },
+        "status": {
+            "type": "string",
+            "enum": ["Active", "Invited"],
+            "description": "The current status of the user account."
         }
       },
       "required": [
         "displayName",
         "email",
-        "role"
+        "role",
+        "status"
       ]
     },
     "department": {
@@ -93,11 +99,27 @@
         "managerId": {
           "type": "string",
           "description": "The UID of the user who manages this department."
+        },
+        "budget": {
+            "type": "number",
+            "description": "The approved budget for the department."
         }
       },
       "required": [
         "name"
       ]
+    },
+    "role": {
+        "title": "Role",
+        "description": "Defines a user role within the application.",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the role."
+            }
+        },
+        "required": ["name"]
     },
     "workflow": {
       "title": "Approval Workflow",
@@ -216,6 +238,12 @@
         "$ref": "#/entities/department"
       },
       "description": "Collection of all departments."
+    },
+    "/roles/{roleId}": {
+        "schema": {
+            "$ref": "#/entities/role"
+        },
+        "description": "Collection of all user roles."
     },
     "/procurementRequests/{procurementRequestId}": {
       "schema": {

@@ -2,7 +2,7 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader, Building, Plus, Trash2, Edit, Upload, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -19,9 +19,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { mockDepartments as initialMockDepartments } from "@/lib/departments-mock-data";
-import { mockUsers } from "@/lib/users-mock-data";
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 type Department = {
     id: string;
@@ -29,6 +29,12 @@ type Department = {
     managerId: string | null;
     budget: number;
 };
+
+type UserProfile = {
+    id: string;
+    name: string;
+    role: string;
+}
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -38,10 +44,16 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function DepartmentsPage() {
-    const { user, role, loading } = useUser();
+    const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
 
-    const [departments, setDepartments] = useState<Department[]>(initialMockDepartments);
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: departmentsLoading } = useCollection<Department>(departmentsQuery);
+
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
     
@@ -49,17 +61,15 @@ export default function DepartmentsPage() {
     const [name, setName] = useState('');
     const [managerId, setManagerId] = useState<string | null>(null);
     const [budget, setBudget] = useState(0);
-
-    const managers = mockUsers.filter(u => u.role === 'Manager' || u.role === 'Administrator');
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'Administrator')) {
+        if (!userLoading && (!user || role !== 'Administrator')) {
             router.push('/');
         }
-    }, [user, role, loading, router]);
+    }, [user, role, userLoading, router]);
     
     useEffect(() => {
         if (isDialogOpen) {
@@ -74,6 +84,8 @@ export default function DepartmentsPage() {
             }
         }
     }, [editingDepartment, isDialogOpen]);
+    
+    const loading = userLoading || departmentsLoading || usersLoading;
 
     if (loading || !user || role !== 'Administrator') {
         return (
@@ -83,18 +95,14 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = () => {
-        const departmentData: Department = {
-            id: editingDepartment?.id || `dept-${Date.now()}`,
-            name,
-            managerId,
-            budget
-        };
+    const handleSave = async () => {
+        const departmentData = { name, managerId, budget };
 
         if (editingDepartment) {
-            setDepartments(departments.map(d => d.id === departmentData.id ? departmentData : d));
+            const deptRef = doc(firestore, 'departments', editingDepartment.id);
+            await setDoc(deptRef, departmentData, { merge: true });
         } else {
-            setDepartments([...departments, departmentData]);
+            await addDoc(collection(firestore, 'departments'), departmentData);
         }
         setEditingDepartment(null);
         setIsDialogOpen(false);
@@ -105,8 +113,8 @@ export default function DepartmentsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = (id: string) => {
-        setDepartments(departments.filter(d => d.id !== id));
+    const handleDelete = async (id: string) => {
+        await deleteDoc(doc(firestore, 'departments', id));
     };
 
     const openAddDialog = () => {
@@ -114,9 +122,11 @@ export default function DepartmentsPage() {
         setIsDialogOpen(true);
     }
 
+    const managers = users?.filter(u => u.role === 'Manager' || u.role === 'Administrator') || [];
+
     const getManagerName = (managerId: string | null) => {
         if (!managerId) return 'Unassigned';
-        return mockUsers.find(u => u.id === managerId)?.name || 'Unknown';
+        return users?.find(u => u.id === managerId)?.name || 'Unknown';
     }
 
     const handleImportClick = () => {
@@ -124,7 +134,7 @@ export default function DepartmentsPage() {
     };
 
     const handleExport = () => {
-        if (departments.length === 0) {
+        if (!departments || departments.length === 0) {
             toast({ title: "No Data to Export", description: "There are no departments to export." });
             return;
         }
@@ -153,7 +163,7 @@ export default function DepartmentsPage() {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -161,7 +171,7 @@ export default function DepartmentsPage() {
 
                 const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
                 
-                const newDepts: Department[] = rows.slice(1).map(row => {
+                const newDepts: Omit<Department, 'id'>[] = rows.slice(1).map(row => {
                     const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
                     let dept: any = {};
                     headers.forEach((header, index) => {
@@ -173,14 +183,15 @@ export default function DepartmentsPage() {
                     }
 
                     return {
-                        id: dept.id || `dept-${Date.now()}-${Math.random()}`,
                         name: dept.name,
                         managerId: dept.managerId && dept.managerId !== 'null' ? dept.managerId : null,
                         budget: parseFloat(dept.budget) || 0,
                     };
                 });
                 
-                setDepartments(prev => [...prev, ...newDepts]);
+                for (const dept of newDepts) {
+                    await addDoc(collection(firestore, 'departments'), dept);
+                }
 
                 toast({ title: "Import Successful", description: `${newDepts.length} departments were added.` });
             } catch (error: any) {
@@ -237,7 +248,7 @@ export default function DepartmentsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {departments.map((dept) => (
+                                {departments && departments.map((dept) => (
                                     <TableRow key={dept.id}>
                                         <TableCell className="font-medium">{dept.name}</TableCell>
                                         <TableCell>{getManagerName(dept.managerId)}</TableCell>
