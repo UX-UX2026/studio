@@ -28,7 +28,7 @@ const formatPercentage = (value: number) => {
 
 
 export default function ProcurementSummaryPage() {
-    const { user, role, loading } = useUser();
+    const { user, role, department, loading } = useUser();
     const router = useRouter();
 
     // State for editable data
@@ -72,7 +72,7 @@ export default function ProcurementSummaryPage() {
     <div className="container mx-auto p-4 sm:p-6 lg:p-8">
         <div className="mb-8">
             <h1 className="text-2xl font-bold text-primary">Procurement Summary</h1>
-            <p className="text-lg text-muted-foreground">SupServ ADM</p>
+            <p className="text-lg text-muted-foreground">{department || 'All Departments'}</p>
         </div>
 
         <div className="space-y-12">
