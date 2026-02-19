@@ -2,7 +2,7 @@
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
 
 export type Role = {
   id: string;
@@ -25,7 +25,7 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   const { data: roles, loading } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {
-    if (!loading && roles && roles.length === 0 && firestore) {
+    if (!loading && roles && firestore) {
       const seedRoles = async () => {
         const defaultRoles = [
           'Administrator', 
@@ -37,12 +37,12 @@ export function RolesProvider({ children }: { children: ReactNode }) {
         ];
         
         try {
-          const rolesCol = collection(firestore, 'roles');
+          const existingRoleNames = roles.map(r => r.name);
+          
           for (const roleName of defaultRoles) {
-            const q = query(rolesCol, where('name', '==', roleName));
-            const snapshot = await getDocs(q);
-            if (snapshot.empty) {
-              await addDoc(rolesCol, { name: roleName });
+            if (!existingRoleNames.includes(roleName)) {
+              // This role is missing, add it.
+              await addDoc(collection(firestore, 'roles'), { name: roleName });
             }
           }
         } catch (error) {
