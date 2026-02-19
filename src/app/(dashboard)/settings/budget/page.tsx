@@ -74,14 +74,15 @@ export default function BudgetPage() {
     }, [budgetItems, budgetsLoading, firestore]);
 
     useEffect(() => {
-        if (!userLoading && (!user || role !== 'Administrator')) {
+        const allowedRoles = ['Administrator', 'Procurement Officer'];
+        if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
             router.push('/');
         }
     }, [user, role, userLoading, router]);
     
     const loading = userLoading || budgetsLoading;
 
-    if (loading || !user || role !== 'Administrator') {
+    if (loading || !user || !role || !['Administrator', 'Procurement Officer'].includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

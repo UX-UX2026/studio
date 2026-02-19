@@ -45,13 +45,13 @@ const allLinks = [
   { 
     label: 'Settings', 
     icon: Settings, 
-    roles: ['Administrator'],
+    roles: ['Administrator', 'Procurement Officer'],
     subLinks: [
         { href: '/settings', label: 'General', roles: ['Administrator'] },
         { href: '/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
         { href: '/settings/departments', label: 'Departments', roles: ['Administrator'] },
         { href: '/settings/roles', label: 'Roles', roles: ['Administrator'] },
-        { href: '/settings/budget', label: 'Budget', roles: ['Administrator'] },
+        { href: '/settings/budget', label: 'Budget', roles: ['Administrator', 'Procurement Officer'] },
         { href: '/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
     ]
   },

@@ -74,7 +74,7 @@ service cloud.firestore {
     }
     
     match /budgets/{budgetId} {
-      allow read, write: if isAdmin();
+      allow read, write: if isAdmin() || getRole() == 'Procurement Officer';
     }
 
     match /procurementRequests/{requestId} {
