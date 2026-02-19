@@ -75,6 +75,16 @@ export default function SettingsPage() {
                         </p>
                         <Button disabled>Connect to Google Sheets</Button>
                     </div>
+                    <div className="space-y-2">
+                        <h3 className="text-lg font-semibold">Backup & Restore</h3>
+                        <p className="text-sm text-muted-foreground">
+                           Project backups are managed outside of this application. You can use a version control system like Git to save your work, or ask me to revert to a previous state from our conversation history.
+                        </p>
+                        <div className="flex gap-2 pt-2">
+                            <Button disabled>Create Manual Backup</Button>
+                            <Button variant="outline" disabled>Configure Automatic Backups</Button>
+                        </div>
+                    </div>
                 </CardContent>
             </Card>
         </div>
