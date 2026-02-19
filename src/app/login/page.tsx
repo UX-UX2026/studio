@@ -132,27 +132,38 @@ export default function LoginPage() {
             // The useEffect will handle the redirect
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
+            
+            const usersCollection = collection(firestore, 'users');
+            const adminQuery = query(usersCollection, where('role', '==', 'Administrator'), limit(1));
+            const adminSnapshot = await getDocs(adminQuery);
+
             let description = "An unexpected error occurred. Please try again.";
-            // The error codes are useful for debugging
-            switch (error.code) {
-                case 'auth/user-not-found':
-                case 'auth/wrong-password':
-                case 'auth/invalid-credential':
-                    description = "Invalid email or password. Please double-check your credentials and try again. Note: users must be created in the Firebase Authentication console before they can sign in with an email and password.";
-                    break;
-                case 'auth/invalid-email':
-                    description = "The email address format is not valid.";
-                    break;
-                case 'auth/operation-not-allowed':
-                    description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
-                    break;
-                case 'auth/configuration-not-found':
-                case 'auth/invalid-api-key':
-                     description = "Firebase configuration is invalid. Please check your setup.";
-                    break;
-                default:
-                    description = error.message;
+
+            if (adminSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
+                description = "It looks like you're setting up the first admin account. Please create this user in the Firebase Authentication console first, then come back here to log in. This will establish them as the site administrator.";
+            } else {
+                // The error codes are useful for debugging
+                switch (error.code) {
+                    case 'auth/user-not-found':
+                    case 'auth/wrong-password':
+                    case 'auth/invalid-credential':
+                        description = "Invalid email or password. Please double-check your credentials and try again. Note: users must be created in the Firebase Authentication console before they can sign in with an email and password.";
+                        break;
+                    case 'auth/invalid-email':
+                        description = "The email address format is not valid.";
+                        break;
+                    case 'auth/operation-not-allowed':
+                        description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
+                        break;
+                    case 'auth/configuration-not-found':
+                    case 'auth/invalid-api-key':
+                        description = "Firebase configuration is invalid. Please check your setup.";
+                        break;
+                    default:
+                        description = error.message;
+                }
             }
+
              setErrorDialog({
                 title: "Login Failed",
                 description: description,
