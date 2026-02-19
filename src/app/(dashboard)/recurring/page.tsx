@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader, History } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { recurringItems } from "@/lib/mock-data";
 import { RecurringClient } from "@/components/app/recurring-client";
 
 
@@ -43,7 +42,7 @@ export default function RecurringPage() {
           </div>
         </CardHeader>
         <CardContent>
-            <RecurringClient items={recurringItems} />
+            <RecurringClient />
         </CardContent>
        </Card>
     </div>

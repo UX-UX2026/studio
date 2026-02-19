@@ -1,13 +1,15 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { capitalData as initialCapitalData, cashExpensesData as initialCashExpensesData } from "@/lib/summary-mock-data";
-import { Input } from "@/components/ui/input";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, query, where } from "firebase/firestore";
+import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -18,31 +20,59 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const formatPercentage = (value: number) => {
-    return new Intl.NumberFormat("en-US", {
-        style: "percent",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(value);
+type SummaryItem = ApprovalItem & {
+    department: string;
+    period: string;
 };
 
-
 export default function ProcurementSummaryPage() {
-    const { user, role, department, loading } = useUser();
+    const { user, role, department, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
 
-    // State for editable data
-    const [cashExpenses, setCashExpenses] = useState(initialCashExpensesData);
-    const [capital, setCapital] = useState(initialCapitalData);
-    const [currentPeriod, setCurrentPeriod] = useState('May');
+    const requestsQuery = useMemo(() => {
+        if (!firestore) return null;
+        const baseQuery = collection(firestore, 'procurementRequests');
 
+        // Admins and Executives see all departments
+        if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
+            return query(baseQuery);
+        }
+
+        // Managers see their own department
+        if (role === 'Manager' && department) {
+            return query(baseQuery, where('department', '==', department));
+        }
+
+        return null;
+
+    }, [firestore, role, department]);
+
+    const { data: requests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+
+    const allItems = useMemo(() => {
+        if (!requests) return [];
+        const items: SummaryItem[] = [];
+        requests.forEach(req => {
+            req.items.forEach(item => {
+                items.push({
+                    ...item,
+                    department: req.department,
+                    period: req.period,
+                });
+            });
+        });
+        return items;
+    }, [requests]);
 
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
-      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
+      if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
         router.push('/');
       }
-    }, [user, role, loading, router]);
+    }, [user, role, userLoading, router]);
+
+    const loading = userLoading || requestsLoading;
     
     if (loading || !user) {
         return (
@@ -51,126 +81,51 @@ export default function ProcurementSummaryPage() {
             </div>
         );
     }
-
-    const handleCashCommentChange = (index: number, value: string) => {
-        const updatedData = [...cashExpenses];
-        updatedData[index].comments = value;
-        setCashExpenses(updatedData);
-    };
-
-    const handleCapitalCommentChange = (index: number, value: string) => {
-        const updatedData = [...capital];
-        updatedData[index].comments = value;
-        setCapital(updatedData);
-    };
     
-    const subtotalProcurement = cashExpenses.reduce((sum, item) => sum + item.procurement, 0);
-    const subtotalForecast = cashExpenses.reduce((sum, item) => sum + item.forecast, 0);
-    const subtotalVsForecast = subtotalForecast - subtotalProcurement;
+    const totalProcurement = allItems.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
 
   return (
-    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
-        <div className="mb-8">
-            <h1 className="text-2xl font-bold text-primary">Procurement Summary</h1>
-            <p className="text-lg text-muted-foreground">{department || 'All Departments'}</p>
-        </div>
-
-        <div className="space-y-12">
-            <div>
-                <h2 className="text-xl font-semibold mb-2">Procurement Line Items</h2>
-                <p className="text-sm text-muted-foreground mb-4">Comparison of {currentPeriod} procurement against forecast for cash expenses. Over-budget items are highlighted.</p>
-                <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted hover:bg-muted">
-                                <TableHead className="w-[300px]">Item</TableHead>
-                                <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                                <TableHead className="text-right">{currentPeriod} Forecast</TableHead>
-                                <TableHead className="text-right">Procurement vs Forecast</TableHead>
-                                <TableHead>Comments</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {cashExpenses.map((item, index) => {
-                                const vsForecast = item.forecast - item.procurement;
-                                const isOverBudget = vsForecast < 0;
-                                return (
-                                    <TableRow key={item.item} className={isOverBudget ? "bg-red-500/10 hover:bg-red-500/20" : ""}>
-                                        <TableCell className="font-medium">{item.item}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecast)}</TableCell>
-                                        <TableCell className={`text-right font-mono ${isOverBudget ? 'text-red-500' : ''}`}>
-                                            {formatCurrency(vsForecast)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Input 
-                                                value={item.comments} 
-                                                onChange={(e) => handleCashCommentChange(index, e.target.value)}
-                                                className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                                            />
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                            })}
-                        </TableBody>
-                        <TableRow className="font-bold bg-muted/50">
-                            <TableHead>Subtotal cash expenses</TableHead>
-                            <TableHead className="text-right font-mono">{formatCurrency(subtotalProcurement)}</TableHead>
-                            <TableHead className="text-right font-mono">{formatCurrency(subtotalForecast)}</TableHead>
-                            <TableHead className={`text-right font-mono ${subtotalVsForecast < 0 ? 'text-red-500' : ''}`}>
-                                {formatCurrency(subtotalVsForecast)}
-                            </TableHead>
-                            <TableHead></TableHead>
+    <Card>
+        <CardHeader>
+            <CardTitle>Procurement Summary</CardTitle>
+            <CardDescription>A summary of all line items from submitted procurement requests.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="mb-4 p-4 text-right rounded-lg bg-primary/10 border-primary/20 border shrink-0">
+                <p className="text-sm font-bold uppercase text-primary">Total Value of All Items</p>
+                <p className="text-3xl font-black text-primary">{formatCurrency(totalProcurement)}</p>
+            </div>
+            <div className="overflow-x-auto rounded-lg border">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-muted hover:bg-muted">
+                            <TableHead>Department</TableHead>
+                            <TableHead>Period</TableHead>
+                            <TableHead>Item</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead className="text-right">Total Value</TableHead>
                         </TableRow>
-                    </Table>
-                </div>
-            </div>
-
-            <div>
-                <h2 className="text-xl font-semibold mb-2">Capital</h2>
-                 <p className="text-sm text-muted-foreground mb-4">Capital expenditure summary including forecasts and budget comparisons.</p>
-                <div className="overflow-x-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                             <TableRow className="bg-muted hover:bg-muted">
-                                <TableHead className="w-[250px]">Item</TableHead>
-                                <TableHead className="text-right">{currentPeriod} Procurement</TableHead>
-                                <TableHead className="text-right">July Forecast</TableHead>
-                                <TableHead className="text-right">Year Total</TableHead>
-                                <TableHead className="text-right">Multiplier</TableHead>
-                                <TableHead className="text-right">Act+F vs Budget</TableHead>
-                                <TableHead className="text-right">Act+F vs Budget YR</TableHead>
-                                <TableHead className="text-right">vs Budget YR %</TableHead>
-                                <TableHead>Comments</TableHead>
+                    </TableHeader>
+                    <TableBody>
+                        {allItems.length > 0 ? allItems.map((item, index) => (
+                            <TableRow key={`${item.id}-${index}`}>
+                                <TableCell><Badge variant="secondary">{item.department}</Badge></TableCell>
+                                <TableCell>{item.period}</TableCell>
+                                <TableCell className="font-medium">{item.description}</TableCell>
+                                <TableCell>{item.category}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
                             </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {capital.map((item, index) => (
-                                <TableRow key={item.item}>
-                                    <TableCell className="font-medium">{item.item}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.procurement)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.julyForecast)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.yearTotal)}</TableCell>
-                                    <TableCell className="text-right font-mono">{item.yearTotalMultiplier?.toFixed(4) ?? ''}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudget)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item.actForecastVsBudgetYR)}</TableCell>
-                                    <TableCell className={`text-right font-mono ${item.vsBudget < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                                        {formatPercentage(item.vsBudget)}
-                                    </TableCell>
-                                    <TableCell>
-                                        <Input 
-                                            value={item.comments} 
-                                            onChange={(e) => handleCapitalCommentChange(index, e.target.value)}
-                                            className="bg-transparent border-0 h-auto p-0 text-xs text-muted-foreground focus-visible:ring-0 focus-visible:ring-offset-0"
-                                        />
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                        )) : (
+                            <TableRow>
+                                <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                    No procurement items found.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
             </div>
-        </div>
-    </div>
+        </CardContent>
+    </Card>
   );
 }
