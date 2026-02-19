@@ -2,7 +2,7 @@
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { Loader, Building2, Plus, Trash2, Edit, Upload, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { mockVendors as initialMockVendors, type Vendor } from "@/lib/vendors-mock-data";
 import { useToast } from "@/hooks/use-toast";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+
+type Vendor = {
+    id: string;
+    name: string;
+    contactPerson: string;
+    email: string;
+    phone: string;
+    address: string;
+    category: string;
+    status: 'Active' | 'Inactive';
+};
 
 const vendorCategories = [
     'IT Services',
@@ -33,10 +45,13 @@ const vendorCategories = [
 ];
 
 export default function VendorsPage() {
-    const { user, role, loading } = useUser();
+    const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
 
-    const [vendors, setVendors] = useState<Vendor[]>(initialMockVendors);
+    const vendorsQuery = useMemo(() => collection(firestore, 'vendors'), [firestore]);
+    const { data: vendors, loading: vendorsLoading } = useCollection<Vendor>(vendorsQuery);
+
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
     
@@ -45,18 +60,18 @@ export default function VendorsPage() {
     const [contactPerson, setContactPerson] = useState('');
     const [email, setEmail] = useState('');
     const [phone, setPhone] = useState('');
+    const [address, setAddress] = useState('');
     const [category, setCategory] = useState('');
     const [status, setStatus] = useState<'Active' | 'Inactive'>('Active');
 
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-
     useEffect(() => {
-      if (!loading && (!user || (role !== 'Procurement Officer' && role !== 'Administrator'))) {
+      if (!userLoading && (!user || (role !== 'Procurement Officer' && role !== 'Administrator'))) {
         router.push('/');
       }
-    }, [user, role, loading, router]);
+    }, [user, role, userLoading, router]);
     
     useEffect(() => {
         if (isDialogOpen) {
@@ -65,6 +80,7 @@ export default function VendorsPage() {
                 setContactPerson(editingVendor.contactPerson);
                 setEmail(editingVendor.email);
                 setPhone(editingVendor.phone);
+                setAddress(editingVendor.address || '');
                 setCategory(editingVendor.category);
                 setStatus(editingVendor.status);
             } else {
@@ -72,11 +88,14 @@ export default function VendorsPage() {
                 setContactPerson('');
                 setEmail('');
                 setPhone('');
+                setAddress('');
                 setCategory('');
                 setStatus('Active');
             }
         }
     }, [editingVendor, isDialogOpen]);
+
+    const loading = userLoading || vendorsLoading;
 
     if (loading || !user || (role !== 'Procurement Officer' && role !== 'Administrator')) {
         return (
@@ -86,21 +105,22 @@ export default function VendorsPage() {
         );
     }
     
-    const handleSave = () => {
-        const vendorData: Vendor = {
-            id: editingVendor?.id || `ven-${Date.now()}`,
+    const handleSave = async () => {
+        const vendorData = {
             name,
             contactPerson,
             email,
             phone,
+            address,
             category,
             status,
         };
 
         if (editingVendor) {
-            setVendors(vendors.map(v => v.id === vendorData.id ? vendorData : v));
+            const vendorRef = doc(firestore, 'vendors', editingVendor.id);
+            await setDoc(vendorRef, vendorData, { merge: true });
         } else {
-            setVendors([...vendors, vendorData]);
+            await addDoc(collection(firestore, 'vendors'), vendorData);
         }
         setEditingVendor(null);
         setIsDialogOpen(false);
@@ -111,8 +131,8 @@ export default function VendorsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = (id: string) => {
-        setVendors(vendors.filter(v => v.id !== id));
+    const handleDelete = async (id: string) => {
+        await deleteDoc(doc(firestore, 'vendors', id));
     };
 
     const openAddDialog = () => {
@@ -125,7 +145,7 @@ export default function VendorsPage() {
     };
 
     const handleExport = () => {
-        if (vendors.length === 0) {
+        if (!vendors || vendors.length === 0) {
             toast({
                 title: "No Data to Export",
                 description: "There are no vendors to export.",
@@ -133,11 +153,11 @@ export default function VendorsPage() {
             return;
         }
 
-        const headers = Object.keys(vendors[0]);
+        const headers: (keyof Vendor)[] = ['id', 'name', 'contactPerson', 'email', 'phone', 'address', 'category', 'status'];
         const csvContent = [
             headers.join(','),
             ...vendors.map(vendor => 
-                headers.map(header => `"${(vendor as any)[header]}"`).join(',')
+                headers.map(header => `"${(vendor as any)[header] || ''}"`).join(',')
             )
         ].join('\n');
 
@@ -157,7 +177,7 @@ export default function VendorsPage() {
         if (!file) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -167,9 +187,9 @@ export default function VendorsPage() {
 
                 const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
                 
-                const newVendors: Vendor[] = rows.slice(1).map(row => {
+                const newVendors = rows.slice(1).map(row => {
                     const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
-                    let vendor = {} as Partial<Vendor>;
+                    let vendor: any = {};
                     headers.forEach((header, index) => {
                         (vendor as any)[header] = values[index];
                     });
@@ -179,17 +199,19 @@ export default function VendorsPage() {
                     }
 
                     return {
-                        id: vendor.id || `ven-${Date.now()}-${Math.random()}`,
                         name: vendor.name,
                         contactPerson: vendor.contactPerson || '',
                         email: vendor.email,
                         phone: vendor.phone || '',
+                        address: vendor.address || '',
                         category: vendor.category,
                         status: vendor.status === 'Active' || vendor.status === 'Inactive' ? vendor.status : 'Active',
                     };
                 });
                 
-                setVendors(prev => [...prev, ...newVendors]);
+                for (const vendor of newVendors) {
+                    await addDoc(collection(firestore, 'vendors'), vendor);
+                }
 
                 toast({
                     title: "Import Successful",
@@ -255,7 +277,7 @@ export default function VendorsPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {vendors.map((vendor) => (
+                                {vendors && vendors.map((vendor) => (
                                     <TableRow key={vendor.id}>
                                         <TableCell className="font-medium">{vendor.name}</TableCell>
                                         <TableCell>
@@ -308,6 +330,10 @@ export default function VendorsPage() {
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="phone" className="text-right">Phone</Label>
                             <Input id="phone" value={phone} onChange={e => setPhone(e.target.value)} className="col-span-3" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="address" className="text-right">Address</Label>
+                            <Input id="address" value={address} onChange={e => setAddress(e.target.value)} className="col-span-3" />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="category" className="text-right">Line Item</Label>
