@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useRef } from "react";
@@ -31,6 +32,8 @@ import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 import { Label } from "@/components/ui/label";
 import { mockDepartments } from "@/lib/departments-mock-data";
 import { type UserRole } from "@/firebase/auth/use-user";
+import { approvalsData, type ApprovalRequest } from "@/lib/approvals-mock-data";
+import { cn } from "@/lib/utils";
 
 
 type Item = {
@@ -97,14 +100,49 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     return mockDepartments.find(d => d.name === 'ICT')?.id || mockDepartments[0].id;
   });
 
-  const departmentName = useMemo(() => {
-      return mockDepartments.find(d => d.id === selectedDepartment)?.name || 'Unknown Department';
-  }, [selectedDepartment]);
-
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const departmentName = useMemo(() => {
+      return mockDepartments.find(d => d.id === selectedDepartment)?.name || 'Unknown Department';
+  }, [selectedDepartment]);
+
+  const periodStatuses = useMemo(() => {
+    const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
+    if (departmentName) {
+        approvalsData
+            .filter(req => req.department === departmentName)
+            .forEach(req => {
+                statuses[req.period] = { status: req.status, id: req.id };
+            });
+    }
+    return statuses;
+  }, [departmentName]);
+
+  const isLocked = useMemo(() => {
+      const periodStatusInfo = periodStatuses[selectedPeriod];
+      if (!periodStatusInfo) return false;
+
+      const { status } = periodStatusInfo;
+      
+      // Lock if completed or pending at executive level
+      if (status === 'Completed' || status === 'Pending Executive') {
+          return true;
+      }
+      // Lock for requesters once submitted to manager
+      if (userRole === 'Requester' && status === 'Pending Manager Approval') {
+          return true;
+      }
+      // Lock for managers if they submitted and it's pending for executive
+      if (userRole === 'Manager' && status === 'Pending Executive') {
+          return true;
+      }
+
+      return false;
+  }, [selectedPeriod, periodStatuses, userRole]);
+
 
   const total = useMemo(() => {
     return items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
@@ -239,6 +277,13 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     };
     reader.readAsText(file);
   };
+  
+  const handleRequestEdit = () => {
+    toast({
+      title: "Edit Request Sent",
+      description: "Your manager has been notified of your request to edit this submission. This is a placeholder action.",
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -253,12 +298,28 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="grid w-full md:max-w-xs items-center gap-1.5">
                 <Label htmlFor="period">Procurement Period</Label>
-                <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+                 <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
                     <SelectTrigger id="period">
                         <SelectValue placeholder="Select period" />
                     </SelectTrigger>
                     <SelectContent>
-                        {periods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                        {periods.map(p => {
+                            const statusInfo = periodStatuses[p];
+                            return (
+                                <SelectItem key={p} value={p}>
+                                    <div className="flex items-center gap-2">
+                                        {statusInfo && (
+                                            <span className={cn(
+                                                "h-2 w-2 rounded-full",
+                                                statusInfo.status === 'Completed' ? 'bg-green-500' : 'bg-yellow-500'
+                                            )} />
+                                        )}
+                                        {!statusInfo && <span className="h-2 w-2" />}
+                                        {p}
+                                    </div>
+                                </SelectItem>
+                            );
+                        })}
                     </SelectContent>
                 </Select>
             </div>
@@ -286,6 +347,16 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
             <p className="text-2xl font-black text-primary">{formatCurrency(total)}</p>
         </div>
       </div>
+      
+      {isLocked && (
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-100/80 border border-yellow-300 text-yellow-800">
+              <Lock className="h-5 w-5"/>
+              <div className="text-sm font-medium">
+                  <p>This submission is locked.</p>
+                  <p className="text-xs">It has been submitted for approval and can no longer be edited.</p>
+              </div>
+          </div>
+      )}
 
       <div className="-mx-6 overflow-x-auto">
         <Table className="min-w-[1200px]">
@@ -303,7 +374,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
           </TableHeader>
           <TableBody>
             {items.map((item, index) => (
-              <TableRow key={item.id} className={item.type === 'Recurring' ? 'bg-muted/50' : ''}>
+              <TableRow key={item.id} className={cn(item.type === 'Recurring' ? 'bg-muted/50' : '', isLocked && 'text-muted-foreground')}>
                 <TableCell>
                   <Badge variant={item.type === "Recurring" ? "secondary" : "outline"}>
                     {item.type}
@@ -314,7 +385,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     type="text"
                     value={item.description}
                     onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
-                    readOnly={item.type === "Recurring"}
+                    readOnly={isLocked || item.type === "Recurring"}
                     className="bg-transparent border-0"
                   />
                 </TableCell>
@@ -323,7 +394,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     type="text"
                     value={item.brand}
                     onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
-                    readOnly={item.type === "Recurring"}
+                    readOnly={isLocked || item.type === "Recurring"}
                     className="bg-transparent border-0"
                   />
                 </TableCell>
@@ -332,7 +403,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     type="number"
                     value={item.qty}
                     onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
-                    readOnly={item.type === "Recurring"}
+                    readOnly={isLocked || item.type === "Recurring"}
                     className="w-16 bg-transparent border-0"
                   />
                 </TableCell>
@@ -340,7 +411,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                    <Select
                         value={item.category}
                         onValueChange={(value) => handleItemChange(item.id, "category", value)}
-                        disabled={item.type === 'Recurring'}
+                        disabled={isLocked || item.type === 'Recurring'}
                     >
                         <SelectTrigger className="w-full bg-transparent border-0">
                             <SelectValue placeholder="Select a category" />
@@ -352,7 +423,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                   {item.type === 'One-Off' && (
                     <Popover onOpenChange={() => setSuggestions(null)}>
                       <PopoverTrigger asChild>
-                         <Button variant="ghost" size="icon" onClick={() => handleGetSuggestion(item.description, item.id)} disabled={isLoadingAi}>
+                         <Button variant="ghost" size="icon" onClick={() => handleGetSuggestion(item.description, item.id)} disabled={isLocked || isLoadingAi}>
                            <Wand2 className={`h-4 w-4 ${isLoadingAi ? 'animate-pulse' : ''}`}/>
                          </Button>
                       </PopoverTrigger>
@@ -385,7 +456,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                     type="number"
                     value={item.unitPrice}
                     onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
-                    readOnly={item.type === "Recurring"}
+                    readOnly={isLocked || item.type === "Recurring"}
                     className="w-24 text-right bg-transparent border-0"
                   />
                 </TableCell>
@@ -393,11 +464,12 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
                   {formatCurrency(item.qty * item.unitPrice)}
                 </TableCell>
                 <TableCell className="text-center">
-                  {item.type === "One-Off" ? (
+                  {item.type === "One-Off" && !isLocked ? (
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => handleRemoveItem(item.id)}
+                      disabled={isLocked}
                     >
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
@@ -413,22 +485,30 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
 
       <div className="flex items-center justify-between pt-4">
         <div className="flex gap-2">
-            <Button variant="outline" onClick={handleAddItem}>
+            <Button variant="outline" onClick={handleAddItem} disabled={isLocked}>
             <Plus className="w-4 h-4 mr-2" />
             Add Manual Item
             </Button>
-            <Button variant="outline" onClick={handleImportClick}>
+            <Button variant="outline" onClick={handleImportClick} disabled={isLocked}>
                 <Upload className="h-4 w-4 mr-2" /> Import
             </Button>
-            <Button variant="outline" onClick={handleExport}>
+            <Button variant="outline" onClick={handleExport} disabled={isLocked}>
                 <Download className="h-4 w-4 mr-2" /> Export
             </Button>
         </div>
         <div className="flex gap-3">
-          <Button variant="ghost">Save as Draft</Button>
-          <Button className="shadow-lg shadow-primary/20">Submit Period Request</Button>
+          {isLocked ? (
+            <Button onClick={handleRequestEdit}>Request Edit</Button>
+          ): (
+            <>
+              <Button variant="ghost">Save as Draft</Button>
+              <Button className="shadow-lg shadow-primary/20">Submit Period Request</Button>
+            </>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+    
