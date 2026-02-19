@@ -24,16 +24,17 @@ service cloud.firestore {
     match /app/metadata {
       // Anyone can read if an admin is set up
       allow read: if isSignedIn();
-      // Only allow setting adminIsSetUp to true. Do not allow it to be flipped back to false.
-      // This can be done by a user who is about to become an admin.
-      allow write: if isSignedIn() && (!exists(path('/databases/$(database)/documents/app/metadata')) || resource.data.adminIsSetUp == false);
+      // Allow writing to this document only if the user is authenticated, and either the document
+      // doesn't exist yet, or it's being set to `adminIsSetUp: true`. This prevents it from being maliciously flipped back to false.
+      allow write: if isSignedIn() && (!exists(path(resource.id)) || request.resource.data.adminIsSetUp == true);
     }
     
     match /users/{userId} {
-      // Allow user to create their own profile.
-      allow create: if isOwner(userId);
+      // Allow user to create their own profile document.
+      // This is essential for the first-time admin setup.
+      allow create: if request.auth.uid == userId;
 
-      // Allow user to read their own profile, or if user is an admin
+      // Allow user to read/update their own profile, or if user is an admin
       allow read, update: if isOwner(userId) || isAdmin();
       
       // Only admins should delete users

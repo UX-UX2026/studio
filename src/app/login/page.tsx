@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { collection, doc, getDocs, getDoc, setDoc, query, limit } from "firebase/firestore";
+import { collection, doc, getDocs, getDoc, setDoc, query, limit, writeBatch } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -62,6 +62,8 @@ export default function LoginPage() {
           // If user is authenticated but has no profile, create one.
           if (status === null) {
             try {
+              const batch = writeBatch(firestore);
+
               const metadataRef = doc(firestore, 'app', 'metadata');
               const userRef = doc(firestore, 'users', user.uid);
               
@@ -75,8 +77,8 @@ export default function LoginPage() {
                 department = 'Executive';
               }
 
-              // Create the user document
-              await setDoc(userRef, {
+              // Set up the user document write
+              batch.set(userRef, {
                 displayName: user.displayName || user.email?.split('@')[0],
                 email: user.email,
                 photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
@@ -87,8 +89,12 @@ export default function LoginPage() {
 
               // If we just created the first admin, update the metadata flag
               if (role === 'Administrator') {
-                await setDoc(metadataRef, { adminIsSetUp: true });
+                 batch.set(metadataRef, { adminIsSetUp: true });
               }
+
+              // Commit the atomic batch
+              await batch.commit();
+              
               // The useUser hook will now pick up the new profile and status will become 'Active',
               // which will trigger the redirect on the next render.
             } catch (error: any) {
@@ -96,6 +102,8 @@ export default function LoginPage() {
               let description = "An error occurred while setting up your account. Please try again.";
               if (error.code === 'permission-denied') {
                 description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured correctly."
+              } else {
+                description = `An error occurred while setting up your account: ${error.message || 'Unknown error'}. Please try again.`
               }
               setErrorDialog({
                   title: "Account Setup Failed",
