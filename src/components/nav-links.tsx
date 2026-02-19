@@ -10,6 +10,7 @@ import {
   Settings,
   Building2,
   ChevronDown,
+  FilePieChart,
 } from 'lucide-react';
 import {
   SidebarNav,
@@ -36,6 +37,7 @@ const allLinks = [
   },
   { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager'] },
   { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
+  { href: '/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
   { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
   { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
   { href: '/settings', label: 'Settings', icon: Settings, roles: ['Administrator'] },
