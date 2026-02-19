@@ -1,7 +1,6 @@
-
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,10 +29,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { recurringItems, oneOffSubmissionItems } from "@/lib/mock-data";
 import { Label } from "@/components/ui/label";
-import { mockDepartments } from "@/lib/departments-mock-data";
 import { type UserRole } from "@/firebase/auth/use-user";
 import { approvalsData, type ApprovalRequest } from "@/lib/approvals-mock-data";
 import { cn } from "@/lib/utils";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection } from "firebase/firestore";
 
 
 type Item = {
@@ -44,6 +44,11 @@ type Item = {
   qty: number;
   category: string;
   unitPrice: number;
+};
+
+type Department = {
+    id: string;
+    name: string;
 };
 
 // Map recurring items to the submission item format
@@ -89,16 +94,30 @@ const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock
 export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
   const [items, setItems] = useState<Item[]>(initialItems);
   const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
-  const [selectedDepartment, setSelectedDepartment] = useState(() => {
-    if ((userRole === 'Manager' || userRole === 'Requester') && userDepartment) {
-        const departmentFromMock = mockDepartments.find(d => d.name === userDepartment);
-        if (departmentFromMock) {
-            return departmentFromMock.id;
+  
+  const firestore = useFirestore();
+  const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+  const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
+
+  useEffect(() => {
+    if (departments && departments.length > 0 && !selectedDepartment) {
+        if ((userRole === 'Manager' || userRole === 'Requester') && userDepartment) {
+            const departmentFromLive = departments.find(d => d.name === userDepartment);
+            if (departmentFromLive) {
+                setSelectedDepartment(departmentFromLive.id);
+                return;
+            }
+        }
+        // Default for admin or if department not found
+        const defaultDept = departments.find(d => d.name === 'ICT') || departments[0];
+        if (defaultDept) {
+            setSelectedDepartment(defaultDept.id);
         }
     }
-    // Default for admin or if department not found
-    return mockDepartments.find(d => d.name === 'ICT')?.id || mockDepartments[0].id;
-  });
+  }, [departments, userRole, userDepartment, selectedDepartment]);
+
 
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
@@ -106,8 +125,8 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const departmentName = useMemo(() => {
-      return mockDepartments.find(d => d.id === selectedDepartment)?.name || 'Unknown Department';
-  }, [selectedDepartment]);
+      return departments?.find(d => d.id === selectedDepartment)?.name || '';
+  }, [selectedDepartment, departments]);
 
   const periodStatuses = useMemo(() => {
     const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
@@ -326,12 +345,12 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
             {userRole === 'Administrator' ? (
                 <div className="grid w-full md:max-w-xs items-center gap-1.5">
                     <Label htmlFor="department">Department</Label>
-                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment}>
+                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment} disabled={deptsLoading}>
                         <SelectTrigger id="department">
-                            <SelectValue placeholder="Select department" />
+                            <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                         </SelectTrigger>
                         <SelectContent>
-                            {mockDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                            {departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>
@@ -510,5 +529,3 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     </div>
   );
 }
-
-    
