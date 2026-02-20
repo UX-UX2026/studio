@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Loader, Banknote, Upload, Download, Check, ChevronsUpDown } from "lucide-react";
+import { Loader, Banknote, Upload, Download } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,8 +21,6 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 
 type Department = {
@@ -64,8 +62,9 @@ export default function BudgetPage() {
     const [columnMappings, setColumnMappings] = useState<{
         category: string;
         yearTotal: string;
-        forecasts: string[];
-    }>({ category: '', yearTotal: '', forecasts: [] });
+        forecastStart: string;
+        forecastEnd: string;
+    }>({ category: '', yearTotal: '', forecastStart: '', forecastEnd: '' });
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -148,22 +147,15 @@ export default function BudgetPage() {
                 let rows: (string|number)[][];
                 const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
-                if (fileExtension === 'csv') {
-                    const text = e.target?.result as string;
-                    rows = text.split('\n').filter(row => row.trim()).map(r => r.split(','));
-                } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                    const data = e.target?.result;
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-                } else {
-                    throw new Error("Unsupported file type. Please upload a CSV or Excel file.");
-                }
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
 
                 if (rows.length < 2) throw new Error("File must have a header and at least one data row.");
 
-                const headers = rows[0].map(h => (h ?? '').toString().trim().replace(/"/g, ''));
+                const headers = (rows[0] as string[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
                 
                 setParsedFileData(rows);
                 setFileHeaders(headers);
@@ -171,15 +163,18 @@ export default function BudgetPage() {
 
                 // Guess mappings
                 const guessMapping = (h: string) => {
+                    if (!h) return null;
                     const lowerH = h.toLowerCase().trim();
-                    if (lowerH === 'category') return 'category';
-                    if (lowerH === 'yeartotal' || lowerH === 'year total') return 'yearTotal';
+                    if (['category', 'line item', 'description', 'expenses'].includes(lowerH)) return 'category';
+                    if (['yeartotal', 'year total', 'total'].includes(lowerH)) return 'yearTotal';
                     const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
                     if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
                     return null;
                 }
 
-                let initialMappings = { category: '', yearTotal: '', forecasts: [] as string[] };
+                let initialMappings = { category: '', yearTotal: '', forecastStart: '', forecastEnd: '' };
+                const forecastColumns: string[] = [];
+
                 headers.forEach(h => {
                     if (!h) return;
                     const mapping = guessMapping(h);
@@ -188,11 +183,16 @@ export default function BudgetPage() {
                     } else if (mapping === 'yearTotal' && !initialMappings.yearTotal) {
                         initialMappings.yearTotal = h;
                     } else if (mapping === 'forecast') {
-                        initialMappings.forecasts.push(h);
+                        forecastColumns.push(h);
                     }
                 });
-                setColumnMappings(initialMappings);
                 
+                if (forecastColumns.length > 0) {
+                    initialMappings.forecastStart = forecastColumns[0];
+                    initialMappings.forecastEnd = forecastColumns[forecastColumns.length - 1];
+                }
+
+                setColumnMappings(initialMappings);
                 setIsMappingDialogOpen(true);
 
             } catch (error: any) {
@@ -202,48 +202,52 @@ export default function BudgetPage() {
                 if (event.target) event.target.value = '';
             }
         };
-
-        const fileExtension = file.name.split('.').pop()?.toLowerCase();
-        if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-            reader.readAsArrayBuffer(file);
-        } else {
-            reader.readAsText(file);
-        }
+        reader.readAsArrayBuffer(file);
     };
     
     const handleConfirmImport = async () => {
-        const categoryIndex = fileHeaders.indexOf(columnMappings.category);
-        const yearTotalIndex = fileHeaders.indexOf(columnMappings.yearTotal);
+        const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
-        if (categoryIndex === -1 || yearTotalIndex === -1 || columnMappings.forecasts.length === 0) {
-            toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category', 'Year Total', and at least one forecast column." });
+        const categoryIndex = fileHeaders.indexOf(category);
+        const yearTotalIndex = fileHeaders.indexOf(yearTotal);
+        const forecastStartIndex = fileHeaders.indexOf(forecastStart);
+        const forecastEndIndex = fileHeaders.indexOf(forecastEnd);
+
+
+        if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
+            toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category' and 'Forecast' columns." });
+            return;
+        }
+        
+        if (forecastStartIndex > forecastEndIndex) {
+            toast({ variant: "destructive", title: "Invalid Range", description: "The 'Forecast Start Column' must come before the 'Forecast End Column'." });
             return;
         }
 
-        const forecastIndices = columnMappings.forecasts.map(f => fileHeaders.indexOf(f));
-        const newMonthHeaders = columnMappings.forecasts;
+        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
+        const newMonthHeaders = fileHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
         
         try {
             const newItems: Omit<BudgetItem, 'id'>[] = parsedFileData.slice(1).map(row => {
                 const values = row.map(v => String(v || '').trim().replace(/"/g, ''));
-                const category = values[categoryIndex];
-                if (!category) return null; // Skip empty rows
+                const categoryValue = values[categoryIndex];
+                if (!categoryValue) return null; // Skip empty rows
 
-                const yearTotal = parseFloat(values[yearTotalIndex]) || 0;
+                const yearTotalValue = yearTotalIndex !== -1 ? (parseFloat(values[yearTotalIndex]) || 0) : 0;
                 
                 const forecasts = forecastIndices.map(index => {
                     const forecastValue = values[index];
-                    return parseFloat(forecastValue) || 0;
+                    return parseFloat(String(forecastValue).replace(/,/g, '')) || 0;
                 });
 
                 return {
                     departmentId: selectedDepartmentId,
                     departmentName: selectedDepartmentName,
-                    category,
+                    category: categoryValue,
                     forecasts,
-                    yearTotal,
+                    yearTotal: yearTotalValue,
                 };
-            }).filter(Boolean) as Omit<BudgetItem, 'id'>[];
+            }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
             if (budgetItems) {
                 for (const item of budgetItems) {
@@ -266,7 +270,7 @@ export default function BudgetPage() {
     };
 
     const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
-    if (loading || !user || !role || !allowedRoles.includes(role)) {
+    if (userLoading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -373,9 +377,9 @@ export default function BudgetPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-6 py-4">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <div className="space-y-2">
-                                <Label>Category Column</Label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                           <div className="space-y-2">
+                                <Label>Category / Line Item Column</Label>
                                 <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
@@ -384,8 +388,18 @@ export default function BudgetPage() {
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label>Year Total Column</Label>
+                                <Label>Year Total Column (Optional)</Label>
                                 <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
+                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                    <SelectContent>
+                                         <SelectItem value="">None</SelectItem>
+                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                             <div className="space-y-2">
+                                <Label>Forecast Start Column</Label>
+                                <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
                                         {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
@@ -393,40 +407,13 @@ export default function BudgetPage() {
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label>Forecast Columns</Label>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button variant="outline" role="combobox" className="w-full justify-between">
-                                            {columnMappings.forecasts.length > 0 ? `${columnMappings.forecasts.length} selected` : "Select columns..."}
-                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                                        <Command>
-                                            <CommandInput placeholder="Search columns..." />
-                                            <CommandList>
-                                                <CommandEmpty>No columns found.</CommandEmpty>
-                                                <CommandGroup>
-                                                    {fileHeaders.filter(h => h).map((header, i) => (
-                                                        <CommandItem
-                                                            key={`${header}-${i}`}
-                                                            value={header}
-                                                            onSelect={(currentValue) => {
-                                                                const newForecasts = columnMappings.forecasts.includes(header)
-                                                                    ? columnMappings.forecasts.filter(f => f !== header)
-                                                                    : [...columnMappings.forecasts, header];
-                                                                setColumnMappings(m => ({ ...m, forecasts: newForecasts }));
-                                                            }}
-                                                        >
-                                                            <Check className={cn("mr-2 h-4 w-4", columnMappings.forecasts.includes(header) ? "opacity-100" : "opacity-0")} />
-                                                            {header}
-                                                        </CommandItem>
-                                                    ))}
-                                                </CommandGroup>
-                                            </CommandList>
-                                        </Command>
-                                    </PopoverContent>
-                                </Popover>
+                                <Label>Forecast End Column</Label>
+                                <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
+                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
                         </div>
 
@@ -436,13 +423,19 @@ export default function BudgetPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            {fileHeaders.map((header, i) => (
-                                                <TableHead key={`${header}-${i}`} className={cn(
-                                                    columnMappings.category === header && "bg-blue-100 dark:bg-blue-900/50",
-                                                    columnMappings.yearTotal === header && "bg-green-100 dark:bg-green-900/50",
-                                                    columnMappings.forecasts.includes(header) && "bg-yellow-100 dark:bg-yellow-900/50",
-                                                )}>{header}</TableHead>
-                                            ))}
+                                            {fileHeaders.map((header, i) => {
+                                                if (!header && fileHeaders.every(h => !h)) return null;
+                                                const forecastStartIndex = fileHeaders.indexOf(columnMappings.forecastStart);
+                                                const forecastEndIndex = fileHeaders.indexOf(columnMappings.forecastEnd);
+                                                
+                                                return (
+                                                    <TableHead key={`${header}-${i}`} className={cn(
+                                                        columnMappings.category === header && "bg-blue-100 dark:bg-blue-900/50",
+                                                        columnMappings.yearTotal === header && "bg-green-100 dark:bg-green-900/50",
+                                                        forecastStartIndex !== -1 && forecastEndIndex !== -1 && i >= forecastStartIndex && i <= forecastEndIndex && "bg-yellow-100 dark:bg-yellow-900/50",
+                                                    )}>{header || `Column ${i+1}`}</TableHead>
+                                                )
+                                            })}
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
