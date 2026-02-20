@@ -42,7 +42,7 @@ export default function LoginPage() {
     const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
-    // This effect handles redirecting a user who is ALREADY logged in.
+    // This effect handles redirecting a user who is ALREADY logged in when they visit the login page.
     useEffect(() => {
         if (!isAuthLoading && user) {
             router.replace('/dashboard');
@@ -54,7 +54,8 @@ export default function LoginPage() {
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            // On success, the main router in src/app/page.tsx will handle the redirect.
+            // Explicitly navigate only AFTER sign-in is successful.
+            router.replace('/dashboard');
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -81,7 +82,8 @@ export default function LoginPage() {
         setIsSigningIn('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // On success, the main router in src/app/page.tsx will handle the redirect.
+            // Explicitly navigate only AFTER sign-in is successful.
+            router.replace('/dashboard');
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
