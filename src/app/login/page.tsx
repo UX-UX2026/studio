@@ -52,13 +52,23 @@ export default function LoginPage() {
         // --- Start Admin Check ---
         // If this is the special admin user, ensure their role is correct.
         if (user.email === 'heinrich@ubuntux.co.za') {
-          // If the profile is loaded and the role is not Administrator, fix it.
-          if (status !== null && role !== 'Administrator') {
+          // If the user's role is not yet Administrator, update it and wait.
+          if (role !== 'Administrator') {
             try {
               const userRef = doc(firestore, 'users', user.uid);
-              await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-              // The useUser hook will re-fetch and update the role. We don't redirect yet,
-              // we let the hook re-run with the correct role.
+              // Set the role to Administrator. Use merge:true to create or update.
+              await setDoc(userRef, { 
+                role: 'Administrator', 
+                department: 'Executive',
+                // Also ensure other profile fields are set, especially for a first-time login
+                displayName: user.displayName || user.email?.split('@')[0],
+                email: user.email,
+                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                status: 'Active',
+              }, { merge: true });
+              
+              // IMPORTANT: Do not proceed. Return and wait for the useUser hook to get the updated role.
+              // The next run of this useEffect will have the correct role and proceed to redirect.
               return; 
             } catch (error: any) {
                console.error("Failed to upgrade to admin:", error);
@@ -75,6 +85,7 @@ export default function LoginPage() {
 
         // --- Redirection and New User Logic ---
         if (status === 'Active') {
+          // By the time we get here for the admin user, their role is guaranteed to be 'Administrator'.
           router.push('/dashboard');
           return;
         }
@@ -89,24 +100,17 @@ export default function LoginPage() {
         }
         
         // If user is authenticated but has no profile (status is null), create one.
+        // This block will now primarily handle non-admin first-time logins.
         if (status === null) {
           try {
             const userRef = doc(firestore, 'users', user.uid);
-
-            let newRole = 'Requester';
-            let newDepartment = 'Unassigned';
-
-            if (user.email === 'heinrich@ubuntux.co.za') {
-              newRole = 'Administrator';
-              newDepartment = 'Executive';
-            }
             
             await setDoc(userRef, {
               displayName: user.displayName || user.email?.split('@')[0],
               email: user.email,
               photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-              role: newRole,
-              department: newDepartment,
+              role: 'Requester', // Default role for new users
+              department: 'Unassigned',
               status: 'Active',
             });
 
