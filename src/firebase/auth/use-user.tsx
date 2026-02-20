@@ -3,8 +3,7 @@
 import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth, useFirestore } from '../';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { testUsers } from '@/lib/test-data';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -52,7 +51,6 @@ export function useUser(): UserState {
   // Listen for profile changes
   useEffect(() => {
     if (!authUser || !firestore) {
-      // Not logged in, or firebase not ready
       if (!auth.currentUser) {
         setLoading(false);
       }
@@ -67,40 +65,12 @@ export function useUser(): UserState {
       (docSnap) => {
         if (docSnap.exists()) {
           setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
-          setLoading(false);
         } else {
-          // Profile doesn't exist, so let's create it ("self-healing").
-          console.log(`User profile for ${authUser.uid} not found. Creating it.`);
-          
-          const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
-
-          const profileData: any = matchingTestUser
-                ? { ...matchingTestUser, photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}` }
-                : {
-                    displayName: authUser.displayName || authUser.email?.split('@')[0],
-                    email: authUser.email,
-                    photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                    role: 'Requester',
-                    department: 'Unassigned',
-                    status: 'Active' as const,
-                };
-            
-          if (authUser.email) {
-            profileData.email = authUser.email;
-          }
-          
-          setDoc(userRef, profileData)
-            .then(() => {
-                // The onSnapshot listener will automatically receive the new data,
-                // so we don't need to setLoading(false) here. It will happen on the next snapshot.
-                console.log(`Successfully triggered profile creation for ${authUser.uid}.`);
-            })
-            .catch((e) => {
-                console.error("useUser: Failed to create user profile.", e);
-                setError(e);
-                setLoading(false);
-            });
+          // Profile doesn't exist. Set profile to null.
+          // The main app layout will handle creating it.
+          setProfile(null);
         }
+        setLoading(false);
       },
       (e) => {
         console.error("useUser: Firestore listener failed.", e);

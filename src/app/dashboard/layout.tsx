@@ -25,12 +25,13 @@ import {
 import { useAuth, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
-import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where, doc, setDoc } from "firebase/firestore";
+import { testUsers } from "@/lib/test-data";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
-  const { user, loading, role } = useUser();
+  const { user, profile, loading, role } = useUser();
   const router = useRouter();
   const auth = useAuth();
   const firestore = useFirestore();
@@ -44,6 +45,39 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       router.push('/login');
     }
   }, [loading, user, router]);
+  
+  // Self-healing profile creation
+  useEffect(() => {
+    // This effect runs when user data has loaded.
+    // If we have a user, but no profile document, this creates it.
+    if (user && !profile && !loading && firestore) {
+        console.log("Dashboard layout detected missing profile for user. Creating it now...");
+
+        const userRef = doc(firestore, 'users', user.uid);
+        
+        const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
+
+        const profileData: any = matchingTestUser
+            ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
+            : {
+                displayName: user.displayName || user.email?.split('@')[0],
+                email: user.email,
+                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                role: 'Requester',
+                department: 'Unassigned',
+                status: 'Active' as const,
+            };
+        
+        if (user.email) {
+            profileData.email = user.email;
+        }
+        
+        setDoc(userRef, profileData)
+            .catch((e) => {
+                console.error("Dashboard layout: Failed to create user profile.", e);
+            });
+    }
+  }, [user, profile, loading, firestore]);
   
   useEffect(() => {
     if (loading || !user || !firestore) {
@@ -75,7 +109,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [loading, user, firestore]);
 
 
-  if (loading || !user) {
+  if (loading || !user || !profile) { // Also wait for profile
     return (
       <div className="flex h-screen items-center justify-center">
         <Loader className="h-8 w-8 animate-spin" />

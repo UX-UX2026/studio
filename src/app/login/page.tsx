@@ -34,7 +34,7 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, loading: userLoading, status, error: userError } = useUser();
+    const { user, profile, loading: userLoading, status, error: userError } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -54,7 +54,7 @@ export default function LoginPage() {
             return;
         }
 
-        if (user) {
+        if (user && profile) { // We also need the profile to be loaded
             if (status === 'Active') {
                 router.push('/dashboard');
             } else if (status === 'Invited') {
@@ -64,17 +64,16 @@ export default function LoginPage() {
                 });
                 signOut(auth);
             }
-            // If status is null, the hook is still working, so we wait for the next render.
         }
-    }, [user, userLoading, status, userError, router, auth]);
+    }, [user, profile, userLoading, status, userError, router, auth]);
     
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            // On success, the `useUser` hook will detect the auth change, create the profile
-            // if it doesn't exist, and the useEffect above will redirect to /dashboard.
+            // On success, the `useUser` hook will detect the auth change.
+            // The useEffect above will handle redirection once the user & profile are loaded.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -100,8 +99,8 @@ export default function LoginPage() {
         setIsLoading('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-             // On success, the `useUser` hook will detect the auth change, create the profile
-            // if it doesn't exist, and the useEffect above will redirect to /dashboard.
+             // On success, the `useUser` hook will detect the auth change.
+             // The useEffect above will handle redirection.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -145,7 +144,7 @@ export default function LoginPage() {
         }
     };
 
-    if (userLoading || user) { // Show loader if auth is loading or if a user is found (while useEffect runs)
+    if (userLoading || (user && !profile)) { // Show loader if auth/profile is loading
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
