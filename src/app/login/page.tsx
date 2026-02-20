@@ -19,7 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { doc, setDoc, getDocs, collection, query, limit } from "firebase/firestore";
+import { doc, setDoc, getDoc, getDocs, collection, query, limit } from "firebase/firestore";
 import { testUsers } from "@/lib/test-data";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -35,7 +35,7 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, loading: userLoading, status } = useUser();
+    const { user, loading: userLoading } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -44,83 +44,70 @@ export default function LoginPage() {
 
 
     useEffect(() => {
-      const handleUserSession = async () => {
-        if (userLoading || !user) {
-          return;
-        }
-
-        // The useUser hook gives us the profile status.
-        // If status is 'Active', it means profile exists and we can redirect.
-        if (status === 'Active') {
-          router.push('/dashboard');
-          return;
-        }
-
-        // If status is 'Invited', show an error and sign out.
-        if (status === 'Invited') {
-          setErrorDialog({
-            title: "Account Pending Activation",
-            description: "Your account has been invited but not yet activated. Please contact an administrator.",
-          });
-          await signOut(auth);
-          return;
-        }
-
-        // If we reach here, it means status is null. The user is authenticated
-        // but has no profile document in Firestore. This is their first login.
-        if (status === null) {
-          try {
-            // Find if the new user's email matches a pre-defined test user.
-            const matchingTestUser = testUsers.find(testUser => testUser.email === user.email);
-            
-            let profileData;
-            
-            if (matchingTestUser) {
-              // If we found a match, use that user's data to create the profile.
-              profileData = {
-                ...matchingTestUser,
-                email: user.email, // ensure email is from the auth object
-                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-              };
-            } else {
-              // If no match, this is a truly new user. Assign default 'Requester' role.
-              profileData = {
-                displayName: user.displayName || user.email?.split('@')[0],
-                email: user.email,
-                photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                role: 'Requester', 
-                department: 'Unassigned',
-                status: 'Active' as const,
-              };
+        const handleUserSession = async () => {
+            if (userLoading || !user || !firestore) {
+                return; // Wait until Firebase auth and user state are resolved.
             }
-            
-            // Create the user document in Firestore with the user's UID as the document ID.
+
             const userRef = doc(firestore, 'users', user.uid);
-            await setDoc(userRef, profileData);
+            const userSnap = await getDoc(userRef);
 
-            // After creation, the useUser hook will update `status` to 'Active',
-            // which will trigger this useEffect again and handle the redirect on the next render.
-          } catch (error: any) {
-              console.error("Account setup error:", error);
-              let description = "An unexpected error occurred during account setup. Please try again.";
-              if (error.code === 'permission-denied') {
-                  description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured to allow new users to be created.";
-              }
-              setErrorDialog({ title: "Account Setup Failed", description });
-              await signOut(auth);
-          }
-        }
-      };
+            if (userSnap.exists()) {
+                // User profile already exists.
+                const userProfile = userSnap.data();
+                if (userProfile.status === 'Active') {
+                    // This is a returning user, send them to the dashboard.
+                    router.push('/dashboard');
+                } else if (userProfile.status === 'Invited') {
+                    // This user has been invited but not yet activated.
+                    setErrorDialog({
+                        title: "Account Pending Activation",
+                        description: "Your account has been invited but not yet activated. Please contact an administrator.",
+                    });
+                    await signOut(auth);
+                }
+            } else {
+                // User profile does NOT exist. This is their first sign-in.
+                try {
+                    const matchingTestUser = testUsers.find(testUser => testUser.email === user.email);
+                    
+                    const profileData = matchingTestUser 
+                        ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
+                        : {
+                            displayName: user.displayName || user.email?.split('@')[0],
+                            email: user.email,
+                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                            role: 'Requester', 
+                            department: 'Unassigned',
+                            status: 'Active' as const,
+                        };
+                    
+                    await setDoc(userRef, profileData);
+                    
+                    // After creating the profile, redirect to the dashboard.
+                    router.push('/dashboard');
 
-      handleUserSession();
-    }, [user, userLoading, status, router, auth, firestore]);
+                } catch (error: any) {
+                    console.error("Account setup error:", error);
+                    let description = "An unexpected error occurred during account setup. Please try again.";
+                    if (error.code === 'permission-denied') {
+                        description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured to allow new users to be created.";
+                    }
+                    setErrorDialog({ title: "Account Setup Failed", description });
+                    await signOut(auth);
+                }
+            }
+        };
+
+        handleUserSession();
+    }, [user, userLoading, firestore, auth, router]);
 
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            // The useEffect will handle the redirect
+            // The useEffect will handle profile creation and redirection.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -144,7 +131,7 @@ export default function LoginPage() {
         setIsLoading('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // The useEffect will handle the redirect
+            // The useEffect will handle profile creation and redirection.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -188,7 +175,7 @@ export default function LoginPage() {
         }
     };
 
-    if (userLoading || (user && status === 'Active')) {
+    if (userLoading || user) { // Show loader if auth is loading or if a user is found (while useEffect runs)
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />

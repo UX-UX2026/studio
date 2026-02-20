@@ -25,8 +25,9 @@ import {
 import { useAuth, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
-import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where, doc, getDoc, setDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
+import { testUsers } from "@/lib/test-data";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -48,41 +49,57 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   }, [loading, user, router]);
   
   useEffect(() => {
-      if (firestore && user) {
-          const seedData = async () => {
-              let dataWasSeeded = false;
+    if (loading || !user || !firestore) {
+        return;
+    }
+    
+    const setupAndRepair = async () => {
+        // --- Profile Recovery Logic ---
+        // If the user is on the dashboard but their profile doc is missing, create it.
+        const userRef = doc(firestore, 'users', user.uid);
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+            const matchingTestUser = testUsers.find(testUser => testUser.email === user.email);
+            const profileData = matchingTestUser 
+                ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
+                : {
+                    displayName: user.displayName || user.email?.split('@')[0],
+                    email: user.email,
+                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                    role: 'Requester', 
+                    department: 'Unassigned',
+                    status: 'Active' as const,
+                };
+            await setDoc(userRef, profileData);
+            // The useUser hook's onSnapshot listener will then pick up this new profile,
+            // triggering a re-render with the correct role.
+        }
 
-              // Seed Departments
-              const deptsCol = collection(firestore, 'departments');
-              const defaultDepartments = [
-                  { name: 'Executive', budget: 500000 },
-                  { name: 'ICT', budget: 250000 },
-                  { name: 'Marketing', budget: 150000 },
-                  { name: 'Operations', budget: 300000 },
-                  { name: 'Human Resources', budget: 100000 },
-                  { name: 'Finance', budget: 120000 },
-              ];
+        // --- Department Seeding Logic ---
+        const deptsCol = collection(firestore, 'departments');
+        const defaultDepartments = [
+            { name: 'Executive', budget: 500000 },
+            { name: 'ICT', budget: 250000 },
+            { name: 'Marketing', budget: 150000 },
+            { name: 'Operations', budget: 300000 },
+            { name: 'Human Resources', budget: 100000 },
+            { name: 'Finance', budget: 120000 },
+        ];
 
-              let deptsAdded = 0;
-              for (const dept of defaultDepartments) {
-                  const q = query(deptsCol, where('name', '==', dept.name));
-                  const snapshot = await getDocs(q);
-                  if (snapshot.empty) {
-                      await addDoc(deptsCol, { ...dept, managerId: null });
-                      deptsAdded++;
-                  }
-              }
-              if (deptsAdded > 0) {
-                  dataWasSeeded = true;
-              }
+        let deptsAdded = 0;
+        for (const dept of defaultDepartments) {
+            const q = query(deptsCol, where('name', '==', dept.name));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) {
+                await addDoc(deptsCol, { ...dept, managerId: null });
+                deptsAdded++;
+            }
+        }
+    };
 
-              if (dataWasSeeded) {
-                  toast({ title: "Test Data Seeded", description: "Sample departments have been added." });
-              }
-          };
-          seedData().catch(console.error);
-      }
-  }, [firestore, user, toast]);
+    setupAndRepair().catch(console.error);
+
+  }, [loading, user, firestore, toast]);
 
 
   if (loading || !user) {
