@@ -141,7 +141,7 @@ export default function BudgetPage() {
 
                 if (rows.length < 2) throw new Error("File must have a header and at least one data row.");
 
-                const headers = rows[0].map(h => String(h).trim().replace(/"/g, ''));
+                const headers = rows[0].map(h => (h ? String(h) : "").trim().replace(/"/g, ''));
                 
                 const categoryIndex = headers.findIndex(h => h.trim().toLowerCase() === 'category');
                 const yearTotalIndex = headers.findIndex(h => h.trim().toLowerCase() === 'yeartotal' || h.trim().toLowerCase() === 'year total');
