@@ -55,17 +55,6 @@ export function useUser(): UserState {
      return { user: null, role: null, department: null, status: null, loading: false };
   }
 
-  // Forcefully assign Administrator role for the specific user to ensure UI consistency.
-  if (authUser.email === 'heinrich@ubuntux.co.za') {
-    return {
-      user: authUser,
-      role: 'Administrator',
-      department: userProfile?.department || 'Executive', // Fallback department
-      status: userProfile?.status || 'Active', // Fallback status
-      loading: false,
-    };
-  }
-
   return {
     user: authUser,
     role: userProfile?.role || null,
