@@ -45,10 +45,11 @@ export function useUser(): UserState {
     return () => unsubscribe();
   }, [auth]);
 
-  const loading = authLoading || profileLoading;
+  // We are loading if we are waiting for auth OR if we have an auth user but are still waiting for their profile.
+  const loading = authLoading || (!!authUser && profileLoading);
 
   if (loading) {
-    return { user: null, role: null, department: null, status: null, loading: true };
+    return { user: authUser, role: null, department: null, status: null, loading: true };
   }
 
   if (!authUser) {

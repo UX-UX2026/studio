@@ -43,32 +43,27 @@ export default function LoginPage() {
 
 
     useEffect(() => {
-      const handleAdminAndRedirect = async () => {
-        // Wait until all user data is loaded
+      const handleUserSession = async () => {
         if (userLoading || !user) {
           return;
         }
 
-        // --- Start Admin Check ---
-        // If this is the special admin user, ensure their role is correct.
-        if (user.email === 'heinrich@ubuntux.co.za') {
-          // If the user's role is not yet Administrator, update it and wait.
+        const isSpecialAdmin = user.email === 'heinrich@ubuntux.co.za';
+
+        // --- Handle Special Admin User ---
+        if (isSpecialAdmin) {
           if (role !== 'Administrator') {
             try {
               const userRef = doc(firestore, 'users', user.uid);
-              // Set the role to Administrator. Use merge:true to create or update.
               await setDoc(userRef, { 
                 role: 'Administrator', 
                 department: 'Executive',
-                // Also ensure other profile fields are set, especially for a first-time login
                 displayName: user.displayName || user.email?.split('@')[0],
                 email: user.email,
                 photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
                 status: 'Active',
               }, { merge: true });
-              
-              // IMPORTANT: Do not proceed. Return and wait for the useUser hook to get the updated role.
-              // The next run of this useEffect will have the correct role and proceed to redirect.
+              // Return and wait for useUser hook to pick up the updated role.
               return; 
             } catch (error: any) {
                console.error("Failed to upgrade to admin:", error);
@@ -77,34 +72,27 @@ export default function LoginPage() {
                   description: "Could not grant you Administrator privileges. Please contact support.",
               });
               await signOut(auth);
-              return;
             }
+          } else if (status === 'Active') {
+            // Role is correct and status is active, proceed to dashboard.
+            router.push('/dashboard');
           }
+          return; // End execution for special admin user
         }
-        // --- End Admin Check ---
 
-        // --- Redirection and New User Logic ---
+        // --- Handle Regular Users ---
         if (status === 'Active') {
-          // By the time we get here for the admin user, their role is guaranteed to be 'Administrator'.
           router.push('/dashboard');
-          return;
-        }
-
-        if (status === 'Invited') {
+        } else if (status === 'Invited') {
           setErrorDialog({
             title: "Account Pending Activation",
             description: "Your account has been invited but not yet activated. Please check your email for an activation link or contact an administrator.",
           });
           await signOut(auth);
-          return;
-        }
-        
-        // If user is authenticated but has no profile (status is null), create one.
-        // This block will now primarily handle non-admin first-time logins.
-        if (status === null) {
+        } else if (status === null) {
+          // This is a new, non-admin user. Create their profile.
           try {
             const userRef = doc(firestore, 'users', user.uid);
-            
             await setDoc(userRef, {
               displayName: user.displayName || user.email?.split('@')[0],
               email: user.email,
@@ -113,32 +101,21 @@ export default function LoginPage() {
               department: 'Unassigned',
               status: 'Active',
             });
-
             // After creation, the useUser hook will update `status` to 'Active',
             // which will trigger this useEffect again and handle the redirect.
-            
           } catch (error: any) {
               console.error("Account setup error:", error);
               let description = "An unexpected error occurred. Please try again.";
-
-              if (error.code === 'unavailable') {
-                  description = "Could not connect to the database to set up your account. This can happen due to restrictive network policies or if the database is not correctly configured. Please check your network and Firebase project setup.";
-              } else if (error.code === 'permission-denied') {
+              if (error.code === 'permission-denied') {
                   description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured correctly to allow new users to be created.";
-              } else {
-                  description = error.message || "An unknown error occurred during account setup.";
               }
-
-              setErrorDialog({
-                  title: "Account Setup Failed",
-                  description: description,
-              });
+              setErrorDialog({ title: "Account Setup Failed", description });
               await signOut(auth);
           }
         }
       };
 
-      handleAdminAndRedirect();
+      handleUserSession();
     }, [user, userLoading, status, role, router, auth, firestore]);
 
     const handleGoogleSignIn = async () => {
