@@ -181,6 +181,7 @@ export default function BudgetPage() {
 
                 let initialMappings = { category: '', yearTotal: '', forecasts: [] as string[] };
                 headers.forEach(h => {
+                    if (!h) return;
                     const mapping = guessMapping(h);
                     if (mapping === 'category' && !initialMappings.category) {
                         initialMappings.category = h;
@@ -378,7 +379,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -387,7 +388,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -406,7 +407,7 @@ export default function BudgetPage() {
                                             <CommandList>
                                                 <CommandEmpty>No columns found.</CommandEmpty>
                                                 <CommandGroup>
-                                                    {fileHeaders.map((header, i) => (
+                                                    {fileHeaders.filter(h => h).map((header, i) => (
                                                         <CommandItem
                                                             key={`${header}-${i}`}
                                                             value={header}
