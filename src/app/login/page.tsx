@@ -19,8 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { doc, setDoc, getDoc, getDocs, collection, query, limit } from "firebase/firestore";
-import { testUsers } from "@/lib/test-data";
+import { getDocs, collection, query, limit } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -35,7 +34,7 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, loading: userLoading } = useUser();
+    const { user, loading: userLoading, status, error: userError } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -44,63 +43,32 @@ export default function LoginPage() {
 
 
     useEffect(() => {
-        const handleUserSession = async () => {
-            if (userLoading || !user || !firestore) {
-                return; // Wait until Firebase auth and user state are resolved.
+        if (userLoading) return; // Wait for useUser to finish loading
+
+        if (userError) {
+             setErrorDialog({
+                title: "Error Loading Profile",
+                description: userError.message,
+            });
+            signOut(auth);
+            return;
+        }
+
+        if (user) {
+            // The useUser hook is now responsible for profile creation.
+            // We just need to check the status and redirect.
+            if (status === 'Active') {
+                router.push('/dashboard');
+            } else if (status === 'Invited') {
+                 setErrorDialog({
+                    title: "Account Pending Activation",
+                    description: "Your account has been invited but not yet activated. Please contact an administrator.",
+                });
+                signOut(auth);
             }
-
-            const userRef = doc(firestore, 'users', user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (userSnap.exists()) {
-                // User profile already exists.
-                const userProfile = userSnap.data();
-                if (userProfile.status === 'Active') {
-                    // This is a returning user, send them to the dashboard.
-                    router.push('/dashboard');
-                } else if (userProfile.status === 'Invited') {
-                    // This user has been invited but not yet activated.
-                    setErrorDialog({
-                        title: "Account Pending Activation",
-                        description: "Your account has been invited but not yet activated. Please contact an administrator.",
-                    });
-                    await signOut(auth);
-                }
-            } else {
-                // User profile does NOT exist. This is their first sign-in.
-                try {
-                    const matchingTestUser = testUsers.find(testUser => testUser.email === user.email);
-                    
-                    const profileData = matchingTestUser 
-                        ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
-                        : {
-                            displayName: user.displayName || user.email?.split('@')[0],
-                            email: user.email,
-                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                            role: 'Requester', 
-                            department: 'Unassigned',
-                            status: 'Active' as const,
-                        };
-                    
-                    await setDoc(userRef, profileData);
-                    
-                    // After creating the profile, redirect to the dashboard.
-                    router.push('/dashboard');
-
-                } catch (error: any) {
-                    console.error("Account setup error:", error);
-                    let description = "An unexpected error occurred during account setup. Please try again.";
-                    if (error.code === 'permission-denied') {
-                        description = "A database security rule prevented your user profile from being created. Please ensure Firestore security rules are configured to allow new users to be created.";
-                    }
-                    setErrorDialog({ title: "Account Setup Failed", description });
-                    await signOut(auth);
-                }
-            }
-        };
-
-        handleUserSession();
-    }, [user, userLoading, firestore, auth, router]);
+            // If status is null, the hook is still working, so we wait for the next render.
+        }
+    }, [user, userLoading, status, userError, router, auth]);
 
     const handleGoogleSignIn = async () => {
         setIsLoading('google');

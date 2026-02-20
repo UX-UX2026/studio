@@ -25,9 +25,7 @@ import {
 import { useAuth, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
-import { collection, getDocs, addDoc, query, where, doc, getDoc, setDoc } from "firebase/firestore";
-import { useToast } from "@/hooks/use-toast";
-import { testUsers } from "@/lib/test-data";
+import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -36,7 +34,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const auth = useAuth();
   const firestore = useFirestore();
-  const { toast } = useToast();
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -53,29 +50,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         return;
     }
     
-    const setupAndRepair = async () => {
-        // --- Profile Recovery Logic ---
-        // If the user is on the dashboard but their profile doc is missing, create it.
-        const userRef = doc(firestore, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-        if (!userSnap.exists()) {
-            const matchingTestUser = testUsers.find(testUser => testUser.email === user.email);
-            const profileData = matchingTestUser 
-                ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
-                : {
-                    displayName: user.displayName || user.email?.split('@')[0],
-                    email: user.email,
-                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                    role: 'Requester', 
-                    department: 'Unassigned',
-                    status: 'Active' as const,
-                };
-            await setDoc(userRef, profileData);
-            // The useUser hook's onSnapshot listener will then pick up this new profile,
-            // triggering a re-render with the correct role.
-        }
-
-        // --- Department Seeding Logic ---
+    const seedDepartments = async () => {
         const deptsCol = collection(firestore, 'departments');
         const defaultDepartments = [
             { name: 'Executive', budget: 500000 },
@@ -86,20 +61,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             { name: 'Finance', budget: 120000 },
         ];
 
-        let deptsAdded = 0;
         for (const dept of defaultDepartments) {
             const q = query(deptsCol, where('name', '==', dept.name));
             const snapshot = await getDocs(q);
             if (snapshot.empty) {
                 await addDoc(deptsCol, { ...dept, managerId: null });
-                deptsAdded++;
             }
         }
     };
 
-    setupAndRepair().catch(console.error);
+    seedDepartments().catch(console.error);
 
-  }, [loading, user, firestore, toast]);
+  }, [loading, user, firestore]);
 
 
   if (loading || !user) {

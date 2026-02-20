@@ -1,66 +1,113 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { useAuth, useDoc, useFirestore } from '../';
-import { doc } from 'firebase/firestore';
+import { useAuth, useFirestore } from '../';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { testUsers } from '@/lib/test-data';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
-
-interface UserState {
-  user: User | null;
-  role: UserRole;
-  department: string | null;
-  status: UserStatus;
-  loading: boolean;
-}
 
 interface UserProfile {
     id: string;
     role: UserRole;
     department: string;
     status: UserStatus;
+    displayName?: string;
+    email: string;
+    photoURL?: string;
+}
+
+interface UserState {
+  user: User | null;
+  profile: UserProfile | null;
+  role: UserRole;
+  department: string | null;
+  status: UserStatus;
+  loading: boolean;
+  error: Error | null;
 }
 
 export function useUser(): UserState {
   const auth = useAuth();
   const firestore = useFirestore();
   const [authUser, setAuthUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
-
-  const userProfileRef = useMemo(() => {
-    if (!firestore || !authUser) return null;
-    return doc(firestore, 'users', authUser.uid);
-  }, [firestore, authUser]);
-
-  const { data: userProfile, loading: profileLoading } = useDoc<UserProfile>(userProfileRef);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
-      setAuthLoading(false);
+      if (!user) {
+          setProfile(null);
+          setLoading(false);
+      }
     });
-
     return () => unsubscribe();
   }, [auth]);
 
-  // We are loading if we are waiting for auth OR if we have an auth user but are still waiting for their profile.
-  const loading = authLoading || (!!authUser && profileLoading);
+  const manageUserProfile = useCallback(async () => {
+    if (!authUser || !firestore) {
+        if (!auth.currentUser) {
+            setLoading(false);
+        }
+        return;
+    };
 
-  if (loading) {
-    return { user: authUser, role: null, department: null, status: null, loading: true };
-  }
+    setLoading(true);
+    setError(null);
+    const userRef = doc(firestore, 'users', authUser.uid);
 
-  if (!authUser) {
-     return { user: null, role: null, department: null, status: null, loading: false };
-  }
+    try {
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+            setProfile({ id: userSnap.id, ...userSnap.data() } as UserProfile);
+        } else {
+            console.log(`User profile for ${authUser.uid} not found. Creating it now.`);
+
+            const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
+
+            const profileData = matchingTestUser 
+                ? { ...matchingTestUser, photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}` }
+                : {
+                    displayName: authUser.displayName || authUser.email?.split('@')[0],
+                    email: authUser.email,
+                    photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                    role: 'Requester',
+                    department: 'Unassigned',
+                    status: 'Active' as const,
+                };
+            
+            profileData.email = authUser.email!;
+
+            await setDoc(userRef, profileData);
+            console.log(`Successfully created profile for ${authUser.uid}.`);
+            
+            setProfile({ id: authUser.uid, ...profileData } as UserProfile);
+        }
+    } catch (e: any) {
+        console.error("useUser: Failed to manage user profile.", e);
+        setError(e);
+    } finally {
+        setLoading(false);
+    }
+  }, [authUser, firestore]);
+
+  useEffect(() => {
+      manageUserProfile();
+  }, [manageUserProfile]);
+
 
   return {
     user: authUser,
-    role: userProfile?.role || null,
-    department: userProfile?.department || null,
-    status: userProfile?.status || null,
-    loading: false,
+    profile,
+    role: profile?.role || null,
+    department: profile?.department || null,
+    status: profile?.status || null,
+    loading: loading,
+    error: error
   };
 }
