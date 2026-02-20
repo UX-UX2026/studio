@@ -34,7 +34,7 @@ const allLinks = [
     subLinks: [
       { href: '/dashboard/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
       { href: '/dashboard/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
-      { href: '/dashboard/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
+      { href: '/dashboard/recurring-items', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
     ]
   },
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager', 'Procurement Officer'] },
