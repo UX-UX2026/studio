@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Loader, Banknote, Upload, Download } from "lucide-react";
+import { Loader, Banknote, Upload, Download, Check, ChevronsUpDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,17 @@ import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where } fro
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { cn } from "@/lib/utils";
 
 type Department = {
     id: string;
@@ -44,6 +55,17 @@ export default function BudgetPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+
+    // State for mapping dialog
+    const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
+    const [fileHeaders, setFileHeaders] = useState<string[]>([]);
+    const [filePreview, setFilePreview] = useState<(string|number)[][]>([]);
+    const [parsedFileData, setParsedFileData] = useState<(string|number)[][]>([]);
+    const [columnMappings, setColumnMappings] = useState<{
+        category: string;
+        yearTotal: string;
+        forecasts: string[];
+    }>({ category: '', yearTotal: '', forecasts: [] });
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -134,7 +156,7 @@ export default function BudgetPage() {
                     const workbook = XLSX.read(data, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
-                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
                 } else {
                     throw new Error("Unsupported file type. Please upload a CSV or Excel file.");
                 }
@@ -143,51 +165,35 @@ export default function BudgetPage() {
 
                 const headers = rows[0].map(h => (h ?? '').toString().trim().replace(/"/g, ''));
                 
-                const categoryIndex = headers.findIndex(h => h.toLowerCase() === 'category');
-                const yearTotalIndex = headers.findIndex(h => h.toLowerCase() === 'yeartotal' || h.toLowerCase() === 'year total');
+                setParsedFileData(rows);
+                setFileHeaders(headers);
+                setFilePreview(rows.slice(1, 4));
 
-                if (categoryIndex === -1 || yearTotalIndex === -1) {
-                    throw new Error("CSV/Excel must contain 'category' and 'yearTotal' columns.");
+                // Guess mappings
+                const guessMapping = (h: string) => {
+                    const lowerH = h.toLowerCase().trim();
+                    if (lowerH === 'category') return 'category';
+                    if (lowerH === 'yeartotal' || lowerH === 'year total') return 'yearTotal';
+                    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+                    if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
+                    return null;
                 }
 
-                const newMonthHeaders = headers.slice(categoryIndex + 1, yearTotalIndex);
-
-                const newItems: Omit<BudgetItem, 'id'>[] = rows.slice(1).map(row => {
-                    const values = row.map(v => String(v || '').trim().replace(/"/g, ''));
-                    const category = values[categoryIndex];
-                    if (!category) return null; // Skip empty rows
-
-                    const yearTotal = parseFloat(values[yearTotalIndex]) || 0;
-                    
-                    const forecasts = newMonthHeaders.map((header, index) => {
-                        const forecastValueIndex = categoryIndex + 1 + index;
-                        const forecastValue = values[forecastValueIndex];
-                        return parseFloat(forecastValue) || 0;
-                    });
-
-                    return {
-                        departmentId: selectedDepartmentId,
-                        departmentName: selectedDepartmentName,
-                        category,
-                        forecasts,
-                        yearTotal,
-                    };
-                }).filter(Boolean) as Omit<BudgetItem, 'id'>[];
-                
-                if (budgetItems) {
-                    for (const item of budgetItems) {
-                        await deleteDoc(doc(firestore, 'budgets', item.id));
+                let initialMappings = { category: '', yearTotal: '', forecasts: [] as string[] };
+                headers.forEach(h => {
+                    const mapping = guessMapping(h);
+                    if (mapping === 'category' && !initialMappings.category) {
+                        initialMappings.category = h;
+                    } else if (mapping === 'yearTotal' && !initialMappings.yearTotal) {
+                        initialMappings.yearTotal = h;
+                    } else if (mapping === 'forecast') {
+                        initialMappings.forecasts.push(h);
                     }
-                }
+                });
+                setColumnMappings(initialMappings);
+                
+                setIsMappingDialogOpen(true);
 
-                const deptRef = doc(firestore, 'departments', selectedDepartmentId);
-                await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
-
-                for (const item of newItems) {
-                    await addDoc(collection(firestore, 'budgets'), item);
-                }
-
-                toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
             } catch (error: any) {
                 console.error("File Parsing Error:", error);
                 toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the file." });
@@ -201,6 +207,60 @@ export default function BudgetPage() {
             reader.readAsArrayBuffer(file);
         } else {
             reader.readAsText(file);
+        }
+    };
+    
+    const handleConfirmImport = async () => {
+        const categoryIndex = fileHeaders.indexOf(columnMappings.category);
+        const yearTotalIndex = fileHeaders.indexOf(columnMappings.yearTotal);
+
+        if (categoryIndex === -1 || yearTotalIndex === -1 || columnMappings.forecasts.length === 0) {
+            toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category', 'Year Total', and at least one forecast column." });
+            return;
+        }
+
+        const forecastIndices = columnMappings.forecasts.map(f => fileHeaders.indexOf(f));
+        const newMonthHeaders = columnMappings.forecasts;
+        
+        try {
+            const newItems: Omit<BudgetItem, 'id'>[] = parsedFileData.slice(1).map(row => {
+                const values = row.map(v => String(v || '').trim().replace(/"/g, ''));
+                const category = values[categoryIndex];
+                if (!category) return null; // Skip empty rows
+
+                const yearTotal = parseFloat(values[yearTotalIndex]) || 0;
+                
+                const forecasts = forecastIndices.map(index => {
+                    const forecastValue = values[index];
+                    return parseFloat(forecastValue) || 0;
+                });
+
+                return {
+                    departmentId: selectedDepartmentId,
+                    departmentName: selectedDepartmentName,
+                    category,
+                    forecasts,
+                    yearTotal,
+                };
+            }).filter(Boolean) as Omit<BudgetItem, 'id'>[];
+            
+            if (budgetItems) {
+                for (const item of budgetItems) {
+                    await deleteDoc(doc(firestore, 'budgets', item.id));
+                }
+            }
+
+            const deptRef = doc(firestore, 'departments', selectedDepartmentId);
+            await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
+
+            for (const item of newItems) {
+                await addDoc(collection(firestore, 'budgets'), item);
+            }
+
+            toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
+            setIsMappingDialogOpen(false);
+        } catch (error: any) {
+             toast({ variant: "destructive", title: "Import Failed", description: error.message || "An error occurred during import." });
         }
     };
 
@@ -302,6 +362,105 @@ export default function BudgetPage() {
                     )}
                 </CardContent>
             </Card>
+            
+            <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
+                <DialogContent className="max-w-4xl">
+                    <DialogHeader>
+                        <DialogTitle>Map Your File Columns</DialogTitle>
+                        <DialogDescription>
+                            Match the columns from your file to the required budget fields. We've tried to guess the mappings for you.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-6 py-4">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                                <Label>Category Column</Label>
+                                <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
+                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Year Total Column</Label>
+                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
+                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                    <SelectContent>
+                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Forecast Columns</Label>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" role="combobox" className="w-full justify-between">
+                                            {columnMappings.forecasts.length > 0 ? `${columnMappings.forecasts.length} selected` : "Select columns..."}
+                                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                                        <Command>
+                                            <CommandInput placeholder="Search columns..." />
+                                            <CommandList>
+                                                <CommandEmpty>No columns found.</CommandEmpty>
+                                                <CommandGroup>
+                                                    {fileHeaders.map((header, i) => (
+                                                        <CommandItem
+                                                            key={`${header}-${i}`}
+                                                            value={header}
+                                                            onSelect={(currentValue) => {
+                                                                const newForecasts = columnMappings.forecasts.includes(header)
+                                                                    ? columnMappings.forecasts.filter(f => f !== header)
+                                                                    : [...columnMappings.forecasts, header];
+                                                                setColumnMappings(m => ({ ...m, forecasts: newForecasts }));
+                                                            }}
+                                                        >
+                                                            <Check className={cn("mr-2 h-4 w-4", columnMappings.forecasts.includes(header) ? "opacity-100" : "opacity-0")} />
+                                                            {header}
+                                                        </CommandItem>
+                                                    ))}
+                                                </CommandGroup>
+                                            </CommandList>
+                                        </Command>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+                        </div>
+
+                        <div>
+                            <Label>Data Preview</Label>
+                            <div className="mt-2 overflow-x-auto border rounded-lg">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            {fileHeaders.map((header, i) => (
+                                                <TableHead key={`${header}-${i}`} className={cn(
+                                                    columnMappings.category === header && "bg-blue-100 dark:bg-blue-900/50",
+                                                    columnMappings.yearTotal === header && "bg-green-100 dark:bg-green-900/50",
+                                                    columnMappings.forecasts.includes(header) && "bg-yellow-100 dark:bg-yellow-900/50",
+                                                )}>{header}</TableHead>
+                                            ))}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {filePreview.map((row, rowIndex) => (
+                                            <TableRow key={`preview-${rowIndex}`}>
+                                                {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{cell}</TableCell>)}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleConfirmImport}>Confirm & Import</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </>
     );
 }
