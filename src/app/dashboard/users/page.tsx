@@ -25,6 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type UserProfile = {
     id: string;
@@ -107,7 +109,7 @@ export default function UsersPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
         const isEditing = !!editingUser;
 
         const userData = {
@@ -116,25 +118,40 @@ export default function UsersPage() {
             role: userRole,
             department,
             photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
-            status: isEditing ? editingUser.status : 'Invited',
+            status: isEditing ? editingUser.status : 'Invited' as const,
         };
 
-        try {
-            if (isEditing) {
-                const userRef = doc(firestore, 'users', editingUser.id);
-                await setDoc(userRef, userData, { merge: true });
-                toast({ title: "User Updated", description: "User details have been successfully updated." });
-            } else {
-                // In a real app, you would call a Cloud Function to create the Firebase Auth user.
-                // Here we just add them to the users collection.
-                await addDoc(collection(firestore, 'users'), userData);
-                toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
-            }
-            setEditingUser(null);
-            setIsDialogOpen(false);
-        } catch (error: any) {
-             toast({ variant: 'destructive', title: 'Error saving user', description: error.message });
+        if (isEditing && editingUser) {
+            const userRef = doc(firestore, 'users', editingUser.id);
+            setDoc(userRef, userData, { merge: true })
+                .then(() => {
+                    toast({ title: "User Updated", description: "User details have been successfully updated." });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: userRef.path,
+                        operation: 'update',
+                        requestResourceData: userData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+        } else {
+            const usersCollectionRef = collection(firestore, 'users');
+            addDoc(usersCollectionRef, userData)
+                .then(() => {
+                    toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: usersCollectionRef.path,
+                        operation: 'create',
+                        requestResourceData: userData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         }
+        setEditingUser(null);
+        setIsDialogOpen(false);
     };
 
     const handleEdit = (userToEdit: UserProfile) => {
@@ -142,8 +159,19 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
-        await deleteDoc(doc(firestore, 'users', id));
+    const handleDelete = (id: string) => {
+        const userRef = doc(firestore, 'users', id);
+        deleteDoc(userRef)
+            .then(() => {
+                toast({ title: "User Deleted", description: "The user has been successfully removed." });
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: userRef.path,
+                    operation: 'delete',
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     };
 
     const openAddDialog = () => {
@@ -151,16 +179,27 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     }
 
-    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
+    const handleUserUpdate = (userId: string, field: keyof UserProfile, value: any) => {
         const userRef = doc(firestore, 'users', userId);
-        await setDoc(userRef, { [field]: value }, { merge: true });
-        if (field === 'status' && value === 'Active') {
-            const user = users?.find(u => u.id === userId);
-            toast({
-                title: "User Activated",
-                description: `${user?.displayName || 'The user'} has been activated.`,
+        const updateData = { [field]: value };
+        setDoc(userRef, updateData, { merge: true })
+            .then(() => {
+                if (field === 'status' && value === 'Active') {
+                    const user = users?.find(u => u.id === userId);
+                    toast({
+                        title: "User Activated",
+                        description: `${user?.displayName || 'The user'} has been activated.`,
+                    });
+                }
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: userRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
     };
 
     const handleImportClick = () => {
