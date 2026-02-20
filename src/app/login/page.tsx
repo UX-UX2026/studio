@@ -43,23 +43,18 @@ export default function LoginPage() {
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
     // This effect handles redirecting a user who is ALREADY logged in.
-    // By not including `user` in the dependency array, it only runs once after the initial auth check.
-    // This prevents it from interfering with the sign-in process itself.
     useEffect(() => {
         if (!isAuthLoading && user) {
             router.replace('/dashboard');
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthLoading, router]);
+    }, [isAuthLoading, user, router]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            // On success, the redirection will be handled by the useEffect after the auth state is fully updated.
-            // Forcing it here was causing the race condition.
-            router.replace('/dashboard');
+            // On success, the main router in src/app/page.tsx will handle the redirect.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -69,6 +64,8 @@ export default function LoginPage() {
             } else if (error.code === 'auth/unauthorized-domain') {
                 const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
                 description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
+            } else if (error.code === 'auth/internal-error') {
+                 description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
             }
             setErrorDialog({
                 title: "Google Login Failed",
@@ -84,7 +81,7 @@ export default function LoginPage() {
         setIsSigningIn('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            router.replace('/dashboard');
+            // On success, the main router in src/app/page.tsx will handle the redirect.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -112,6 +109,9 @@ export default function LoginPage() {
                     case 'auth/configuration-not-found':
                     case 'auth/invalid-api-key':
                         description = "Firebase configuration is invalid. Please check your setup.";
+                        break;
+                    case 'auth/internal-error':
+                        description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
                         break;
                     default:
                         description = error.message;
