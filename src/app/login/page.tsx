@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -41,8 +41,37 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
+    const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
 
-    // This effect handles redirecting a user who is ALREADY logged in when they visit the login page.
+    // This effect handles the redirect flow for Google Sign-In.
+    useEffect(() => {
+        const checkRedirectResult = async () => {
+            if (!auth) return;
+            try {
+                const result = await getRedirectResult(auth);
+                // If result is not null, a user has successfully signed in.
+                // The main `useAuthentication` provider will detect the new user state and handle redirection.
+            } catch (error: any) {
+                console.error("Google sign-in redirect error:", error);
+                let description = "An unknown error occurred during sign-in. Please try again.";
+                if (error.code === 'auth/account-exists-with-different-credential') {
+                    description = "An account already exists with the same email address but different sign-in credentials. Please sign in using the original method associated with this email.";
+                } else if (error.code === 'auth/unauthorized-domain') {
+                    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+                    description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
+                }
+                setErrorDialog({ title: "Google Login Failed", description });
+            } finally {
+                // Whether there was a result, an error, or nothing, we are done processing the redirect.
+                setIsProcessingRedirect(false);
+            }
+        };
+
+        checkRedirectResult();
+    }, [auth]);
+
+
+    // This effect handles redirecting a user who is ALREADY logged in.
     useEffect(() => {
         if (!isAuthLoading && user) {
             router.replace('/dashboard');
@@ -52,29 +81,8 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
-        try {
-            await signInWithPopup(auth, provider);
-            // Explicitly navigate only AFTER sign-in is successful.
-            router.replace('/dashboard');
-        } catch (error: any)
-        {
-            console.error("Google authentication error:", error);
-            let description = error.message;
-            if (error.code === 'auth/popup-closed-by-user') {
-                description = "The sign-in popup was closed before completing the sign-in. Please try again. If this issue persists, check for popup blockers.";
-            } else if (error.code === 'auth/unauthorized-domain') {
-                const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-                description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
-            } else if (error.code === 'auth/internal-error') {
-                 description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
-            }
-            setErrorDialog({
-                title: "Google Login Failed",
-                description: description,
-            });
-        } finally {
-            setIsSigningIn(null);
-        }
+        // This will navigate the user away from the app. Errors are handled by the useEffect hook above.
+        await signInWithRedirect(auth, provider);
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -82,8 +90,7 @@ export default function LoginPage() {
         setIsSigningIn('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // Explicitly navigate only AFTER sign-in is successful.
-            router.replace('/dashboard');
+            // The `useEffect` watching the `user` state will handle the redirect.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -129,7 +136,18 @@ export default function LoginPage() {
         }
     };
 
-    if (isAuthLoading || user) {
+    // Show a loading screen while either the initial auth state is loading or we're checking for a redirect result.
+    if (isAuthLoading || isProcessingRedirect) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+    
+    // If we have finished all loading and there IS a user, we shouldn't show the login form.
+    // The redirecting useEffect will handle navigation.
+    if (user) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
