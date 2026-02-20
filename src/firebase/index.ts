@@ -1,9 +1,5 @@
 'use client';
 
-import { initializeApp, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-
 // The Firebase configuration is now directly in this file to prevent loading issues.
 export const firebaseConfig = {
   "projectId": "studio-845965156-c3a3b",
@@ -15,26 +11,7 @@ export const firebaseConfig = {
   "measurementId": ""
 };
 
-// A private variable to hold the initialized instances.
-let _firebaseInstances: { app: FirebaseApp; auth: Auth; firestore: Firestore; } | null = null;
-
-export function initializeFirebase(): { app: FirebaseApp; auth: Auth; firestore: Firestore; } {
-  // If already initialized, return the existing instances.
-  if (_firebaseInstances) {
-    return _firebaseInstances;
-  }
-
-  // Initialize the app. Our singleton pattern ensures this happens only once.
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const firestore = getFirestore(app);
-
-  // Cache the instances.
-  _firebaseInstances = { app, auth, firestore };
-  
-  return _firebaseInstances;
-}
-
+// All initialization logic is now handled in FirebaseClientProvider.
 
 export { FirebaseProvider, useFirebaseApp, useAuth, useFirestore } from './provider';
 export { useUser, type UserRole, type UserStatus } from './auth/use-user';
