@@ -1,6 +1,8 @@
+'use client';
+
 import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, initializeFirestore, Firestore } from 'firebase/firestore';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // The Firebase configuration is now directly in this file to prevent loading issues.
 export const firebaseConfig = {
@@ -25,11 +27,8 @@ export function initializeFirebase(): { app: FirebaseApp; auth: Auth; firestore:
   // Initialize the app, or get the existing one.
   const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  // Initialize Firestore with long polling enabled.
-  // This must only be called once.
-  const firestore = initializeFirestore(app, {
-    experimentalForceLongPolling: true,
-  });
+  // Revert to the simpler getFirestore() to troubleshoot the "offline" error.
+  const firestore = getFirestore(app);
 
   // Cache the instances.
   _firebaseInstances = { app, auth, firestore };
