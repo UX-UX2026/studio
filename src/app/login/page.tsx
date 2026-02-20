@@ -19,8 +19,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getDocs, collection, query, limit } from "firebase/firestore";
+import { getDocs, collection, query, limit, doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuthentication } from "@/context/authentication-provider";
+import { testUsers } from '@/lib/test-data';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -46,11 +47,33 @@ export default function LoginPage() {
     // This effect handles the redirect flow for Google Sign-In.
     useEffect(() => {
         const checkRedirectResult = async () => {
-            if (!auth) return;
+            if (!auth || !firestore) return;
             try {
                 const result = await getRedirectResult(auth);
-                // If result is not null, a user has successfully signed in.
-                // The main `useAuthentication` provider will detect the new user state and handle redirection.
+                if (result) {
+                    // User has signed in via redirect. Now, ensure their profile exists.
+                    const user = result.user;
+                    const userRef = doc(firestore, 'users', user.uid);
+                    const userSnap = await getDoc(userRef);
+
+                    if (!userSnap.exists()) {
+                        console.log("Login page: Missing profile for user. Creating it now...");
+                        const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
+                        const profileData = {
+                            displayName: user.displayName || user.email?.split('@')[0],
+                            email: user.email,
+                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                            role: matchingTestUser ? matchingTestUser.role : 'Requester',
+                            department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
+                            status: 'Active' as const,
+                        };
+                        await setDoc(userRef, profileData);
+                        console.log("Login page: Profile created successfully.");
+                    }
+                    // Now that we're sure the profile exists, redirect to dashboard.
+                    router.replace('/dashboard');
+
+                }
             } catch (error: any) {
                 console.error("Google sign-in redirect error:", error);
                 let description = "An unknown error occurred during sign-in. Please try again.";
@@ -68,15 +91,15 @@ export default function LoginPage() {
         };
 
         checkRedirectResult();
-    }, [auth]);
+    }, [auth, firestore, router]);
 
 
     // This effect handles redirecting a user who is ALREADY logged in.
     useEffect(() => {
-        if (!isAuthLoading && user) {
+        if (!isAuthLoading && user && !isProcessingRedirect) {
             router.replace('/dashboard');
         }
-    }, [isAuthLoading, user, router]);
+    }, [isAuthLoading, user, isProcessingRedirect, router]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
