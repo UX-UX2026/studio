@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth, useFirestore } from '../';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { testUsers } from '@/lib/test-data';
-
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -38,6 +37,7 @@ export function useUser(): UserState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
+  // Listen for auth state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setAuthUser(user);
@@ -48,31 +48,33 @@ export function useUser(): UserState {
     });
     return () => unsubscribe();
   }, [auth]);
-
-  const manageUserProfile = useCallback(async () => {
+  
+  // Listen for profile changes
+  useEffect(() => {
     if (!authUser || !firestore) {
-        if (!auth.currentUser) {
-            setLoading(false);
-        }
-        return;
-    };
+      // Not logged in, or firebase not ready
+      if (!auth.currentUser) {
+        setLoading(false);
+      }
+      return;
+    }
 
     setLoading(true);
     setError(null);
     const userRef = doc(firestore, 'users', authUser.uid);
-
-    try {
-        const userSnap = await getDoc(userRef);
-
-        if (userSnap.exists()) {
-            setProfile({ id: userSnap.id, ...userSnap.data() } as UserProfile);
+    
+    const unsubscribe = onSnapshot(userRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+          setLoading(false);
         } else {
-            // Self-healing: Profile doesn't exist, so let's create it.
-            console.log(`User profile for ${authUser.uid} not found. Creating it.`);
-            
-            const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
+          // Profile doesn't exist, so let's create it ("self-healing").
+          console.log(`User profile for ${authUser.uid} not found. Creating it.`);
+          
+          const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
 
-            const profileData = matchingTestUser
+          const profileData: any = matchingTestUser
                 ? { ...matchingTestUser, photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}` }
                 : {
                     displayName: authUser.displayName || authUser.email?.split('@')[0],
@@ -83,26 +85,32 @@ export function useUser(): UserState {
                     status: 'Active' as const,
                 };
             
-            if (authUser.email) {
-                profileData.email = authUser.email;
-            }
-
-            await setDoc(userRef, profileData);
-            setProfile({ id: authUser.uid, ...profileData } as UserProfile);
-            console.log(`Successfully created profile from useUser hook for ${authUser.uid}.`);
+          if (authUser.email) {
+            profileData.email = authUser.email;
+          }
+          
+          setDoc(userRef, profileData)
+            .then(() => {
+                // The onSnapshot listener will automatically receive the new data,
+                // so we don't need to setLoading(false) here. It will happen on the next snapshot.
+                console.log(`Successfully triggered profile creation for ${authUser.uid}.`);
+            })
+            .catch((e) => {
+                console.error("useUser: Failed to create user profile.", e);
+                setError(e);
+                setLoading(false);
+            });
         }
-    } catch (e: any) {
-        console.error("useUser: Failed to get or create user profile.", e);
+      },
+      (e) => {
+        console.error("useUser: Firestore listener failed.", e);
         setError(e);
-    } finally {
         setLoading(false);
-    }
+      }
+    );
+
+    return () => unsubscribe();
   }, [authUser, firestore, auth]);
-
-  useEffect(() => {
-      manageUserProfile();
-  }, [manageUserProfile]);
-
 
   return {
     user: authUser,
