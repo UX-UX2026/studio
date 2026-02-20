@@ -389,10 +389,10 @@ export default function BudgetPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Year Total Column (Optional)</Label>
-                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
+                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === '--none--' ? '' : v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                         <SelectItem value="">None</SelectItem>
+                                         <SelectItem value="--none--">None</SelectItem>
                                         {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
