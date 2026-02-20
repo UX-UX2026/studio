@@ -32,17 +32,19 @@ service cloud.firestore {
     }
     
     match /users/{userId} {
-      // Allow user to create their own profile, or if user is an admin.
-      allow create: if request.auth.uid == userId || isAdmin();
+      // Allow any signed-in user to read/list for easier initial setup.
+      // For production, you should restrict this to admins or based on relationships.
+      allow read, list: if isSignedIn();
 
-      // Allow user to read/update their own profile, or if user is an admin
-      allow read, update: if isOwner(userId) || isAdmin();
+      // Allow any signed-in user to create user documents during setup.
+      // For production, this should be restricted to an admin-only Cloud Function.
+      allow create: if isSignedIn();
+
+      // Allow user to update their own profile, or if user is an admin
+      allow update: if isOwner(userId) || isAdmin();
       
       // Only admins should delete users
       allow delete: if isAdmin();
-
-      // Allow authenticated users to query the user list
-      allow list: if isSignedIn();
     }
 
     match /roles/{roleId} {
