@@ -1,6 +1,6 @@
 'use client';
 
-import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
@@ -24,10 +24,9 @@ export function initializeFirebase(): { app: FirebaseApp; auth: Auth; firestore:
     return _firebaseInstances;
   }
 
-  // Initialize the app, or get the existing one.
-  const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+  // Initialize the app. Our singleton pattern ensures this happens only once.
+  const app = initializeApp(firebaseConfig);
   const auth = getAuth(app);
-  // Revert to the simpler getFirestore() to troubleshoot the "offline" error.
   const firestore = getFirestore(app);
 
   // Cache the instances.
