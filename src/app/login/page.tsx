@@ -34,43 +34,18 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, loading: userLoading, error: userError } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoading, setIsLoading] = useState<'google' | 'email' | 'page' | null>('page');
+    const [isLoading, setIsLoading] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
-    // This effect ensures that if a user is already logged in, they are redirected
-    // to the dashboard, and the login UI doesn't flash.
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (user) => {
-            if (user) {
-                router.replace('/dashboard');
-            } else {
-                setIsLoading(null);
-            }
-        });
-        return () => unsubscribe();
-    }, [auth, router]);
-
-    // This effect handles showing errors from the useUser hook, e.g. permission denied
-    useEffect(() => {
-        if (userError) {
-             setErrorDialog({
-                title: "Error Loading Profile",
-                description: userError.message,
-            });
-            signOut(auth);
-        }
-    }, [userError, auth]);
-    
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
-            // The onAuthStateChanged listener above will handle the redirect on success.
             await signInWithPopup(auth, provider);
+            router.replace('/dashboard');
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -93,8 +68,8 @@ export default function LoginPage() {
         e.preventDefault();
         setIsLoading('email');
         try {
-             // The onAuthStateChanged listener above will handle the redirect on success.
             await signInWithEmailAndPassword(auth, email, password);
+            router.replace('/dashboard');
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -136,31 +111,13 @@ export default function LoginPage() {
         }
     };
 
-    // Show a loader while we determine the initial auth state.
-    if (isLoading === 'page' || userLoading) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
-    
-    // Don't render the form if a user is found, as a redirect is imminent.
-    if (user) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
-
     return (
         <>
             <div className="flex min-h-screen items-center justify-center bg-background p-4">
                 <Card className="w-full max-w-md shadow-2xl">
                     <CardHeader className="text-center">
                         <div className="mx-auto mb-4 text-center">
-                        <p className="text-sm font-medium uppercase tracking-widest text-primary">ProcurePortal</p>
+                        <p className="text-sm font-medium uppercase text-primary">ProcurePortal</p>
                         <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
                         </div>
                         <CardTitle className="text-2xl">Welcome</CardTitle>
