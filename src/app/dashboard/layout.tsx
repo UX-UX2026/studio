@@ -76,41 +76,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                   dataWasSeeded = true;
               }
 
-
-              // Seed Users
-              const usersCol = collection(firestore, 'users');
-              const testUsers = [
-                  { displayName: 'Heinrich', email: 'heinrich@ubuntux.co.za', role: 'Administrator', department: 'Executive', status: 'Active' },
-                  { displayName: 'Manager Mike', email: 'manager.mike@procurportal.local', role: 'Manager', department: 'ICT', status: 'Active' },
-                  { displayName: 'Executive Eve', email: 'executive.eve@procurportal.local', role: 'Executive', department: 'Executive', status: 'Active' },
-                  { displayName: 'Procurement Pete', email: 'procurement.pete@procurportal.local', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
-                  { displayName: 'Requester Ray', email: 'requester.ray@procurportal.local', role: 'Requester', department: 'Marketing', status: 'Active' },
-                  { displayName: 'Assistant Amy', email: 'assistant.amy@procurportal.local', role: 'Procurement Assistant', department: 'Finance', status: 'Active' },
-                  { displayName: 'Admin User', email: 'admin@procurportal.local', role: 'Administrator', department: 'Executive', status: 'Active' },
-                  { displayName: 'Procurement Assistant User', email: 'proca@procurportal.com', role: 'Procurement Assistant', department: 'Finance', status: 'Active' },
-                  { displayName: 'Procurement Officer User', email: 'proc@procurportal.com', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
-                  { displayName: 'Executive User', email: 'ex@procurportal.com', role: 'Executive', department: 'Executive', status: 'Active' },
-                  { displayName: 'Manager User', email: 'man@procurportal.com', role: 'Manager', department: 'Operations', status: 'Active' },
-              ];
-              
-              let usersAdded = 0;
-              for (const testUser of testUsers) {
-                  const q = query(usersCol, where('email', '==', testUser.email));
-                  const snapshot = await getDocs(q);
-                  if (snapshot.empty) {
-                      await addDoc(usersCol, {
-                          ...testUser,
-                          photoURL: `https://i.pravatar.cc/150?u=${testUser.email}`,
-                      });
-                      usersAdded++;
-                  }
-              }
-              if (usersAdded > 0) {
-                  dataWasSeeded = true;
-              }
-
               if (dataWasSeeded) {
-                  toast({ title: "Test Data Seeded", description: "Sample departments and user accounts have been added." });
+                  toast({ title: "Test Data Seeded", description: "Sample departments have been added." });
               }
           };
           seedData().catch(console.error);
