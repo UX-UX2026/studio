@@ -63,7 +63,12 @@ export default function FulfillmentPage() {
 
     useEffect(() => {
       const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'];
-      if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
+      if (userLoading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      if (role && !allowedRoles.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, userLoading, router]);
@@ -103,8 +108,9 @@ export default function FulfillmentPage() {
     }, [role, department, departmentOrder]);
     
     const loading = userLoading || requestsLoading;
-
-    if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'].includes(role)) {
+    
+    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

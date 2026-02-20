@@ -56,8 +56,13 @@ export default function BudgetPage() {
 
      useEffect(() => {
         const allowedRoles = ['Administrator', 'Procurement Officer'];
-        if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
-            router.push('/dashboard');
+        if (userLoading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (role && !allowedRoles.includes(role)) {
+          router.push('/dashboard');
         }
     }, [user, role, userLoading, router]);
     
@@ -176,7 +181,8 @@ export default function BudgetPage() {
         reader.readAsText(file);
     };
 
-    if (userLoading || !user || !role || !['Administrator', 'Procurement Officer'].includes(role)) {
+    const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

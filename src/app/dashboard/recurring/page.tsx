@@ -2,7 +2,7 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Loader, History } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { RecurringClient } from "@/components/app/recurring-client";
@@ -14,12 +14,18 @@ export default function RecurringItemsPage() {
 
     useEffect(() => {
       const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive'];
-      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
+      if (loading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      if (role && !allowedRoles.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, loading, router]);
     
-    if (loading || !user || !role || !['Procurement Officer', 'Administrator', 'Manager', 'Executive'].includes(role)) {
+    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator', 'Manager', 'Executive'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

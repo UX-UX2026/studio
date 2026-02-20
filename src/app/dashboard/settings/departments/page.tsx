@@ -66,7 +66,12 @@ export default function DepartmentsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-        if (!userLoading && (!user || role !== 'Administrator')) {
+        if (userLoading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (role && role !== 'Administrator') {
             router.push('/dashboard');
         }
     }, [user, role, userLoading, router]);

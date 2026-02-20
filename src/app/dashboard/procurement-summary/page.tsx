@@ -130,7 +130,12 @@ export default function ProcurementSummaryPage() {
     
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
-      if (!userLoading && (!user || !role || !allowedRoles.includes(role))) {
+      if (userLoading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      if (role && !allowedRoles.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, userLoading, router]);
@@ -138,7 +143,8 @@ export default function ProcurementSummaryPage() {
     const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
     const monthForHeader = selectedPeriod.split(' ')[0];
 
-    if (!user || userLoading) {
+    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

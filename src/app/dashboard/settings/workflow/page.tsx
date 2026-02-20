@@ -67,7 +67,12 @@ export default function WorkflowPage() {
     const [workflow, setWorkflow] = useState<WorkflowStage[]>([]);
 
     useEffect(() => {
-        if (!userLoading && (!user || adminRole !== 'Administrator')) {
+        if (userLoading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (adminRole && adminRole !== 'Administrator') {
             router.push('/dashboard');
         }
     }, [user, adminRole, userLoading, router]);

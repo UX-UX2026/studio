@@ -14,7 +14,12 @@ export default function SettingsPage() {
     const router = useRouter();
 
     useEffect(() => {
-        if (!loading && (!user || role !== 'Administrator')) {
+        if (loading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (role && role !== 'Administrator') {
             router.push('/dashboard');
         }
     }, [user, role, loading, router]);

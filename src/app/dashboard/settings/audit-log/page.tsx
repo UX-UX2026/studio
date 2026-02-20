@@ -34,7 +34,12 @@ export default function AuditLogPage() {
     const { data: auditLogs, loading: logsLoading } = useCollection<AuditEvent>(auditLogsQuery);
 
     useEffect(() => {
-        if (!userLoading && (!user || role !== 'Administrator')) {
+        if (userLoading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (role && role !== 'Administrator') {
             router.push('/dashboard');
         }
     }, [user, role, userLoading, router]);

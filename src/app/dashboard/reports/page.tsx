@@ -2,7 +2,7 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Loader, FilePieChart, BarChart, Clock, Building } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,12 +42,18 @@ export default function ReportsPage() {
 
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Executive', 'Procurement Officer'];
-      if (!loading && (!user || !role || !allowedRoles.includes(role))) {
+      if (loading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      if (role && !allowedRoles.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, loading, router]);
     
-    if (loading || !user || !role || !['Administrator', 'Manager', 'Executive', 'Procurement Officer'].includes(role)) {
+    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Executive', 'Procurement Officer'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

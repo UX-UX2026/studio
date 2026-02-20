@@ -68,7 +68,13 @@ export default function VendorsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
-      if (!userLoading && (!user || (role !== 'Procurement Officer' && role !== 'Administrator'))) {
+      const allowedRoles = ['Procurement Officer', 'Administrator'];
+      if (userLoading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      if (role && !allowedRoles.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, userLoading, router]);
@@ -97,7 +103,8 @@ export default function VendorsPage() {
 
     const loading = userLoading || vendorsLoading;
 
-    if (loading || !user || (role !== 'Procurement Officer' && role !== 'Administrator')) {
+    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator'], []);
+    if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

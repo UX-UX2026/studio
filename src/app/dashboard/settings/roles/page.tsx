@@ -34,7 +34,12 @@ export default function RolesPage() {
     const [name, setName] = useState('');
 
     useEffect(() => {
-        if (!userLoading && (!user || userRole !== 'Administrator')) {
+        if (userLoading) return;
+        if (!user) {
+          router.push('/dashboard');
+          return;
+        }
+        if (userRole && userRole !== 'Administrator') {
             router.push('/dashboard');
         }
     }, [user, userRole, userLoading, router]);
