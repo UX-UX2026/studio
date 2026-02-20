@@ -3,11 +3,11 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import React, { useState, useEffect } from "react";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth as useFirebaseAuthInstance, useFirestore } from "@/firebase";
+import { useAuth as useFirebaseAuthInstance } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
@@ -37,40 +37,11 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
-    const [isProcessingRedirect, setIsProcessingRedirect] = useState(true);
-
-    // This effect handles the redirect flow for Google Sign-In.
-    useEffect(() => {
-        const checkRedirectResult = async () => {
-            if (!auth) return;
-            try {
-                // This promise resolves with the user credential if the user has just been redirected
-                // from the sign-in page, or with `null` if the user has just landed on the page.
-                // The `useUser` hook will now handle profile creation automatically.
-                await getRedirectResult(auth);
-            } catch (error: any) {
-                console.error("Google sign-in redirect error:", error);
-                let description = "An unknown error occurred during sign-in. Please try again.";
-                if (error.code === 'auth/account-exists-with-different-credential') {
-                    description = "An account already exists with the same email address but different sign-in credentials. Please sign in using the original method associated with this email.";
-                } else if (error.code === 'auth/unauthorized-domain') {
-                    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-                    description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
-                }
-                setErrorDialog({ title: "Google Login Failed", description });
-            } finally {
-                // Whether there was a result, an error, or nothing, we are done processing the redirect.
-                setIsProcessingRedirect(false);
-            }
-        };
-
-        checkRedirectResult();
-    }, [auth]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
-        // This will navigate the user away from the app. Errors are handled by the useEffect hook above.
+        // The AuthenticationProvider will handle the result of this redirect.
         await signInWithRedirect(auth, provider);
     };
 
@@ -78,8 +49,8 @@ export default function LoginPage() {
         e.preventDefault();
         setIsSigningIn('email');
         try {
-            // The useUser hook will now handle creating the profile if it doesn't exist.
             await signInWithEmailAndPassword(auth, email, password);
+            // On success, the AuthenticationProvider will see the new user and redirect.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -116,8 +87,9 @@ export default function LoginPage() {
         }
     };
 
-    // Show a loading screen while either the initial auth state is loading or we're checking for a redirect result.
-    if (isAuthLoading || isProcessingRedirect) {
+    // Show a loading screen while the AuthenticationProvider is determining the auth state.
+    // This includes processing the redirect result from Google.
+    if (isAuthLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -125,8 +97,8 @@ export default function LoginPage() {
         );
     }
     
-    // If we have finished all loading and there IS a user, we shouldn't show the login form.
-    // The redirecting AuthenticationProvider will handle navigation.
+    // If the provider is done loading and we have a user, it means the login was successful
+    // and we are waiting for the provider to redirect us to the dashboard.
     if (user) {
         return (
             <div className="flex h-screen items-center justify-center">
@@ -136,6 +108,7 @@ export default function LoginPage() {
         );
     }
 
+    // If not loading and no user, we are not logged in, so show the login form.
     return (
         <>
             <div className="flex min-h-screen items-center justify-center bg-background p-4">
