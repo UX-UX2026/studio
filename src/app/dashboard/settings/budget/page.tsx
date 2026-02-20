@@ -134,17 +134,17 @@ export default function BudgetPage() {
                     const workbook = XLSX.read(data, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
                     const worksheet = workbook.Sheets[sheetName];
-                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
                 } else {
                     throw new Error("Unsupported file type. Please upload a CSV or Excel file.");
                 }
 
                 if (rows.length < 2) throw new Error("File must have a header and at least one data row.");
 
-                const headers = rows[0].map(h => (h ? String(h) : "").trim().replace(/"/g, ''));
+                const headers = rows[0].map(h => (h ?? '').toString().trim().replace(/"/g, ''));
                 
-                const categoryIndex = headers.findIndex(h => h.trim().toLowerCase() === 'category');
-                const yearTotalIndex = headers.findIndex(h => h.trim().toLowerCase() === 'yeartotal' || h.trim().toLowerCase() === 'year total');
+                const categoryIndex = headers.findIndex(h => h.toLowerCase() === 'category');
+                const yearTotalIndex = headers.findIndex(h => h.toLowerCase() === 'yeartotal' || h.toLowerCase() === 'year total');
 
                 if (categoryIndex === -1 || yearTotalIndex === -1) {
                     throw new Error("CSV/Excel must contain 'category' and 'yearTotal' columns.");
