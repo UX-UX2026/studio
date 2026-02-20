@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -34,62 +34,57 @@ export default function LoginPage() {
     const router = useRouter();
     const auth = useAuth();
     const firestore = useFirestore();
-    const { user, profile, loading: userLoading, status, error: userError } = useUser();
+    const { user, loading: userLoading, error: userError } = useUser();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoading, setIsLoading] = useState<'google' | 'email' | null>(null);
+    const [isLoading, setIsLoading] = useState<'google' | 'email' | 'page' | null>('page');
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
-
+    // This effect ensures that if a user is already logged in, they are redirected
+    // to the dashboard, and the login UI doesn't flash.
     useEffect(() => {
-        if (userLoading) return; // Wait for useUser to finish loading
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (user) {
+                router.replace('/dashboard');
+            } else {
+                setIsLoading(null);
+            }
+        });
+        return () => unsubscribe();
+    }, [auth, router]);
 
+    // This effect handles showing errors from the useUser hook, e.g. permission denied
+    useEffect(() => {
         if (userError) {
              setErrorDialog({
                 title: "Error Loading Profile",
                 description: userError.message,
             });
             signOut(auth);
-            return;
         }
-
-        if (user && profile) { // We also need the profile to be loaded
-            if (status === 'Active') {
-                router.push('/dashboard');
-            } else if (status === 'Invited') {
-                 setErrorDialog({
-                    title: "Account Pending Activation",
-                    description: "Your account has been invited but not yet activated. Please contact an administrator.",
-                });
-                signOut(auth);
-            }
-        }
-    }, [user, profile, userLoading, status, userError, router, auth]);
+    }, [userError, auth]);
     
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
+            // The onAuthStateChanged listener above will handle the redirect on success.
             await signInWithPopup(auth, provider);
-            // On success, the `useUser` hook will detect the auth change.
-            // The useEffect above will handle redirection once the user & profile are loaded.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
             let description = error.message;
-            if (error.code === 'auth/unauthorized-domain') {
+            if (error.code === 'auth/popup-closed-by-user') {
+                description = "The sign-in popup was closed before completing the sign-in. Please try again. If this issue persists, check for popup blockers.";
+            } else if (error.code === 'auth/unauthorized-domain') {
                 const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
                 description = `This app's domain is not authorized. Go to your Firebase project's Authentication settings, find the 'Sign-in method' tab, and add this exact domain to the 'Authorized domains' list: "${hostname}"`;
-            } else if (error.message.includes('client is offline')) {
-                description = "The application could not connect to the database. Please check your internet connection and try again.";
             }
             setErrorDialog({
                 title: "Google Login Failed",
                 description: description,
             });
-        } 
-        finally {
             setIsLoading(null);
         }
     };
@@ -98,9 +93,8 @@ export default function LoginPage() {
         e.preventDefault();
         setIsLoading('email');
         try {
+             // The onAuthStateChanged listener above will handle the redirect on success.
             await signInWithEmailAndPassword(auth, email, password);
-             // On success, the `useUser` hook will detect the auth change.
-             // The useEffect above will handle redirection.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -113,7 +107,6 @@ export default function LoginPage() {
             if (userSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
                 description = "This seems to be the first login. To use a local admin account, you must first create it in your Firebase project's Authentication console. Use the email and password you're trying to log in with, then sign in here.";
             } else {
-                // The error codes are useful for debugging
                 switch (error.code) {
                     case 'auth/user-not-found':
                     case 'auth/wrong-password':
@@ -139,12 +132,21 @@ export default function LoginPage() {
                 title: "Login Failed",
                 description: description,
             });
-        } finally {
-            setIsLoading(null);
+             setIsLoading(null);
         }
     };
 
-    if (userLoading || (user && !profile)) { // Show loader if auth/profile is loading
+    // Show a loader while we determine the initial auth state.
+    if (isLoading === 'page' || userLoading) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+    
+    // Don't render the form if a user is found, as a redirect is imminent.
+    if (user) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
