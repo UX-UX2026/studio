@@ -261,6 +261,13 @@
               "permissions"
             ]
           }
+        },
+        "budgetHeaders": {
+          "type": "array",
+          "description": "The headers for the monthly budget forecasts.",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [

@@ -16,7 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type Department = {
     id: string;
     name: string;
-}
+    budgetHeaders?: string[];
+};
 
 type BudgetItem = {
     id: string;
@@ -26,8 +27,6 @@ type BudgetItem = {
     forecasts: number[];
     yearTotal: number;
 };
-
-const monthHeaders = ['Jul 25', 'Aug 25', 'Sep 25', 'Oct 25', 'Nov 25', 'Dec 25', 'Jan 26', 'Feb 26', 'Mar 26', 'Apr 26', 'May 26', 'Jun 26'];
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -64,9 +63,16 @@ export default function BudgetPage() {
     
     const loading = userLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
     
-    const selectedDepartmentName = useMemo(() => {
-        return departments?.find(d => d.id === selectedDepartmentId)?.name || '';
+    const selectedDepartment = useMemo(() => {
+        return departments?.find(d => d.id === selectedDepartmentId);
     }, [selectedDepartmentId, departments]);
+
+    const monthHeaders = useMemo(() => {
+        return selectedDepartment?.budgetHeaders || [];
+    }, [selectedDepartment]);
+
+    const selectedDepartmentName = selectedDepartment?.name || '';
+
 
     const handleImportClick = () => {
         if (!selectedDepartmentId) {
@@ -81,8 +87,9 @@ export default function BudgetPage() {
             toast({ title: "No Data to Export", description: "There is no budget data to export for this department." });
             return;
         }
-
-        const headers = ['category', ...monthHeaders.map(h => h.replace(' ', '').toLowerCase()), 'yearTotal'];
+        
+        const exportMonthHeaders = selectedDepartment?.budgetHeaders || [];
+        const headers = ['category', ...exportMonthHeaders, 'yearTotal'];
         
         const csvContent = [
             headers.join(','),
@@ -96,7 +103,7 @@ export default function BudgetPage() {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
-        link.setAttribute('download', `budget_${selectedDepartmentName.replace(' ', '_')}.csv`);
+        link.setAttribute('download', `budget_${selectedDepartmentName.replace(/ /g, '_')}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -115,27 +122,33 @@ export default function BudgetPage() {
                 if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
 
                 const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
-                const forecastHeaders = monthHeaders.map(h => h.replace(' ', '').toLowerCase());
                 
+                const categoryIndex = headers.findIndex(h => h.trim().toLowerCase() === 'category');
+                const yearTotalIndex = headers.findIndex(h => h.trim().toLowerCase() === 'yeartotal' || h.trim().toLowerCase() === 'year total');
+
+                if (categoryIndex === -1 || yearTotalIndex === -1) {
+                    throw new Error("CSV must contain 'category' and 'yearTotal' columns.");
+                }
+
+                const newMonthHeaders = headers.slice(categoryIndex + 1, yearTotalIndex);
+
                 const newItems: Omit<BudgetItem, 'id'>[] = rows.slice(1).map(row => {
                     const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
-                    let item: any = {};
-                    headers.forEach((header, index) => {
-                        item[header] = values[index];
-                    });
-
-                    if (!item.category || !item.yearTotal) {
-                        throw new Error("CSV is missing required columns: category, yearTotal.");
-                    }
+                    const category = values[categoryIndex];
+                    const yearTotal = parseFloat(values[yearTotalIndex]) || 0;
                     
-                    const forecasts = forecastHeaders.map(fh => parseFloat(item[fh]) || 0);
+                    const forecasts = newMonthHeaders.map((header, index) => {
+                        const forecastValueIndex = categoryIndex + 1 + index;
+                        const forecastValue = values[forecastValueIndex];
+                        return parseFloat(forecastValue) || 0;
+                    });
 
                     return {
                         departmentId: selectedDepartmentId,
                         departmentName: selectedDepartmentName,
-                        category: item.category,
+                        category,
                         forecasts,
-                        yearTotal: parseFloat(item.yearTotal) || 0,
+                        yearTotal,
                     };
                 });
                 
@@ -144,6 +157,9 @@ export default function BudgetPage() {
                         await deleteDoc(doc(firestore, 'budgets', item.id));
                     }
                 }
+
+                const deptRef = doc(firestore, 'departments', selectedDepartmentId);
+                await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
 
                 for (const item of newItems) {
                     await addDoc(collection(firestore, 'budgets'), item);
