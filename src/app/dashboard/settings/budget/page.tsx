@@ -12,6 +12,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import * as XLSX from 'xlsx';
 
 type Department = {
     id: string;
@@ -121,25 +122,41 @@ export default function BudgetPage() {
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const text = e.target?.result as string;
             try {
-                const rows = text.split('\n').filter(row => row.trim());
-                if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
+                let rows: (string|number)[][];
+                const fileExtension = file.name.split('.').pop()?.toLowerCase();
 
-                const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
+                if (fileExtension === 'csv') {
+                    const text = e.target?.result as string;
+                    rows = text.split('\n').filter(row => row.trim()).map(r => r.split(','));
+                } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                    const data = e.target?.result;
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    rows = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                } else {
+                    throw new Error("Unsupported file type. Please upload a CSV or Excel file.");
+                }
+
+                if (rows.length < 2) throw new Error("File must have a header and at least one data row.");
+
+                const headers = rows[0].map(h => String(h).trim().replace(/"/g, ''));
                 
                 const categoryIndex = headers.findIndex(h => h.trim().toLowerCase() === 'category');
                 const yearTotalIndex = headers.findIndex(h => h.trim().toLowerCase() === 'yeartotal' || h.trim().toLowerCase() === 'year total');
 
                 if (categoryIndex === -1 || yearTotalIndex === -1) {
-                    throw new Error("CSV must contain 'category' and 'yearTotal' columns.");
+                    throw new Error("CSV/Excel must contain 'category' and 'yearTotal' columns.");
                 }
 
                 const newMonthHeaders = headers.slice(categoryIndex + 1, yearTotalIndex);
 
                 const newItems: Omit<BudgetItem, 'id'>[] = rows.slice(1).map(row => {
-                    const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
+                    const values = row.map(v => String(v || '').trim().replace(/"/g, ''));
                     const category = values[categoryIndex];
+                    if (!category) return null; // Skip empty rows
+
                     const yearTotal = parseFloat(values[yearTotalIndex]) || 0;
                     
                     const forecasts = newMonthHeaders.map((header, index) => {
@@ -155,7 +172,7 @@ export default function BudgetPage() {
                         forecasts,
                         yearTotal,
                     };
-                });
+                }).filter(Boolean) as Omit<BudgetItem, 'id'>[];
                 
                 if (budgetItems) {
                     for (const item of budgetItems) {
@@ -172,13 +189,19 @@ export default function BudgetPage() {
 
                 toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
             } catch (error: any) {
-                console.error("CSV Parsing Error:", error);
-                toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+                console.error("File Parsing Error:", error);
+                toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the file." });
             } finally {
                 if (event.target) event.target.value = '';
             }
         };
-        reader.readAsText(file);
+
+        const fileExtension = file.name.split('.').pop()?.toLowerCase();
+        if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+            reader.readAsArrayBuffer(file);
+        } else {
+            reader.readAsText(file);
+        }
     };
 
     const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
@@ -196,7 +219,7 @@ export default function BudgetPage() {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept=".csv"
+                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 onChange={handleFileChange}
             />
             <Card>
@@ -206,7 +229,7 @@ export default function BudgetPage() {
                         Budget Integration by Department
                     </CardTitle>
                     <CardDescription>
-                        Import, view, and export departmental budget data. Select a department to begin.
+                        Import, view, and export departmental budget data from a CSV or Excel file. Select a department to begin.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
