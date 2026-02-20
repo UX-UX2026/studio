@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, query, where, getDocs } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 type Department = {
     id: string;
@@ -64,35 +64,6 @@ export default function DepartmentsPage() {
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (!departmentsLoading && departments && departments.length === 0 && firestore) {
-            const seedDepartments = async () => {
-                const defaultDepartments = [
-                    { name: 'Executive', budget: 500000 },
-                    { name: 'ICT', budget: 250000 },
-                    { name: 'Marketing', budget: 150000 },
-                    { name: 'Operations', budget: 300000 },
-                    { name: 'Human Resources', budget: 100000 },
-                    { name: 'Finance', budget: 120000 },
-                ];
-
-                try {
-                    const deptsCol = collection(firestore, 'departments');
-                    for (const dept of defaultDepartments) {
-                        const q = query(deptsCol, where('name', '==', dept.name));
-                        const snapshot = await getDocs(q);
-                        if (snapshot.empty) {
-                            await addDoc(deptsCol, { ...dept, managerId: null });
-                        }
-                    }
-                } catch(e) {
-                    console.error("Error seeding departments:", e);
-                }
-            };
-            seedDepartments();
-        }
-    }, [departments, departmentsLoading, firestore]);
 
     useEffect(() => {
         if (!userLoading && (!user || role !== 'Administrator')) {

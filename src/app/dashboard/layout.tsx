@@ -22,15 +22,20 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth } from "@/firebase";
+import { useAuth, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
+import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
+
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
   const { user, loading, role } = useUser();
   const router = useRouter();
   const auth = useAuth();
+  const firestore = useFirestore();
+  const { toast } = useToast();
 
   const handleSignOut = async () => {
     await signOut(auth);
@@ -41,6 +46,67 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       router.push('/login');
     }
   }, [loading, user, router]);
+  
+  useEffect(() => {
+      if (firestore && user) {
+          const seedData = async () => {
+              let dataWasSeeded = false;
+
+              // Seed Departments
+              const deptsCol = collection(firestore, 'departments');
+              const deptsSnapshot = await getDocs(deptsCol);
+              if (deptsSnapshot.empty) {
+                  const defaultDepartments = [
+                      { name: 'Executive', budget: 500000 },
+                      { name: 'ICT', budget: 250000 },
+                      { name: 'Marketing', budget: 150000 },
+                      { name: 'Operations', budget: 300000 },
+                      { name: 'Human Resources', budget: 100000 },
+                      { name: 'Finance', budget: 120000 },
+                  ];
+                  for (const dept of defaultDepartments) {
+                      await addDoc(deptsCol, { ...dept, managerId: null });
+                  }
+                  dataWasSeeded = true;
+              }
+
+              // Seed Users
+              const usersCol = collection(firestore, 'users');
+              const usersSnapshot = await getDocs(usersCol);
+              if (usersSnapshot.docs.length <= 1) { // Allow for the initial admin user
+                  const testUsers = [
+                      { displayName: 'Manager Mike', email: 'manager.mike@procurportal.local', role: 'Manager', department: 'ICT', status: 'Active' },
+                      { displayName: 'Executive Eve', email: 'executive.eve@procurportal.local', role: 'Executive', department: 'Executive', status: 'Active' },
+                      { displayName: 'Procurement Pete', email: 'procurement.pete@procurportal.local', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
+                      { displayName: 'Requester Ray', email: 'requester.ray@procurportal.local', role: 'Requester', department: 'Marketing', status: 'Active' },
+                      { displayName: 'Assistant Amy', email: 'assistant.amy@procurportal.local', role: 'Procurement Assistant', department: 'Finance', status: 'Invited' },
+                  ];
+                  
+                  let usersAdded = 0;
+                  for (const testUser of testUsers) {
+                      const q = query(usersCol, where('email', '==', testUser.email));
+                      const snapshot = await getDocs(q);
+                      if (snapshot.empty) {
+                          await addDoc(usersCol, {
+                              ...testUser,
+                              photoURL: `https://i.pravatar.cc/150?u=${testUser.email}`,
+                          });
+                          usersAdded++;
+                      }
+                  }
+                  if (usersAdded > 0) {
+                      dataWasSeeded = true;
+                  }
+              }
+
+              if (dataWasSeeded) {
+                  toast({ title: "Test Data Seeded", description: "Sample departments and user accounts have been added." });
+              }
+          };
+          seedData().catch(console.error);
+      }
+  }, [firestore, user, toast]);
+
 
   if (loading || !user) {
     return (
