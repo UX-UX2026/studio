@@ -85,18 +85,20 @@ export default function UsersPage() {
     }, [editingUser, isDialogOpen, roles, departments]);
 
     const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
-
-    if (loading || !user) {
-        return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
     
-    // After loading, check role. If not admin, redirect.
-    if (adminRole !== 'Administrator') {
+    useEffect(() => {
+      // Don't do anything while loading.
+      if (userLoading) {
+        return;
+      }
+      // When loading is finished, if the role is not correct, redirect.
+      if (adminRole !== 'Administrator') {
         router.push('/dashboard');
+      }
+    }, [adminRole, userLoading, router]);
+    
+    // Show a loader until all data is loaded AND the role is confirmed.
+    if (loading || adminRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
