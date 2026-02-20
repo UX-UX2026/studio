@@ -2,22 +2,22 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@/firebase/auth/use-user';
+import { useAuthentication } from '@/context/authentication-provider';
 import { Loader } from 'lucide-react';
 
 export default function RootPage() {
   const router = useRouter();
-  const { user, loading } = useUser();
+  const { user, isLoading } = useAuthentication();
 
   useEffect(() => {
-    if (!loading) {
+    if (!isLoading) {
       if (user) {
         router.replace('/dashboard');
       } else {
         router.replace('/login');
       }
     }
-  }, [user, loading, router]);
+  }, [user, isLoading, router]);
 
   return (
     <div className="flex h-screen items-center justify-center">

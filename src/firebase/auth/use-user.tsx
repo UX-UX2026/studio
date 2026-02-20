@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { useAuth, useFirestore } from '../';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { User } from 'firebase/auth';
+import { useFirestore } from '../';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { useAuthentication } from '@/context/authentication-provider';
+import { testUsers } from '@/lib/test-data';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -29,58 +31,74 @@ interface UserState {
 }
 
 export function useUser(): UserState {
-  const auth = useAuth();
+  const { user: authUser, isLoading: isAuthLoading } = useAuthentication();
   const firestore = useFirestore();
-  const [authUser, setAuthUser] = useState<User | null>(null);
+  
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
-  // Listen for auth state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setAuthUser(user);
-      if (!user) {
-          setProfile(null);
-          setLoading(false);
-      }
-    });
-    return () => unsubscribe();
-  }, [auth]);
-  
-  // Listen for profile changes
-  useEffect(() => {
+    if (isAuthLoading) {
+      setIsProfileLoading(true);
+      return;
+    }
+      
     if (!authUser || !firestore) {
-      if (!auth.currentUser) {
-        setLoading(false);
-      }
+      setProfile(null);
+      setIsProfileLoading(false);
       return;
     }
 
-    setLoading(true);
-    setError(null);
+    setIsProfileLoading(true);
     const userRef = doc(firestore, 'users', authUser.uid);
     
     const unsubscribe = onSnapshot(userRef,
       (docSnap) => {
         if (docSnap.exists()) {
           setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+          setIsProfileLoading(false);
         } else {
-          // Profile doesn't exist. Set profile to null.
-          // The main app layout will handle creating it.
-          setProfile(null);
+          // Self-healing: Profile doesn't exist, so create it.
+          console.log("useUser: Missing profile for user. Creating it now...");
+          const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
+
+          const profileData: any = matchingTestUser
+              ? { ...matchingTestUser, photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}` }
+              : {
+                  displayName: authUser.displayName || authUser.email?.split('@')[0],
+                  email: authUser.email,
+                  photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                  role: 'Requester',
+                  department: 'Unassigned',
+                  status: 'Active' as const,
+              };
+          
+          if (authUser.email) {
+              profileData.email = authUser.email;
+          }
+          
+          setDoc(userRef, profileData)
+            .then(() => {
+                console.log("useUser: Profile created successfully.");
+                // The onSnapshot listener will fire again with the new data, so no need to explicitly set loading to false here.
+            })
+            .catch((e) => {
+                console.error("useUser: Failed to create user profile.", e);
+                setError(e);
+                setIsProfileLoading(false);
+            });
         }
-        setLoading(false);
       },
       (e) => {
         console.error("useUser: Firestore listener failed.", e);
         setError(e);
-        setLoading(false);
+        setIsProfileLoading(false);
       }
     );
 
     return () => unsubscribe();
-  }, [authUser, firestore, auth]);
+  }, [authUser, isAuthLoading, firestore]);
 
   return {
     user: authUser,
@@ -88,7 +106,7 @@ export function useUser(): UserState {
     role: profile?.role || null,
     department: profile?.department || null,
     status: profile?.status || null,
-    loading: loading,
+    loading: isAuthLoading || isProfileLoading,
     error: error
   };
 }

@@ -3,6 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ThemeProvider } from '@/components/theme-provider';
+import { AuthenticationProvider } from '@/context/authentication-provider';
 
 export const metadata: Metadata = {
   title: 'ProcureEase',
@@ -28,7 +29,9 @@ export default function RootLayout({
           themes={['light', 'dark', 'classic']}
         >
           <FirebaseClientProvider>
-            {children}
+            <AuthenticationProvider>
+              {children}
+            </AuthenticationProvider>
           </FirebaseClientProvider>
           <Toaster />
         </ThemeProvider>

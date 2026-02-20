@@ -5,10 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import Link from "next/link";
 import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth, useFirestore } from "@/firebase";
+import { useAuth as useFirebaseAuthInstance, useFirestore } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import {
   AlertDialog,
@@ -20,6 +20,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getDocs, collection, query, limit } from "firebase/firestore";
+import { useAuthentication } from "@/context/authentication-provider";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -32,20 +33,28 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const router = useRouter();
-    const auth = useAuth();
+    const auth = useFirebaseAuthInstance();
     const firestore = useFirestore();
+    const { user, isLoading: isAuthLoading } = useAuthentication();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isLoading, setIsLoading] = useState<'google' | 'email' | null>(null);
+    const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
+    useEffect(() => {
+        if (!isAuthLoading && user) {
+            router.replace('/dashboard');
+        }
+    }, [user, isAuthLoading, router]);
+
     const handleGoogleSignIn = async () => {
-        setIsLoading('google');
+        setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            router.replace('/dashboard');
+            // On success, the onAuthStateChanged listener in AuthenticationProvider
+            // will update the state, and the useEffect above will trigger the redirect.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -60,16 +69,18 @@ export default function LoginPage() {
                 title: "Google Login Failed",
                 description: description,
             });
-            setIsLoading(null);
+        } finally {
+            setIsSigningIn(null);
         }
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsLoading('email');
+        setIsSigningIn('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            router.replace('/dashboard');
+             // On success, the onAuthStateChanged listener in AuthenticationProvider
+            // will update the state, and the useEffect above will trigger the redirect.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
@@ -107,9 +118,18 @@ export default function LoginPage() {
                 title: "Login Failed",
                 description: description,
             });
-             setIsLoading(null);
+        } finally {
+            setIsSigningIn(null);
         }
     };
+
+    if (isAuthLoading || user) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
 
     return (
         <>
@@ -125,8 +145,8 @@ export default function LoginPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isLoading}>
-                                {isLoading === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                            <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isSigningIn}>
+                                {isSigningIn === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                                 Sign in with Google
                             </Button>
                             <div className="relative">
@@ -150,7 +170,7 @@ export default function LoginPage() {
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         required
-                                        disabled={!!isLoading}
+                                        disabled={!!isSigningIn}
                                     />
                                 </div>
                                 <div className="space-y-2">
@@ -162,11 +182,11 @@ export default function LoginPage() {
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         required
-                                        disabled={!!isLoading}
+                                        disabled={!!isSigningIn}
                                     />
                                 </div>
-                                <Button type="submit" className="w-full h-12 text-base" disabled={!!isLoading}>
-                                    {isLoading === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                <Button type="submit" className="w-full h-12 text-base" disabled={!!isSigningIn}>
+                                    {isSigningIn === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                     Sign In
                                 </Button>
                             </form>
