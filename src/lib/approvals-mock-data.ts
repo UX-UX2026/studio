@@ -3,6 +3,7 @@ export type ApprovalItem = {
     type: "Recurring" | "One-Off";
     description: string;
     category: string;
+    brand: string;
     qty: number;
     unitPrice: number;
     fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
@@ -13,10 +14,12 @@ export type ApprovalItem = {
 export type ApprovalRequest = {
     id: string;
     department: string;
+    departmentId: string;
     period: string;
     total: number;
     status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
     submittedBy: string;
+    submittedById: string;
     timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: ApprovalItem[];
