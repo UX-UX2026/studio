@@ -1,4 +1,1 @@
-// This file is intentionally left blank to disable this route.
-export default function DisabledPage() {
-  return null;
-}
+// This file is intentionally disabled to prevent build errors.
