@@ -112,8 +112,30 @@ export default function LoginPage() {
         e.preventDefault();
         setIsSigningIn('email');
         try {
-            await signInWithEmailAndPassword(auth, email, password);
-            // The `useEffect` watching the `user` state will handle the redirect.
+            const userCredential = await signInWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // Ensure profile exists before redirecting
+            const userRef = doc(firestore, 'users', user.uid);
+            const userSnap = await getDoc(userRef);
+
+            if (!userSnap.exists()) {
+                console.log("Login page (Email): Missing profile for user. Creating it now...");
+                const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
+                const profileData = {
+                    displayName: user.displayName || user.email?.split('@')[0],
+                    email: user.email,
+                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                    role: matchingTestUser ? matchingTestUser.role : 'Requester',
+                    department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
+                    status: 'Active' as const,
+                };
+                await setDoc(userRef, profileData);
+                console.log("Login page (Email): Profile created successfully.");
+            }
+            
+            router.replace('/dashboard');
+            
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
