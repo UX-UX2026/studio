@@ -80,6 +80,11 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                       { displayName: 'Procurement Pete', email: 'procurement.pete@procurportal.local', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
                       { displayName: 'Requester Ray', email: 'requester.ray@procurportal.local', role: 'Requester', department: 'Marketing', status: 'Active' },
                       { displayName: 'Assistant Amy', email: 'assistant.amy@procurportal.local', role: 'Procurement Assistant', department: 'Finance', status: 'Invited' },
+                      { displayName: 'Admin User', email: 'admin@procurportal.local', role: 'Administrator', department: 'Executive', status: 'Active' },
+                      { displayName: 'Procurement Assistant User', email: 'proca@procurportal.com', role: 'Procurement Assistant', department: 'Finance', status: 'Active' },
+                      { displayName: 'Procurement Officer User', email: 'proc@procurportal.com', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
+                      { displayName: 'Executive User', email: 'ex@procurportal.com', role: 'Executive', department: 'Executive', status: 'Active' },
+                      { displayName: 'Manager User', email: 'man@procurportal.com', role: 'Manager', department: 'Operations', status: 'Active' },
                   ];
                   
                   let usersAdded = 0;
