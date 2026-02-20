@@ -1,94 +1,116 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, Unsubscribe } from 'firebase/firestore';
 import { testUsers } from '@/lib/test-data';
 
+// Define the UserProfile shape
+export type UserRole = string | null;
+export type UserStatus = 'Active' | 'Invited' | null;
+
+export interface UserProfile {
+    id: string;
+    role: UserRole;
+    department: string;
+    status: UserStatus;
+    displayName?: string;
+    email: string;
+    photoURL?: string;
+}
+
+// Define the context shape
 interface AuthContextType {
   user: User | null;
+  profile: UserProfile | null;
+  role: UserRole;
+  department: string | null;
   isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
-  const auth = useFirebaseAuthInstance();
+  const firebaseAuth = useFirebaseAuthInstance();
   const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-        if (authUser) {
-            // We have a user. Now ensure their profile exists.
-            if (firestore) {
-                const userRef = doc(firestore, 'users', authUser.uid);
-                try {
-                    const docSnap = await getDoc(userRef);
-                    if (!docSnap.exists()) {
-                        // Profile doesn't exist, create it.
-                        console.log(`Auth Provider: No profile for ${authUser.uid}. Creating now...`);
-                        const matchingTestUser = testUsers.find(testUser => testUser.email?.toLowerCase() === authUser.email?.toLowerCase());
-                        const profileData = {
-                            displayName: authUser.displayName || authUser.email?.split('@')[0],
-                            email: authUser.email,
-                            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                            role: matchingTestUser ? matchingTestUser.role : 'Requester',
-                            department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
-                            status: 'Active' as const,
-                        };
-                        await setDoc(userRef, profileData);
-                        console.log("Auth Provider: Profile created.");
-                    }
-                    // Profile is guaranteed to exist now.
-                    setUser(authUser);
-                } catch (e) {
-                    console.error("Auth Provider: Error during profile check/creation.", e);
-                    await auth.signOut(); // Log out user on error
-                    setUser(null);
-                }
+    let profileUnsubscribe: Unsubscribe | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+      }
+
+      if (authUser) {
+        setUser(authUser);
+        if (firestore) {
+          const userRef = doc(firestore, 'users', authUser.uid);
+          profileUnsubscribe = onSnapshot(userRef, async (docSnap) => {
+            if (docSnap.exists()) {
+              setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+              setIsLoading(false);
+            } else {
+              console.log(`Auth Provider: No profile for ${authUser.uid}. Creating...`);
+              try {
+                const matchingTestUser = testUsers.find(tu => tu.email?.toLowerCase() === authUser.email?.toLowerCase());
+                const profileData = {
+                  displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+                  email: authUser.email,
+                  photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                  role: matchingTestUser?.role || 'Requester',
+                  department: matchingTestUser?.department || 'Unassigned',
+                  status: 'Active' as const,
+                };
+                await setDoc(userRef, profileData);
+                // The onSnapshot listener will automatically fire again with the new data
+              } catch (e) {
+                console.error("Auth Provider: Failed to create user profile.", e);
+                await firebaseAuth.signOut();
+              }
             }
-        } else {
-            // No authenticated user.
-            setUser(null);
+          }, (error) => {
+            console.error("Auth Provider: Profile listener error.", error);
+            setIsLoading(false);
+            setProfile(null);
+          });
         }
-        // In all cases, once this async function completes, the initial loading is done.
+      } else {
+        setUser(null);
+        setProfile(null);
         setIsLoading(false);
+      }
     });
 
-    // Handle the redirect result from Google sign-in. This will trigger the onAuthStateChanged listener above.
-    getRedirectResult(auth).catch(error => {
-        console.error("Error from getRedirectResult:", error);
-        // This can happen if the user closes the popup or if there's a configuration issue.
-        // The onAuthStateChanged listener will correctly handle the lack of a user.
-        setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [auth, firestore]);
+    return () => {
+      authUnsubscribe();
+      if (profileUnsubscribe) {
+        profileUnsubscribe();
+      }
+    };
+  }, [firebaseAuth, firestore]);
 
   useEffect(() => {
-    if (isLoading) return; // Wait until the initial auth state is confirmed
+    if (isLoading) return;
 
     const isAuthPage = pathname === '/login';
 
-    if (user && isAuthPage) {
-      // User is logged in but on the login page, redirect them.
+    if (profile && isAuthPage) {
       router.replace('/dashboard');
-    } else if (!user && !isAuthPage && pathname !== '/') {
-      // User is not logged in and is trying to access a protected page.
-      // Redirect them to login. We also check for the root path which is handled by page.tsx.
+    } else if (!profile && !isAuthPage && pathname !== '/') {
       router.replace('/login');
     }
-  }, [isLoading, user, pathname, router]);
+  }, [isLoading, profile, pathname, router]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading }}>
+    <AuthContext.Provider value={{ user, profile, role: profile?.role || null, department: profile?.department || null, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
