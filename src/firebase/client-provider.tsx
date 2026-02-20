@@ -3,7 +3,7 @@
 import { ReactNode, useMemo } from 'react';
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, enableNetwork } from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { FirebaseProvider } from './provider';
 import { firebaseConfig } from './index';
 
@@ -13,15 +13,6 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
     const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
     const auth = getAuth(app);
     const firestore = getFirestore(app);
-
-    // Explicitly enable the network to combat the "client is offline" issue.
-    // This is a more direct approach to ensure connectivity.
-    try {
-      enableNetwork(firestore);
-    } catch (e) {
-      console.error("Firebase: Could not enable network.", e);
-    }
-    
     return { app, auth, firestore };
   }, []);
 

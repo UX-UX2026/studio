@@ -3,7 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { useAuth, useFirestore } from '../';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { testUsers } from '@/lib/test-data';
+
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -65,12 +67,32 @@ export function useUser(): UserState {
         if (userSnap.exists()) {
             setProfile({ id: userSnap.id, ...userSnap.data() } as UserProfile);
         } else {
-            // Profile should be created on login. If not, it's an inconsistent state.
-            // This might happen on the first second of login. We'll let the next render handle it.
-            setProfile(null);
+            // Self-healing: Profile doesn't exist, so let's create it.
+            console.log(`User profile for ${authUser.uid} not found. Creating it.`);
+            
+            const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === authUser.email?.toLowerCase());
+
+            const profileData = matchingTestUser
+                ? { ...matchingTestUser, photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}` }
+                : {
+                    displayName: authUser.displayName || authUser.email?.split('@')[0],
+                    email: authUser.email,
+                    photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                    role: 'Requester',
+                    department: 'Unassigned',
+                    status: 'Active' as const,
+                };
+            
+            if (authUser.email) {
+                profileData.email = authUser.email;
+            }
+
+            await setDoc(userRef, profileData);
+            setProfile({ id: authUser.uid, ...profileData } as UserProfile);
+            console.log(`Successfully created profile from useUser hook for ${authUser.uid}.`);
         }
     } catch (e: any) {
-        console.error("useUser: Failed to get user profile.", e);
+        console.error("useUser: Failed to get or create user profile.", e);
         setError(e);
     } finally {
         setLoading(false);

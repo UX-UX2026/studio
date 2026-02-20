@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut, type User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
@@ -19,8 +19,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getDocs, collection, query, limit, doc, getDoc, setDoc } from "firebase/firestore";
-import { testUsers } from "@/lib/test-data";
+import { getDocs, collection, query, limit } from "firebase/firestore";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -68,45 +67,14 @@ export default function LoginPage() {
             // If status is null, the hook is still working, so we wait for the next render.
         }
     }, [user, userLoading, status, userError, router, auth]);
-
-    const manageUserProfileOnLogin = async (user: User) => {
-        if (!user || !firestore) return;
-
-        const userRef = doc(firestore, 'users', user.uid);
-        const userSnap = await getDoc(userRef);
-
-        if (!userSnap.exists()) {
-            console.log(`User profile for ${user.uid} not found. Creating it on login.`);
-
-            const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
-
-            const profileData = matchingTestUser
-                ? { ...matchingTestUser, photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}` }
-                : {
-                    displayName: user.displayName || user.email?.split('@')[0],
-                    email: user.email,
-                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                    role: 'Requester',
-                    department: 'Unassigned',
-                    status: 'Active' as const,
-                };
-            
-            if (user.email) {
-                profileData.email = user.email;
-            }
-
-            await setDoc(userRef, profileData);
-            console.log(`Successfully created profile on login for ${user.uid}.`);
-        }
-    };
-
+    
     const handleGoogleSignIn = async () => {
         setIsLoading('google');
         const provider = new GoogleAuthProvider();
         try {
-            const userCredential = await signInWithPopup(auth, provider);
-            await manageUserProfileOnLogin(userCredential.user);
-            // The useEffect will now handle redirection with the profile already created.
+            await signInWithPopup(auth, provider);
+            // On success, the `useUser` hook will detect the auth change, create the profile
+            // if it doesn't exist, and the useEffect above will redirect to /dashboard.
         } catch (error: any)
         {
             console.error("Google authentication error:", error);
@@ -131,9 +99,9 @@ export default function LoginPage() {
         e.preventDefault();
         setIsLoading('email');
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            await manageUserProfileOnLogin(userCredential.user);
-            // The useEffect will now handle redirection with the profile already created.
+            await signInWithEmailAndPassword(auth, email, password);
+             // On success, the `useUser` hook will detect the auth change, create the profile
+            // if it doesn't exist, and the useEffect above will redirect to /dashboard.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
