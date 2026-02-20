@@ -75,7 +75,7 @@ export default function LoginPage() {
 
         // --- Redirection and New User Logic ---
         if (status === 'Active') {
-          router.push('/');
+          router.push('/dashboard');
           return;
         }
 

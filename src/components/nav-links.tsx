@@ -26,33 +26,33 @@ import { cn } from '@/lib/utils';
 import React from 'react';
 
 const allLinks = [
-  { href: '/', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'] },
+  { href: '/dashboard', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'] },
   { 
     label: 'Procurement', 
     icon: FileText, 
     roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
     subLinks: [
-      { href: '/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-      { href: '/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
-      { href: '/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
+      { href: '/dashboard/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
+      { href: '/dashboard/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
+      { href: '/dashboard/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
     ]
   },
-  { href: '/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager', 'Procurement Officer'] },
-  { href: '/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive', 'Procurement Assistant'] },
-  { href: '/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-  { href: '/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
-  { href: '/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
+  { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager', 'Procurement Officer'] },
+  { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive', 'Procurement Assistant'] },
+  { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
+  { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
+  { href: '/dashboard/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
   { 
     label: 'Settings', 
     icon: Settings, 
     roles: ['Administrator', 'Procurement Officer'],
     subLinks: [
-        { href: '/settings', label: 'General', roles: ['Administrator'] },
-        { href: '/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
-        { href: '/settings/departments', label: 'Departments', roles: ['Administrator'] },
-        { href: '/settings/roles', label: 'Roles', roles: ['Administrator'] },
-        { href: '/settings/budget', label: 'Budget', roles: ['Administrator', 'Procurement Officer'] },
-        { href: '/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
+        { href: '/dashboard/settings', label: 'General', roles: ['Administrator'] },
+        { href: '/dashboard/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
+        { href: '/dashboard/settings/departments', label: 'Departments', roles: ['Administrator'] },
+        { href: '/dashboard/settings/roles', label: 'Roles', roles: ['Administrator'] },
+        { href: '/dashboard/settings/budget', label: 'Budget', roles: ['Administrator', 'Procurement Officer'] },
+        { href: '/dashboard/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
     ]
   },
 ];
@@ -70,7 +70,7 @@ export function NavLinks({ role }: { role: UserRole }) {
             const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
             if (visibleSubLinks.length === 0) return null;
             
-            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href) && sublink.href !== '/settings' || pathname === '/settings' && sublink.href === '/settings');
+            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
 
 
             return (
@@ -100,7 +100,7 @@ export function NavLinks({ role }: { role: UserRole }) {
             );
           }
           
-          const isActive = link.href === '/' ? pathname === '/' : pathname.startsWith(link.href);
+          const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
           return (
             <SidebarNavLink
               key={link.href}
