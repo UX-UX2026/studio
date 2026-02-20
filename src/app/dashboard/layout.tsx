@@ -54,21 +54,28 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
               // Seed Departments
               const deptsCol = collection(firestore, 'departments');
-              const deptsSnapshot = await getDocs(deptsCol);
-              if (deptsSnapshot.empty) {
-                  const defaultDepartments = [
-                      { name: 'Executive', budget: 500000 },
-                      { name: 'ICT', budget: 250000 },
-                      { name: 'Marketing', budget: 150000 },
-                      { name: 'Operations', budget: 300000 },
-                      { name: 'Human Resources', budget: 100000 },
-                      { name: 'Finance', budget: 120000 },
-                  ];
-                  for (const dept of defaultDepartments) {
+              const defaultDepartments = [
+                  { name: 'Executive', budget: 500000 },
+                  { name: 'ICT', budget: 250000 },
+                  { name: 'Marketing', budget: 150000 },
+                  { name: 'Operations', budget: 300000 },
+                  { name: 'Human Resources', budget: 100000 },
+                  { name: 'Finance', budget: 120000 },
+              ];
+
+              let deptsAdded = 0;
+              for (const dept of defaultDepartments) {
+                  const q = query(deptsCol, where('name', '==', dept.name));
+                  const snapshot = await getDocs(q);
+                  if (snapshot.empty) {
                       await addDoc(deptsCol, { ...dept, managerId: null });
+                      deptsAdded++;
                   }
+              }
+              if (deptsAdded > 0) {
                   dataWasSeeded = true;
               }
+
 
               // Seed Users
               const usersCol = collection(firestore, 'users');
