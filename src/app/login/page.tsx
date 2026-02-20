@@ -42,19 +42,23 @@ export default function LoginPage() {
     const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
     const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
 
-    // This effect redirects the user if they are already logged in when they visit the page.
+    // This effect handles redirecting a user who is ALREADY logged in.
+    // By not including `user` in the dependency array, it only runs once after the initial auth check.
+    // This prevents it from interfering with the sign-in process itself.
     useEffect(() => {
         if (!isAuthLoading && user) {
             router.replace('/dashboard');
         }
-    }, [user, isAuthLoading, router]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthLoading, router]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
         try {
             await signInWithPopup(auth, provider);
-            // On success, we now handle the redirect directly.
+            // On success, the redirection will be handled by the useEffect after the auth state is fully updated.
+            // Forcing it here was causing the race condition.
             router.replace('/dashboard');
         } catch (error: any)
         {
@@ -80,7 +84,6 @@ export default function LoginPage() {
         setIsSigningIn('email');
         try {
             await signInWithEmailAndPassword(auth, email, password);
-             // On success, we now handle the redirect directly.
             router.replace('/dashboard');
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
