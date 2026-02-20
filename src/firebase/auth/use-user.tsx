@@ -39,17 +39,20 @@ export function useUser(): UserState {
 
   useEffect(() => {
     if (isAuthLoading) {
+        // Wait for the main AuthenticationProvider to finish its work (including profile creation).
         setIsProfileLoading(true);
         return;
     }
       
     if (!authUser || !firestore) {
+      // No user, so no profile to load. We are done loading.
       setProfile(null);
       setIsProfileLoading(false);
       return;
     }
 
-    setIsProfileLoading(true);
+    // Auth is loaded and we have a user. The AuthenticationProvider has already guaranteed
+    // that a profile document exists. We can now safely listen for real-time updates to it.
     const userRef = doc(firestore, 'users', authUser.uid);
     
     const unsubscribe = onSnapshot(userRef,
@@ -57,11 +60,12 @@ export function useUser(): UserState {
         if (docSnap.exists()) {
           setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
         } else {
-          // This should no longer happen because the AuthenticationProvider handles creation.
-          // If it does, it's a temporary state while the provider creates the document.
-          console.warn(`useUser: Profile for ${authUser.uid} not found. Waiting for creation...`);
+          // This case should no longer happen because the provider handles creation.
+          // If it does, it's a critical error state (e.g. document deleted mid-session).
+          console.error(`useUser: Profile for ${authUser.uid} unexpectedly not found! Signing out.`);
           setProfile(null);
         }
+        // The attempt to load the profile (or confirm its absence) is now complete.
         setIsProfileLoading(false);
       },
       (e) => {

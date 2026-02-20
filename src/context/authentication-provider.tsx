@@ -23,55 +23,51 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const handleAuthChange = async (authUser: User | null) => {
-      if (authUser && firestore) {
-        const userRef = doc(firestore, 'users', authUser.uid);
-        try {
-          const docSnap = await getDoc(userRef);
-          if (!docSnap.exists()) {
-            // Profile doesn't exist, create it.
-            console.log(`Auth Provider: No profile for ${authUser.uid}. Creating now...`);
-            const matchingTestUser = testUsers.find(testUser => testUser.email?.toLowerCase() === authUser.email?.toLowerCase());
-            const profileData = {
-                displayName: authUser.displayName || authUser.email?.split('@')[0],
-                email: authUser.email,
-                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                role: matchingTestUser ? matchingTestUser.role : 'Requester',
-                department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
-                status: 'Active' as const,
-            };
-            await setDoc(userRef, profileData);
-            console.log("Auth Provider: Profile created.");
-          }
-          // Now that we know the profile exists, set the user.
-          setUser(authUser);
-        } catch (e) {
-          console.error("Auth Provider: Failed to get or create user profile.", e);
-          await auth.signOut(); // Sign out on error to prevent being in a broken state
-          setUser(null);
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+        if (authUser) {
+            // We have a user. Now ensure their profile exists.
+            if (firestore) {
+                const userRef = doc(firestore, 'users', authUser.uid);
+                try {
+                    const docSnap = await getDoc(userRef);
+                    if (!docSnap.exists()) {
+                        // Profile doesn't exist, create it.
+                        console.log(`Auth Provider: No profile for ${authUser.uid}. Creating now...`);
+                        const matchingTestUser = testUsers.find(testUser => testUser.email?.toLowerCase() === authUser.email?.toLowerCase());
+                        const profileData = {
+                            displayName: authUser.displayName || authUser.email?.split('@')[0],
+                            email: authUser.email,
+                            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                            role: matchingTestUser ? matchingTestUser.role : 'Requester',
+                            department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
+                            status: 'Active' as const,
+                        };
+                        await setDoc(userRef, profileData);
+                        console.log("Auth Provider: Profile created.");
+                    }
+                    // Profile is guaranteed to exist now.
+                    setUser(authUser);
+                } catch (e) {
+                    console.error("Auth Provider: Error during profile check/creation.", e);
+                    await auth.signOut(); // Log out user on error
+                    setUser(null);
+                }
+            }
+        } else {
+            // No authenticated user.
+            setUser(null);
         }
-      } else {
-        // User is signed out
-        setUser(null);
-      }
-      setIsLoading(false);
-    };
+        // In all cases, once this async function completes, the initial loading is done.
+        setIsLoading(false);
+    });
 
-    const unsubscribe = onAuthStateChanged(auth, handleAuthChange);
-
-    // Also handle initial redirect result
-    getRedirectResult(auth)
-      .then(result => {
-        // If there's a result, onAuthStateChanged will be triggered and handle it.
-        // If no result, and no user is already cached, we need to ensure loading stops.
-        if (!result && !auth.currentUser) {
-          setIsLoading(false);
-        }
-      })
-      .catch((error) => {
-        console.error("Error processing Firebase redirect result:", error);
-        setIsLoading(false); // Make sure loading stops even on error
-      });
+    // Handle the redirect result from Google sign-in. This will trigger the onAuthStateChanged listener above.
+    getRedirectResult(auth).catch(error => {
+        console.error("Error from getRedirectResult:", error);
+        // This can happen if the user closes the popup or if there's a configuration issue.
+        // The onAuthStateChanged listener will correctly handle the lack of a user.
+        setIsLoading(false);
+    });
 
     return () => unsubscribe();
   }, [auth, firestore]);
