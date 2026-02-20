@@ -66,12 +66,6 @@ export default function UsersPage() {
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
-
-    useEffect(() => {
-        if (!userLoading && (!user || adminRole !== 'Administrator')) {
-            router.push('/dashboard');
-        }
-    }, [user, adminRole, userLoading, router]);
     
     useEffect(() => {
         if (isDialogOpen) {
@@ -92,7 +86,17 @@ export default function UsersPage() {
 
     const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
 
-    if (loading || !user || adminRole !== 'Administrator') {
+    if (loading || !user) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+                <Loader className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+    
+    // After loading, check role. If not admin, redirect.
+    if (adminRole !== 'Administrator') {
+        router.push('/dashboard');
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
