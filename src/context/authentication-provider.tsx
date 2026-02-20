@@ -2,8 +2,10 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged, getRedirectResult } from 'firebase/auth';
-import { useAuth as useFirebaseAuthInstance } from '@/firebase';
+import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { testUsers } from '@/lib/test-data';
 
 interface AuthContextType {
   user: User | null;
@@ -14,29 +16,65 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const auth = useFirebaseAuthInstance();
+  const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
-    // This listener will be triggered by onAuthStateChanged, which is in turn
-    // triggered by the completion of getRedirectResult.
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
+    const handleAuthChange = async (authUser: User | null) => {
+      if (authUser && firestore) {
+        const userRef = doc(firestore, 'users', authUser.uid);
+        try {
+          const docSnap = await getDoc(userRef);
+          if (!docSnap.exists()) {
+            // Profile doesn't exist, create it.
+            console.log(`Auth Provider: No profile for ${authUser.uid}. Creating now...`);
+            const matchingTestUser = testUsers.find(testUser => testUser.email?.toLowerCase() === authUser.email?.toLowerCase());
+            const profileData = {
+                displayName: authUser.displayName || authUser.email?.split('@')[0],
+                email: authUser.email,
+                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                role: matchingTestUser ? matchingTestUser.role : 'Requester',
+                department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
+                status: 'Active' as const,
+            };
+            await setDoc(userRef, profileData);
+            console.log("Auth Provider: Profile created.");
+          }
+          // Now that we know the profile exists, set the user.
+          setUser(authUser);
+        } catch (e) {
+          console.error("Auth Provider: Failed to get or create user profile.", e);
+          await auth.signOut(); // Sign out on error to prevent being in a broken state
+          setUser(null);
+        }
+      } else {
+        // User is signed out
+        setUser(null);
+      }
       setIsLoading(false);
-    });
+    };
 
-    // We process the redirect result here at the top level of the app.
-    // If the user is coming back from a Google sign-in, this will complete the flow.
-    // The onAuthStateChanged listener above will then receive the user object.
-    getRedirectResult(auth).catch((error) => {
-      // This is for developer debugging; a user-facing error could be implemented here.
-      console.error("Error processing Firebase redirect result:", error);
-    });
+    const unsubscribe = onAuthStateChanged(auth, handleAuthChange);
+
+    // Also handle initial redirect result
+    getRedirectResult(auth)
+      .then(result => {
+        // If there's a result, onAuthStateChanged will be triggered and handle it.
+        // If no result, and no user is already cached, we need to ensure loading stops.
+        if (!result && !auth.currentUser) {
+          setIsLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error("Error processing Firebase redirect result:", error);
+        setIsLoading(false); // Make sure loading stops even on error
+      });
 
     return () => unsubscribe();
-  }, [auth]);
+  }, [auth, firestore]);
 
   useEffect(() => {
     if (isLoading) return; // Wait until the initial auth state is confirmed
