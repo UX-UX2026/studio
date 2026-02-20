@@ -18,9 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getDocs, collection, query, limit, doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuthentication } from "@/context/authentication-provider";
-import { testUsers } from '@/lib/test-data';
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -33,7 +31,6 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const auth = useFirebaseAuthInstance();
-    const firestore = useFirestore();
     const { user, isLoading: isAuthLoading } = useAuthentication();
     
     const [email, setEmail] = useState('');
@@ -45,33 +42,12 @@ export default function LoginPage() {
     // This effect handles the redirect flow for Google Sign-In.
     useEffect(() => {
         const checkRedirectResult = async () => {
-            if (!auth || !firestore) return;
+            if (!auth) return;
             try {
                 // This promise resolves with the user credential if the user has just been redirected
                 // from the sign-in page, or with `null` if the user has just landed on the page.
-                const result = await getRedirectResult(auth);
-                if (result) {
-                    // User has signed in via redirect. Now, ensure their profile exists.
-                    const user = result.user;
-                    const userRef = doc(firestore, 'users', user.uid);
-                    const userSnap = await getDoc(userRef);
-
-                    if (!userSnap.exists()) {
-                        console.log("Login page: Missing profile for user. Creating it now...");
-                        const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
-                        const profileData = {
-                            displayName: user.displayName || user.email?.split('@')[0],
-                            email: user.email,
-                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                            role: matchingTestUser ? matchingTestUser.role : 'Requester',
-                            department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
-                            status: 'Active' as const,
-                        };
-                        await setDoc(userRef, profileData);
-                        console.log("Login page: Profile created successfully.");
-                    }
-                    // The redirect to the dashboard is now handled by the AuthenticationProvider.
-                }
+                // The `useUser` hook will now handle profile creation automatically.
+                await getRedirectResult(auth);
             } catch (error: any) {
                 console.error("Google sign-in redirect error:", error);
                 let description = "An unknown error occurred during sign-in. Please try again.";
@@ -89,7 +65,7 @@ export default function LoginPage() {
         };
 
         checkRedirectResult();
-    }, [auth, firestore]);
+    }, [auth]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
@@ -102,64 +78,33 @@ export default function LoginPage() {
         e.preventDefault();
         setIsSigningIn('email');
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-
-            // Ensure profile exists before redirecting
-            const userRef = doc(firestore, 'users', user.uid);
-            const userSnap = await getDoc(userRef);
-
-            if (!userSnap.exists()) {
-                console.log("Login page (Email): Missing profile for user. Creating it now...");
-                const matchingTestUser = testUsers.find(testUser => testUser.email.toLowerCase() === user.email?.toLowerCase());
-                const profileData = {
-                    displayName: user.displayName || user.email?.split('@')[0],
-                    email: user.email,
-                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                    role: matchingTestUser ? matchingTestUser.role : 'Requester',
-                    department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
-                    status: 'Active' as const,
-                };
-                await setDoc(userRef, profileData);
-                console.log("Login page (Email): Profile created successfully.");
-            }
-            
-            // The redirect to the dashboard is now handled by the AuthenticationProvider.
-            
+            // The useUser hook will now handle creating the profile if it doesn't exist.
+            await signInWithEmailAndPassword(auth, email, password);
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             
-            const usersCollection = collection(firestore, 'users');
-            const q = query(usersCollection, limit(1));
-            const userSnapshot = await getDocs(q);
-
             let description = "An unexpected error occurred. Please try again.";
-
-            if (userSnapshot.empty && (error.code === 'auth/user-not-found' || error.code === 'auth/invalid-credential')) {
-                description = "This seems to be the first login. To use a local admin account, you must first create it in your Firebase project's Authentication console. Use the email and password you're trying to log in with, then sign in here.";
-            } else {
-                switch (error.code) {
-                    case 'auth/user-not-found':
-                    case 'auth/wrong-password':
-                    case 'auth/invalid-credential':
-                        description = "Invalid email or password. Please double-check your credentials. Note: new email/password users must first be created in the Firebase Authentication console by an administrator.";
-                        break;
-                    case 'auth/invalid-email':
-                        description = "The email address format is not valid.";
-                        break;
-                    case 'auth/operation-not-allowed':
-                        description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
-                        break;
-                    case 'auth/configuration-not-found':
-                    case 'auth/invalid-api-key':
-                        description = "Firebase configuration is invalid. Please check your setup.";
-                        break;
-                    case 'auth/internal-error':
-                        description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
-                        break;
-                    default:
-                        description = error.message;
-                }
+            switch (error.code) {
+                case 'auth/user-not-found':
+                case 'auth/wrong-password':
+                case 'auth/invalid-credential':
+                    description = "Invalid email or password. Please double-check your credentials.";
+                    break;
+                case 'auth/invalid-email':
+                    description = "The email address format is not valid.";
+                    break;
+                case 'auth/operation-not-allowed':
+                    description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
+                    break;
+                case 'auth/configuration-not-found':
+                case 'auth/invalid-api-key':
+                    description = "Firebase configuration is invalid. Please check your setup.";
+                    break;
+                case 'auth/internal-error':
+                    description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
+                    break;
+                default:
+                    description = error.message;
             }
 
              setErrorDialog({

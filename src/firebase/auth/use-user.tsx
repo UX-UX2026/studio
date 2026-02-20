@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
 import { useFirestore } from '../';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useAuthentication } from '@/context/authentication-provider';
+import { testUsers } from '@/lib/test-data';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -38,12 +39,12 @@ export function useUser(): UserState {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (isAuthLoading) {
+    if (isAuthLoading || !firestore) {
       setIsProfileLoading(true);
       return;
     }
       
-    if (!authUser || !firestore) {
+    if (!authUser) {
       setProfile(null);
       setIsProfileLoading(false);
       return;
@@ -53,17 +54,34 @@ export function useUser(): UserState {
     const userRef = doc(firestore, 'users', authUser.uid);
     
     const unsubscribe = onSnapshot(userRef,
-      (docSnap) => {
+      async (docSnap) => {
         if (docSnap.exists()) {
           setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+          setIsProfileLoading(false);
         } else {
-          // If the profile doesn't exist, it means it hasn't been created yet.
-          // The login flow is now responsible for creating it.
-          // We set profile to null and stop loading.
-          setProfile(null);
-          console.warn(`useUser: No profile document found for user ${authUser.uid}. It should be created on login.`);
+          // Self-healing: Profile doesn't exist, so create it.
+          console.log(`useUser: No profile for ${authUser.uid}. Creating now...`);
+          try {
+            const matchingTestUser = testUsers.find(testUser => testUser.email?.toLowerCase() === authUser.email?.toLowerCase());
+            const profileData = {
+                displayName: authUser.displayName || authUser.email?.split('@')[0],
+                email: authUser.email,
+                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                role: matchingTestUser ? matchingTestUser.role : 'Requester',
+                department: matchingTestUser ? matchingTestUser.department : 'Unassigned',
+                status: 'Active' as const,
+            };
+            await setDoc(userRef, profileData);
+            // After creation, the onSnapshot listener will automatically fire again with the new data.
+            // This will trigger the `docSnap.exists()` block above, setting the profile and completing the loading state.
+            console.log("useUser: Profile created. Listener will refetch.");
+          } catch (e) {
+            console.error("useUser: Failed to create user profile.", e);
+            setError(e as Error);
+            setProfile(null);
+            setIsProfileLoading(false);
+          }
         }
-        setIsProfileLoading(false);
       },
       (e) => {
         console.error("useUser: Firestore listener failed.", e);
