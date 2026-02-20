@@ -28,7 +28,7 @@ import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
 
 type UserProfile = {
     id: string;
-    displayName: string;
+    displayName?: string;
     email: string;
     role: string;
     department: string;
@@ -70,7 +70,7 @@ export default function UsersPage() {
     useEffect(() => {
         if (isDialogOpen) {
             if (editingUser) {
-                setName(editingUser.displayName);
+                setName(editingUser.displayName || '');
                 setEmail(editingUser.email);
                 setUserRole(editingUser.role);
                 setDepartment(editingUser.department);
@@ -290,9 +290,9 @@ export default function UsersPage() {
                                     <TableCell className="font-medium flex items-center gap-3">
                                         <Avatar>
                                             <AvatarImage src={u.photoURL} />
-                                            <AvatarFallback>{u.displayName.charAt(0)}</AvatarFallback>
+                                            <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                         </Avatar>
-                                        {u.displayName}
+                                        {u.displayName || u.email}
                                     </TableCell>
                                     <TableCell>{u.email}</TableCell>
                                     <TableCell>

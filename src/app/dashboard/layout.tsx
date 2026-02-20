@@ -80,6 +80,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               // Seed Users
               const usersCol = collection(firestore, 'users');
               const testUsers = [
+                  { displayName: 'Heinrich', email: 'heinrich@ubuntux.co.za', role: 'Administrator', department: 'Executive', status: 'Active' },
                   { displayName: 'Manager Mike', email: 'manager.mike@procurportal.local', role: 'Manager', department: 'ICT', status: 'Active' },
                   { displayName: 'Executive Eve', email: 'executive.eve@procurportal.local', role: 'Executive', department: 'Executive', status: 'Active' },
                   { displayName: 'Procurement Pete', email: 'procurement.pete@procurportal.local', role: 'Procurement Officer', department: 'Finance', status: 'Active' },
