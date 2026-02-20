@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
 import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,7 +32,6 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 )
 
 export default function LoginPage() {
-    const router = useRouter();
     const auth = useFirebaseAuthInstance();
     const firestore = useFirestore();
     const { user, isLoading: isAuthLoading } = useAuthentication();
@@ -49,6 +47,8 @@ export default function LoginPage() {
         const checkRedirectResult = async () => {
             if (!auth || !firestore) return;
             try {
+                // This promise resolves with the user credential if the user has just been redirected
+                // from the sign-in page, or with `null` if the user has just landed on the page.
                 const result = await getRedirectResult(auth);
                 if (result) {
                     // User has signed in via redirect. Now, ensure their profile exists.
@@ -70,9 +70,7 @@ export default function LoginPage() {
                         await setDoc(userRef, profileData);
                         console.log("Login page: Profile created successfully.");
                     }
-                    // Now that we're sure the profile exists, redirect to dashboard.
-                    router.replace('/dashboard');
-
+                    // The redirect to the dashboard is now handled by the AuthenticationProvider.
                 }
             } catch (error: any) {
                 console.error("Google sign-in redirect error:", error);
@@ -91,15 +89,7 @@ export default function LoginPage() {
         };
 
         checkRedirectResult();
-    }, [auth, firestore, router]);
-
-
-    // This effect handles redirecting a user who is ALREADY logged in.
-    useEffect(() => {
-        if (!isAuthLoading && user && !isProcessingRedirect) {
-            router.replace('/dashboard');
-        }
-    }, [isAuthLoading, user, isProcessingRedirect, router]);
+    }, [auth, firestore]);
 
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
@@ -134,7 +124,7 @@ export default function LoginPage() {
                 console.log("Login page (Email): Profile created successfully.");
             }
             
-            router.replace('/dashboard');
+            // The redirect to the dashboard is now handled by the AuthenticationProvider.
             
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
@@ -191,11 +181,12 @@ export default function LoginPage() {
     }
     
     // If we have finished all loading and there IS a user, we shouldn't show the login form.
-    // The redirecting useEffect will handle navigation.
+    // The redirecting AuthenticationProvider will handle navigation.
     if (user) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
+                <p className="ml-4">Redirecting...</p>
             </div>
         );
     }

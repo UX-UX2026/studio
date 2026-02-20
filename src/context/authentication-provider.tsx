@@ -3,7 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance } from '@/firebase';
-import { Loader } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
 
 interface AuthContextType {
   user: User | null;
@@ -16,6 +16,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const auth = useFirebaseAuthInstance();
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -25,15 +27,24 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [auth]);
 
+  useEffect(() => {
+    if (isLoading) return; // Wait until auth state is confirmed
+
+    const isAuthPage = pathname === '/login';
+
+    if (user && isAuthPage) {
+      // User is logged in but on the login page, redirect them.
+      router.replace('/dashboard');
+    } else if (!user && !isAuthPage && pathname !== '/') {
+      // User is not logged in and is trying to access a protected page.
+      // Redirect them to login. We also check for the root path which is handled by page.tsx.
+      router.replace('/login');
+    }
+  }, [isLoading, user, pathname, router]);
+
   return (
     <AuthContext.Provider value={{ user, isLoading }}>
-      {isLoading ? (
-         <div className="flex h-screen items-center justify-center">
-          <Loader className="h-8 w-8 animate-spin" />
-        </div>
-      ) : (
-        children
-      )}
+      {children}
     </AuthContext.Provider>
   );
 }

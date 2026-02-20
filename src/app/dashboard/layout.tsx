@@ -40,12 +40,6 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/login');
-    }
-  }, [loading, user, router]);
-  
-  useEffect(() => {
     if (loading || !user || !firestore) {
         return;
     }
