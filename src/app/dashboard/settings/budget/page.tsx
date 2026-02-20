@@ -326,7 +326,7 @@ export default function BudgetPage() {
                             <Loader className="h-8 w-8 animate-spin" />
                         </div>
                     ) : selectedDepartmentId ? (
-                        <div className="overflow-x-auto border rounded-lg">
+                        <div className="overflow-auto border rounded-lg">
                             <Table>
                                 <TableHeader>
                                     <TableRow>
@@ -419,7 +419,7 @@ export default function BudgetPage() {
 
                         <div>
                             <Label>Data Preview</Label>
-                            <div className="mt-2 overflow-x-auto border rounded-lg">
+                            <div className="mt-2 overflow-auto border rounded-lg">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
@@ -458,3 +458,4 @@ export default function BudgetPage() {
         </>
     );
 }
+

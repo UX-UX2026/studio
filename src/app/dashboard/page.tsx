@@ -171,7 +171,7 @@ export default function DashboardPage() {
             </Button>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -218,3 +218,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

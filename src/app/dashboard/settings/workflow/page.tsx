@@ -212,7 +212,7 @@ export default function WorkflowPage() {
                 </div>
 
                 {selectedDepartmentId ? (
-                    <div className="overflow-x-auto rounded-lg border">
+                    <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -298,3 +298,4 @@ export default function WorkflowPage() {
         </Card>
     );
 }
+

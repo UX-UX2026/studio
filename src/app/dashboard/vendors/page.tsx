@@ -272,7 +272,7 @@ export default function VendorsPage() {
                             Add Vendor
                         </Button>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -379,3 +379,4 @@ export default function VendorsPage() {
         </>
     );
 }
+

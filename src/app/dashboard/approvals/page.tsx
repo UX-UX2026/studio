@@ -368,7 +368,7 @@ export default function ApprovalsPage() {
                                                 <p className="text-sm text-muted-foreground mb-4">
                                                     Below are the individual items included in this procurement request.
                                                 </p>
-                                                <div className="overflow-x-auto rounded-lg border">
+                                                <div className="overflow-auto rounded-lg border">
                                                     <Table>
                                                         <TableHeader>
                                                             <TableRow className="bg-muted hover:bg-muted">
@@ -448,3 +448,4 @@ export default function ApprovalsPage() {
     </div>
   );
 }
+

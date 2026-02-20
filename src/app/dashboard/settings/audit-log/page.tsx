@@ -78,7 +78,7 @@ export default function AuditLogPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="overflow-auto rounded-lg border">
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -121,3 +121,4 @@ export default function AuditLogPage() {
         </Card>
     );
 }
+

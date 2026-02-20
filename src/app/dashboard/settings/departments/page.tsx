@@ -242,7 +242,7 @@ export default function DepartmentsPage() {
                             Add Department
                         </Button>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -317,3 +317,4 @@ export default function DepartmentsPage() {
         </>
     );
 }
+
