@@ -27,7 +27,8 @@ import {
 import { useAuth, useFirestore } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
-import { collection, getDocs, addDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, addDoc, query, where, serverTimestamp, limit } from "firebase/firestore";
+import { testUsers, testProcurementRequests } from "@/lib/test-data";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -66,7 +67,62 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         }
     };
 
-    seedDepartments().catch(console.error);
+    const seedProcurementData = async () => {
+        const requestsCol = collection(firestore, 'procurementRequests');
+        const q = query(requestsCol, limit(1));
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+            return; // Data already exists
+        }
+
+        console.log("Seeding procurement test data...");
+
+        const usersCol = collection(firestore, 'users');
+        const usersSnapshot = await getDocs(usersCol);
+        const userMap = new Map<string, string>(); // email -> id
+        usersSnapshot.forEach(doc => {
+            userMap.set(doc.data().email.toLowerCase(), doc.id);
+        });
+        
+        const deptsCol = collection(firestore, 'departments');
+        const deptsSnapshot = await getDocs(deptsCol);
+        const deptMap = new Map<string, string>(); // name -> id
+        deptsSnapshot.forEach(doc => {
+            deptMap.set(doc.data().name, doc.id);
+        });
+
+        const requesterRay = testUsers.find(u => u.displayName === 'Requester Ray');
+        const managerMike = testUsers.find(u => u.displayName === 'Manager Mike');
+
+        for (const req of testProcurementRequests) {
+            let submittedById = null;
+            if (req.submittedBy === 'Requester Ray' && requesterRay) {
+                submittedById = userMap.get(requesterRay.email.toLowerCase());
+            } else if (req.submittedBy === 'Manager Mike' && managerMike) {
+                submittedById = userMap.get(managerMike.email.toLowerCase());
+            }
+
+            const departmentId = deptMap.get(req.department);
+
+            if (submittedById && departmentId) {
+                const finalRequest = {
+                    ...req,
+                    departmentId,
+                    submittedById,
+                    createdAt: serverTimestamp()
+                };
+
+                await addDoc(requestsCol, finalRequest);
+            } else {
+                 console.warn(`Could not seed request for ${req.department}. Missing user or department ID.`);
+            }
+        }
+    };
+
+    seedDepartments()
+        .then(seedProcurementData)
+        .catch(console.error);
 
   }, [loading, user, firestore]);
 
