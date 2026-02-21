@@ -135,9 +135,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
-        <main className="flex-1 flex flex-col">
+        <main className="flex-1 flex flex-col overflow-hidden">
           <AppHeader />
-          <div className="flex-1 overflow-y-auto p-4 md:p-8 bg-background">
+          <div className="flex-1 overflow-auto p-4 md:p-8 bg-background">
             <RolesProvider>{children}</RolesProvider>
           </div>
         </main>

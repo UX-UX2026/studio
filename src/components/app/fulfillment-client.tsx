@@ -146,7 +146,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
 
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>

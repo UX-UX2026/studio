@@ -195,7 +195,7 @@ export default function ProcurementSummaryPage() {
                     <Loader className="h-8 w-8 animate-spin" />
                 </div>
              ) : (
-                <div className="overflow-x-auto rounded-lg border">
+                <div className="overflow-auto rounded-lg border">
                     <Table>
                         <TableHeader>
                             <TableRow className="bg-muted hover:bg-muted">
