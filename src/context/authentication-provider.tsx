@@ -41,94 +41,95 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
+  // Effect for handling auth state changes and initial profile load
   useEffect(() => {
-    let profileUnsubscribe: Unsubscribe | null = null;
-
-    const authUnsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
-      if (profileUnsubscribe) {
-        profileUnsubscribe();
-      }
-
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async (authUser) => {
+      setIsLoading(true);
       if (authUser) {
         setUser(authUser);
         if (firestore) {
           const userRef = doc(firestore, 'users', authUser.uid);
-          profileUnsubscribe = onSnapshot(userRef, async (docSnap) => {
+          try {
+            const docSnap = await getDoc(userRef);
+            let profileData: UserProfile;
+
             if (docSnap.exists()) {
-              const userProfile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-              const specialAdmin = testUsers.find(u => u.email === userProfile.email && u.role === 'Administrator');
-
-              if (specialAdmin && userProfile.role !== 'Administrator') {
-                // Correct the role for this specific user. The listener will be triggered again by this update.
+              profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+              
+              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
+              if (specialAdmin && profileData.role !== 'Administrator') {
+                console.log(`Auth Provider: Correcting role for special admin ${profileData.email}.`);
                 await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-              } else {
-                setProfile(userProfile);
-                setIsLoading(false);
+                profileData.role = 'Administrator';
+                profileData.department = 'Executive';
               }
+
             } else {
-              // This is a new user, create their profile.
               console.log(`Auth Provider: No profile for ${authUser.uid}. Creating...`);
-              try {
-                const metadataRef = doc(firestore, 'app', 'metadata');
-                const metadataSnap = await getDoc(metadataRef);
-                
-                let assignedRole = 'Requester'; // Default role
-                const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
-                
-                const specialAdmin = testUsers.find(u => u.email === authUser.email && u.role === 'Administrator');
+              const metadataRef = doc(firestore, 'app', 'metadata');
+              const metadataSnap = await getDoc(metadataRef);
+              const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
+              
+              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === authUser.email?.toLowerCase() && u.role === 'Administrator');
 
-                if (specialAdmin) {
-                    assignedRole = 'Administrator';
-                } else if (needsAdminSetup) {
-                  // This is the first user, make them an admin.
-                  assignedRole = 'Administrator';
-                  console.log('Auth Provider: First user detected. Assigning Administrator role.');
+              let assignedRole = 'Requester';
+              if (specialAdmin || needsAdminSetup) {
+                assignedRole = 'Administrator';
+                if (needsAdminSetup) {
+                    console.log('Auth Provider: First user detected. Assigning Administrator role.');
                 }
-
-                const profileData = {
-                  displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-                  email: authUser.email,
-                  photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                  role: assignedRole,
-                  department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
-                  status: 'Active' as const,
-                };
-                
-                await setDoc(userRef, profileData);
-
-                if (needsAdminSetup && assignedRole === 'Administrator') {
-                  // After successfully creating the admin user, set the flag.
-                  await setDoc(metadataRef, { adminIsSetUp: true });
-                  console.log('Auth Provider: adminIsSetUp flag has been set.');
-                }
-                // The onSnapshot listener will automatically fire again with the new data,
-                // so we don't need to call setProfile here.
-              } catch (e) {
-                console.error("Auth Provider: Failed to create user profile.", e);
-                await firebaseAuth.signOut();
               }
+
+              const newProfile = {
+                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+                email: authUser.email!,
+                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                role: assignedRole,
+                department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
+                status: 'Active' as const,
+              };
+              
+              await setDoc(userRef, newProfile);
+
+              if (needsAdminSetup && assignedRole === 'Administrator') {
+                await setDoc(metadataRef, { adminIsSetUp: true });
+                console.log('Auth Provider: adminIsSetUp flag has been set.');
+              }
+
+              profileData = { id: authUser.uid, ...newProfile };
             }
-          }, (error) => {
-            console.error("Auth Provider: Profile listener error.", error);
-            setIsLoading(false);
+            setProfile(profileData);
+          } catch (error) {
+            console.error("Auth Provider: Error during profile setup.", error);
+            await firebaseAuth.signOut();
             setProfile(null);
-          });
+          }
         }
       } else {
         setUser(null);
         setProfile(null);
-        setIsLoading(false);
+      }
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [firebaseAuth, firestore, router]);
+
+  // Effect for real-time profile updates
+  useEffect(() => {
+    if (!user || !firestore) return;
+    
+    const userRef = doc(firestore, 'users', user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
       }
     });
 
-    return () => {
-      authUnsubscribe();
-      if (profileUnsubscribe) {
-        profileUnsubscribe();
-      }
-    };
-  }, [firebaseAuth, firestore]);
+    return () => unsubscribe();
+  }, [user, firestore]);
 
+  // Effect for routing
   useEffect(() => {
     if (isLoading) return;
 
