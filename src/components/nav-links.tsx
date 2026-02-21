@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -94,7 +95,7 @@ export function NavLinks({ role }: { role: UserRole }) {
           return (
             <SidebarMenuItem key={link.label} className="block">
               <Collapsible defaultOpen={isParentActive}>
-                <CollapsibleTrigger className="w-full">
+                <CollapsibleTrigger className="w-full" asChild>
                   <SidebarMenuButton isActive={isParentActive} className="w-full">
                       <link.icon />
                       <span>{link.label}</span>
