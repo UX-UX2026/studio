@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult } from 'firebase/auth';
-import React, { useState, useEffect } from "react";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth as useFirebaseAuthInstance } from "@/firebase";
@@ -28,43 +28,27 @@ export default function LoginPage() {
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isSigningIn, setIsSigningIn] = useState(true); // Start true to handle redirect result
-
-    // This effect handles the result of a Google Sign-In redirect.
-    useEffect(() => {
-        getRedirectResult(auth)
-            .then((result) => {
-                // If result is not null, the user has just signed in via redirect.
-                // The onAuthStateChanged listener in AuthenticationProvider will handle the rest.
-                if (result) {
-                    toast({ title: "Signed in successfully" });
-                }
-            })
-            .catch((error) => {
-                // Handle Errors here.
-                console.error("Google redirect sign-in error:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Google Sign-In Failed",
-                    description: error.message || "An error occurred during Google sign-in.",
-                });
-            })
-            .finally(() => {
-                // Done checking for redirect result.
-                setIsSigningIn(false);
-            });
-    }, [auth, toast]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleGoogleSignIn = async () => {
-        setIsSigningIn(true);
+        setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
-        // The page will redirect away. Errors are handled by the useEffect when the user is redirected back.
-        await signInWithRedirect(auth, provider);
+        try {
+            await signInWithRedirect(auth, provider);
+        } catch (error: any) {
+            console.error("Google sign-in redirect initiation error:", error);
+             toast({
+                variant: "destructive",
+                title: "Google Sign-In Failed",
+                description: "Could not start the Google sign-in process. Please try again.",
+            });
+            setIsSubmitting(false);
+        }
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSigningIn(true);
+        setIsSubmitting(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
             // On success, the AuthenticationProvider will handle the redirect.
@@ -81,7 +65,7 @@ export default function LoginPage() {
                     description = "The email address format is not valid.";
                     break;
                 case 'auth/operation-not-allowed':
-                    description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
+                    description = "Email & Password sign-in is not enabled. Please enable it in the Firebase console.";
                     break;
                  case 'auth/internal-error':
                     description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
@@ -94,16 +78,13 @@ export default function LoginPage() {
                 title: "Login Failed",
                 description: description
             });
-        } finally {
-            setIsSigningIn(false);
+             setIsSubmitting(false);
         }
     };
     
-    // The page is loading if the main auth provider is loading, or if a sign-in process is active.
-    const isLoading = isAuthLoading || isSigningIn;
+    const isLoading = isAuthLoading || isSubmitting;
 
-    // Show a loading screen while the AuthenticationProvider is determining the auth state.
-    if (isLoading) {
+    if (isAuthLoading && !isSubmitting) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -125,7 +106,7 @@ export default function LoginPage() {
                 <CardContent>
                     <div className="space-y-4">
                         <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
-                            {isSigningIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Sign in with Google
                         </Button>
                         <div className="relative">
@@ -165,7 +146,7 @@ export default function LoginPage() {
                                 />
                             </div>
                             <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
-                                {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Sign In
                             </Button>
                         </form>
