@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,8 @@ export default function LoginPage() {
         setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
         try {
-            await signInWithRedirect(auth, provider);
+            // Using signInWithPopup to get detailed errors back.
+            await signInWithPopup(auth, provider);
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             let description = "An unexpected error occurred. Please try again.";
@@ -62,7 +63,9 @@ export default function LoginPage() {
                 variant: "destructive",
                 title: "Google Sign-In Failed",
                 description: description,
+                duration: 9000,
             });
+        } finally {
             setIsSubmitting(false);
         }
     };
@@ -97,8 +100,10 @@ export default function LoginPage() {
              toast({
                 variant: "destructive",
                 title: "Login Failed",
-                description: description
+                description: description,
+                duration: 9000,
             });
+        } finally {
              setIsSubmitting(false);
         }
     };
