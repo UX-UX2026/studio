@@ -18,15 +18,19 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRoles } from "@/lib/roles-provider";
-import type { Role } from "@/lib/roles-provider";
+import { useRoles, type Role } from "@/lib/roles-provider";
+import { useFirestore } from "@/firebase";
+import { useToast } from "@/hooks/use-toast";
+import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc } from "firebase/firestore";
 
 
 export default function RolesPage() {
     const { user, role: userRole, loading: userLoading } = useUser();
     const router = useRouter();
+    const firestore = useFirestore();
+    const { toast } = useToast();
 
-    const { roles, loading: rolesLoading, addRole, updateRole, deleteRole } = useRoles();
+    const { roles, loading: rolesLoading } = useRoles();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<Role | null>(null);
     
@@ -63,15 +67,38 @@ export default function RolesPage() {
     }
     
     const handleSave = async () => {
-        if (!name) return;
+        if (!name || !user) return;
 
-        if (editingRole) {
-            await updateRole({ ...editingRole, name });
-        } else {
-            await addRole({ name });
+        try {
+            if (editingRole) {
+                const roleRef = doc(firestore, 'roles', editingRole.id);
+                await setDoc(roleRef, { ...editingRole, name });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'role.update',
+                    details: `Updated role from "${editingRole.name}" to "${name}"`,
+                    entity: { type: 'role', id: editingRole.id },
+                    timestamp: serverTimestamp()
+                });
+                toast({ title: 'Role Updated' });
+            } else {
+                const docRef = await addDoc(collection(firestore, 'roles'), { name });
+                 await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'role.create',
+                    details: `Created new role: "${name}"`,
+                    entity: { type: 'role', id: docRef.id },
+                    timestamp: serverTimestamp()
+                });
+                toast({ title: 'Role Added' });
+            }
+            setEditingRole(null);
+            setIsDialogOpen(false);
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error saving role', description: error.message });
         }
-        setEditingRole(null);
-        setIsDialogOpen(false);
     };
     
     const handleEdit = (role: Role) => {
@@ -79,8 +106,25 @@ export default function RolesPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = (id: string) => {
-        deleteRole(id);
+    const handleDelete = async (id: string) => {
+        if (!user) return;
+        const roleToDelete = roles.find(r => r.id === id);
+        if (!roleToDelete) return;
+
+        try {
+            await deleteDoc(doc(firestore, 'roles', id));
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'role.delete',
+                details: `Deleted role: "${roleToDelete.name}"`,
+                entity: { type: 'role', id: id },
+                timestamp: serverTimestamp()
+            });
+            toast({ title: 'Role Deleted' });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error deleting role', description: error.message });
+        }
     };
 
     const openAddDialog = () => {
@@ -160,4 +204,3 @@ export default function RolesPage() {
         </>
     );
 }
-

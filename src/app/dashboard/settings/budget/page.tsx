@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
@@ -274,6 +274,7 @@ export default function BudgetPage() {
     };
     
     const handleConfirmImport = async () => {
+        if (!user) return;
         const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
         const stringifiedHeaders = derivedHeaders.map(h => String(h));
@@ -352,6 +353,15 @@ export default function BudgetPage() {
             for (const item of newItems) {
                 await addDoc(collection(firestore, 'budgets'), item);
             }
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'budget.import',
+                details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName}.`,
+                entity: { type: 'department', id: selectedDepartmentId },
+                timestamp: serverTimestamp()
+            });
 
             toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
             setIsMappingDialogOpen(false);

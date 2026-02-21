@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 type Department = {
     id: string;
@@ -101,13 +101,30 @@ export default function DepartmentsPage() {
     }
     
     const handleSave = async () => {
+        if (!user) return;
         const departmentData = { name, managerId, budget };
 
         if (editingDepartment) {
             const deptRef = doc(firestore, 'departments', editingDepartment.id);
             await setDoc(deptRef, departmentData, { merge: true });
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'department.update',
+                details: `Updated department: ${name}`,
+                entity: { type: 'department', id: editingDepartment.id },
+                timestamp: serverTimestamp()
+            });
         } else {
-            await addDoc(collection(firestore, 'departments'), departmentData);
+            const docRef = await addDoc(collection(firestore, 'departments'), departmentData);
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'department.create',
+                details: `Created department: ${name}`,
+                entity: { type: 'department', id: docRef.id },
+                timestamp: serverTimestamp()
+            });
         }
         setEditingDepartment(null);
         setIsDialogOpen(false);
@@ -119,7 +136,19 @@ export default function DepartmentsPage() {
     };
     
     const handleDelete = async (id: string) => {
+        if (!user) return;
+        const deptToDelete = departments?.find(d => d.id === id);
         await deleteDoc(doc(firestore, 'departments', id));
+        if (deptToDelete) {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'department.delete',
+                details: `Deleted department: ${deptToDelete.name}`,
+                entity: { type: 'department', id },
+                timestamp: serverTimestamp()
+            });
+        }
     };
 
     const openAddDialog = () => {

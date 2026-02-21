@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 type Vendor = {
     id: string;
@@ -113,6 +113,7 @@ export default function VendorsPage() {
     }
     
     const handleSave = async () => {
+        if (!user) return;
         const vendorData = {
             name,
             contactPerson,
@@ -126,8 +127,24 @@ export default function VendorsPage() {
         if (editingVendor) {
             const vendorRef = doc(firestore, 'vendors', editingVendor.id);
             await setDoc(vendorRef, vendorData, { merge: true });
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'vendor.update',
+                details: `Updated vendor: ${name}`,
+                entity: { type: 'vendor', id: editingVendor.id },
+                timestamp: serverTimestamp()
+            });
         } else {
-            await addDoc(collection(firestore, 'vendors'), vendorData);
+            const docRef = await addDoc(collection(firestore, 'vendors'), vendorData);
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'vendor.create',
+                details: `Created vendor: ${name}`,
+                entity: { type: 'vendor', id: docRef.id },
+                timestamp: serverTimestamp()
+            });
         }
         setEditingVendor(null);
         setIsDialogOpen(false);
@@ -139,7 +156,19 @@ export default function VendorsPage() {
     };
     
     const handleDelete = async (id: string) => {
+        if (!user) return;
+        const vendorToDelete = vendors?.find(v => v.id === id);
         await deleteDoc(doc(firestore, 'vendors', id));
+        if (vendorToDelete) {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'vendor.delete',
+                details: `Deleted vendor: ${vendorToDelete.name}`,
+                entity: { type: 'vendor', id },
+                timestamp: serverTimestamp()
+            });
+        }
     };
 
     const openAddDialog = () => {

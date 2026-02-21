@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/accordion";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 
 
@@ -218,6 +218,16 @@ export default function ApprovalsPage() {
             status: newStatus,
             timeline: newTimeline
         });
+
+        await addDoc(collection(firestore, 'auditLogs'), {
+            userId: user.uid,
+            userName: user.displayName,
+            action: 'request.status_change',
+            details: `Updated request ${activeRequest.id.substring(0,8)}... status to "${newStatus}"`,
+            entity: { type: 'procurementRequest', id: selectedRequestId },
+            timestamp: serverTimestamp()
+        });
+        
         toast(toastMessage);
     };
 
@@ -239,6 +249,16 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, {
                 comments: arrayUnion(commentData),
             });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'request.comment',
+                details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
+                entity: { type: 'procurementRequest', id: activeRequest.id },
+                timestamp: serverTimestamp()
+            });
+
             setNewComment("");
             toast({ title: "Comment added" });
         } catch (error: any) {

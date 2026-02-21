@@ -8,8 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LayoutGrid, List, Plus, Trash2, Upload, Download, Loader } from "lucide-react";
 import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, addDoc, doc, setDoc, deleteDoc } from "firebase/firestore";
+import { useFirestore, useCollection, useUser } from "@/firebase";
+import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 
 type RecurringItem = {
     id: string;
@@ -30,6 +30,7 @@ const formatCurrency = (amount: number) => {
 
 export function RecurringClient() {
     const firestore = useFirestore();
+    const { user } = useUser();
     const recurringItemsQuery = useMemo(() => collection(firestore, 'recurringItems'), [firestore]);
     const { data: items, loading } = useCollection<RecurringItem>(recurringItemsQuery);
     
@@ -40,6 +41,16 @@ export function RecurringClient() {
     const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
         const itemRef = doc(firestore, 'recurringItems', id);
         await setDoc(itemRef, { [field]: value }, { merge: true });
+        if (user) {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'recurringItem.update',
+                details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
+                entity: { type: 'recurringItem', id },
+                timestamp: serverTimestamp()
+            });
+        }
     };
 
     const handleAddItem = async () => {
@@ -51,12 +62,33 @@ export function RecurringClient() {
           frequency: "Monthly",
           active: true,
         };
-        await addDoc(collection(firestore, 'recurringItems'), newItem);
+        const docRef = await addDoc(collection(firestore, 'recurringItems'), newItem);
+        if (user) {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'recurringItem.create',
+                details: `Created new recurring item: "New Item"`,
+                entity: { type: 'recurringItem', id: docRef.id },
+                timestamp: serverTimestamp()
+            });
+        }
         setView('list'); // Switch to list view for easier editing
     };
     
     const handleRemoveItem = async (id: string) => {
+        const itemToRemove = items?.find(i => i.id === id);
         await deleteDoc(doc(firestore, 'recurringItems', id));
+        if (user && itemToRemove) {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'recurringItem.delete',
+                details: `Deleted recurring item: "${itemToRemove.name}"`,
+                entity: { type: 'recurringItem', id },
+                timestamp: serverTimestamp()
+            });
+        }
     };
 
     const handleImportClick = () => {
