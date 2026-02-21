@@ -5,11 +5,13 @@ import { AppHeader } from "@/components/app-header";
 import { NavLinks } from "@/components/nav-links";
 import {
   Sidebar,
-  SidebarBody,
+  SidebarContent,
   SidebarFooter,
   SidebarHeader,
   SidebarProvider,
-} from "@/components/app/sidebar";
+  SidebarInset,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
@@ -79,69 +81,64 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen">
-        <Sidebar>
-          <SidebarHeader>
-            <Link
-              href="/dashboard"
-              className="flex flex-col items-center justify-center p-2 text-center"
-            >
-              <span className="text-xs font-medium uppercase tracking-widest text-sidebar-primary">ProcurePortal</span>
-              <span className="text-xl font-bold tracking-tight text-sidebar-foreground">UBUNTU PATHWAYS</span>
+      <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground">
+        <SidebarHeader className="h-16 border-b border-sidebar-border p-2 flex items-center justify-between">
+            <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden font-bold tracking-tight text-sidebar-foreground p-2">
+                <span className="text-xl group-data-[collapsible=icon]:hidden">UBUNTU PATHWAYS</span>
             </Link>
-          </SidebarHeader>
-          <SidebarBody>
+            <SidebarTrigger className="hidden md:flex" />
+        </SidebarHeader>
+        <SidebarContent className="p-2">
             <NavLinks role={role} />
-          </SidebarBody>
-          <SidebarFooter>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3 cursor-pointer hover:bg-sidebar-accent/80 transition-colors">
-                  <Avatar className="h-8 w-8">
-                    {profile.photoURL ? (
-                      <AvatarImage
-                        src={profile.photoURL}
-                        alt={profile.displayName || 'User Avatar'}
-                      />
-                    ) : userAvatar && (
-                      <AvatarImage
-                        src={userAvatar.imageUrl}
-                        alt={userAvatar.description}
-                        data-ai-hint={userAvatar.imageHint}
-                        width={32}
-                        height={32}
-                      />
-                    )}
-                    <AvatarFallback>{profile.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div className="overflow-hidden">
-                    <p className="truncate text-sm font-semibold text-sidebar-foreground">
-                      {profile.displayName || user.email}
+        </SidebarContent>
+        <SidebarFooter>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent p-3 cursor-pointer hover:bg-sidebar-accent/80 transition-colors group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:p-2">
+                <Avatar className="h-8 w-8">
+                  {profile.photoURL ? (
+                    <AvatarImage
+                      src={profile.photoURL}
+                      alt={profile.displayName || 'User Avatar'}
+                    />
+                  ) : userAvatar && (
+                    <AvatarImage
+                      src={userAvatar.imageUrl}
+                      alt={userAvatar.description}
+                      data-ai-hint={userAvatar.imageHint}
+                      width={32}
+                      height={32}
+                    />
+                  )}
+                  <AvatarFallback>{profile.displayName?.charAt(0) || user.email?.charAt(0)}</AvatarFallback>
+                </Avatar>
+                <div className="overflow-hidden group-data-[collapsible=icon]:hidden">
+                  <p className="truncate text-sm font-semibold text-sidebar-foreground">
+                    {profile.displayName || user.email}
+                  </p>
+                  {role && (
+                    <p className="truncate text-xs text-sidebar-foreground/80">
+                      {role}
                     </p>
-                    {role && (
-                      <p className="truncate text-xs text-sidebar-foreground/80">
-                        {role}
-                      </p>
-                    )}
-                  </div>
+                  )}
                 </div>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56" align="end" forceMount>
-                 <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Sign out</span>
-                 </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarFooter>
-        </Sidebar>
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <AppHeader />
-          <div className="flex-1 overflow-auto p-4 md:p-8 bg-background">
-            <RolesProvider>{children}</RolesProvider>
-          </div>
-        </main>
-      </div>
+              </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sign out</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset>
+        <AppHeader />
+        <div className="flex-1 overflow-auto p-4 md:p-8 bg-background">
+          <RolesProvider>{children}</RolesProvider>
+        </div>
+      </SidebarInset>
     </SidebarProvider>
   );
 }

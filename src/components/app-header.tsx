@@ -1,9 +1,9 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { Bell, Menu } from "lucide-react";
+import { Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useSidebar } from "@/components/app/sidebar";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -32,7 +32,6 @@ const getBreadcrumbItems = (pathname: string) => {
 };
 
 export function AppHeader() {
-  const { toggleSidebar } = useSidebar();
   const pathname = usePathname();
   const breadcrumbItems = getBreadcrumbItems(pathname);
   const [currentDate, setCurrentDate] = useState("");
@@ -48,10 +47,7 @@ export function AppHeader() {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-card px-4 md:px-8">
       <div className="flex items-center gap-4">
-        <Button size="icon" variant="ghost" onClick={toggleSidebar}>
-            <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle Sidebar</span>
-        </Button>
+        <SidebarTrigger className="md:hidden" />
         <Breadcrumb>
           <BreadcrumbList>
             {breadcrumbItems.map((item, index) => (

@@ -15,15 +15,19 @@ import {
   Banknote,
 } from 'lucide-react';
 import {
-  SidebarNav,
-  SidebarNavLink,
-  SidebarNavMain,
-} from '@/components/app/sidebar';
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+  useSidebar,
+} from '@/components/ui/sidebar';
 import Link from 'next/link';
 import { type UserRole } from '@/firebase/auth/use-user';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './ui/collapsible';
-import { cn } from '@/lib/utils';
 import React from 'react';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
+import { cn } from '@/lib/utils';
 
 const allLinks = [
   { href: '/dashboard', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'] },
@@ -59,63 +63,76 @@ const allLinks = [
 
 export function NavLinks({ role }: { role: UserRole }) {
   const pathname = usePathname();
+  const { state } = useSidebar();
 
   const visibleLinks = role ? allLinks.filter(link => link.roles.includes(role)) : [];
 
   return (
-    <SidebarNav>
-      <SidebarNavMain>
-        {visibleLinks.map((link) => {
-          if (link.subLinks) {
-            const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
-            if (visibleSubLinks.length === 0) return null;
-            
-            const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
+    <SidebarMenu>
+      {visibleLinks.map((link) => {
+        if (link.subLinks) {
+          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
+          if (visibleSubLinks.length === 0) return null;
+          
+          const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
 
-
+          if (state === 'collapsed') {
             return (
-              <Collapsible key={link.label} defaultOpen={isParentActive}>
-                <CollapsibleTrigger asChild>
-                    <div className={cn(
-                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-sidebar-foreground/80 transition-colors cursor-pointer",
-                      "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                      isParentActive && "text-sidebar-accent-foreground"
-                    )}>
-                      <link.icon className="h-4 w-4" />
-                      {link.label}
+              <SidebarMenuItem key={link.label}>
+                  <Link href={visibleSubLinks[0].href} legacyBehavior passHref>
+                      <SidebarMenuButton tooltip={link.label} isActive={isParentActive} asChild>
+                          <a><link.icon /><span>{link.label}</span></a>
+                      </SidebarMenuButton>
+                  </Link>
+              </SidebarMenuItem>
+            )
+          }
+
+          return (
+            <SidebarMenuItem key={link.label} className="block">
+              <Collapsible defaultOpen={isParentActive}>
+                <CollapsibleTrigger className="w-full">
+                  <SidebarMenuButton isActive={isParentActive} className="w-full">
+                      <link.icon />
+                      <span>{link.label}</span>
                       <ChevronDown className="ml-auto h-4 w-4 transition-transform [&[data-state=open]]:rotate-180" />
-                    </div>
+                  </SidebarMenuButton>
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-1 flex flex-col gap-1 pl-8">
-                  {visibleSubLinks.map(subLink => {
-                     const isActive = pathname === subLink.href;
-                     return (
-                        <SidebarNavLink key={subLink.href} href={subLink.href} active={isActive} asChild>
-                            <Link href={subLink.href}>{subLink.label}</Link>
-                        </SidebarNavLink>
-                     )
-                  })}
+                <CollapsibleContent>
+                  <SidebarMenuSub>
+                    {visibleSubLinks.map(subLink => {
+                        const isActive = pathname === subLink.href;
+                        return (
+                        <SidebarMenuSubItem key={subLink.href}>
+                            <Link href={subLink.href} legacyBehavior passHref>
+                                <SidebarMenuSubButton asChild isActive={isActive}>
+                                    <a>{subLink.label}</a>
+                                </SidebarMenuSubButton>
+                            </Link>
+                        </SidebarMenuSubItem>
+                        )
+                    })}
+                  </SidebarMenuSub>
                 </CollapsibleContent>
               </Collapsible>
-            );
-          }
-          
-          const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
-          return (
-            <SidebarNavLink
-              key={link.href}
-              href={link.href}
-              active={isActive}
-              asChild
-            >
-              <Link href={link.href}>
-                <link.icon className="h-4 w-4" />
-                {link.label}
-              </Link>
-            </SidebarNavLink>
+            </SidebarMenuItem>
           );
-        })}
-      </SidebarNavMain>
-    </SidebarNav>
+        }
+        
+        const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
+        return (
+          <SidebarMenuItem key={link.href}>
+            <Link href={link.href} legacyBehavior passHref>
+                <SidebarMenuButton tooltip={link.label} isActive={isActive} asChild>
+                    <a>
+                        <link.icon />
+                        <span>{link.label}</span>
+                    </a>
+                </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
   );
 }
