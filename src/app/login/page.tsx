@@ -3,21 +3,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import React, { useState } from "react";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth as useFirebaseAuthInstance } from "@/firebase";
 import { Loader2 } from "lucide-react";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { useToast } from "@/hooks/use-toast";
 import { useAuthentication } from "@/context/authentication-provider";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
@@ -31,61 +23,53 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const auth = useFirebaseAuthInstance();
-    const { isLoading } = useAuthentication();
+    const { isLoading: isAuthLoading } = useAuthentication();
+    const { toast } = useToast();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
-    const [isSigningIn, setIsSigningIn] = useState<'google' | 'email' | null>(null);
-    const [errorDialog, setErrorDialog] = useState<{title: string, description: string} | null>(null);
+    const [isSigningIn, setIsSigningIn] = useState(true); // Start true to handle redirect result
+
+    // This effect handles the result of a Google Sign-In redirect.
+    useEffect(() => {
+        getRedirectResult(auth)
+            .then((result) => {
+                // If result is not null, the user has just signed in via redirect.
+                // The onAuthStateChanged listener in AuthenticationProvider will handle the rest.
+                if (result) {
+                    toast({ title: "Signed in successfully" });
+                }
+            })
+            .catch((error) => {
+                // Handle Errors here.
+                console.error("Google redirect sign-in error:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Google Sign-In Failed",
+                    description: error.message || "An error occurred during Google sign-in.",
+                });
+            })
+            .finally(() => {
+                // Done checking for redirect result.
+                setIsSigningIn(false);
+            });
+    }, [auth, toast]);
 
     const handleGoogleSignIn = async () => {
-        setIsSigningIn('google');
+        setIsSigningIn(true);
         const provider = new GoogleAuthProvider();
-        try {
-            await signInWithPopup(auth, provider);
-            // On success, the AuthenticationProvider will see the new user and redirect.
-        } catch (error: any) {
-            console.error("Google authentication error:", error);
-            
-            let description = "An unexpected error occurred. Please try again.";
-            // The 403 error the user is seeing often manifests as 'auth/internal-error' or 'auth/auth-domain-config-required'
-            // when using signInWithPopup/Redirect if the project isn't configured correctly.
-            switch (error.code) {
-                case 'auth/popup-closed-by-user':
-                    description = "The sign-in popup was closed before completing the sign-in. Please try again.";
-                    break;
-                case 'auth/cancelled-popup-request':
-                    description = "The sign-in flow was cancelled. Please try again.";
-                    break;
-                case 'auth/operation-not-allowed':
-                    description = "Google Sign-In is not enabled for this project. Please go to the Firebase Console, select your project, go to Authentication > Sign-in method, and enable the Google provider.";
-                    break;
-                case 'auth/internal-error':
-                case 'auth/auth-domain-config-required':
-                    description = "Your Firebase project is not configured correctly for Google Sign-In. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure your domain is added to the authorized domains list in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
-                    break;
-                default:
-                    description = error.message;
-            }
-
-            setErrorDialog({
-                title: "Login Failed",
-                description: description,
-            });
-        } finally {
-            setIsSigningIn(null);
-        }
+        // The page will redirect away. Errors are handled by the useEffect when the user is redirected back.
+        await signInWithRedirect(auth, provider);
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsSigningIn('email');
+        setIsSigningIn(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
-            // On success, the AuthenticationProvider will see the new user and redirect.
+            // On success, the AuthenticationProvider will handle the redirect.
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
-            
             let description = "An unexpected error occurred. Please try again.";
             switch (error.code) {
                 case 'auth/user-not-found':
@@ -99,25 +83,24 @@ export default function LoginPage() {
                 case 'auth/operation-not-allowed':
                     description = "Email & Password sign-in is not enabled for this app. Please enable it in the Firebase console.";
                     break;
-                case 'auth/configuration-not-found':
-                case 'auth/invalid-api-key':
-                    description = "Firebase configuration is invalid. Please check your setup.";
-                    break;
-                case 'auth/internal-error':
+                 case 'auth/internal-error':
                     description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
                     break;
                 default:
                     description = error.message;
             }
-
-             setErrorDialog({
+             toast({
+                variant: "destructive",
                 title: "Login Failed",
-                description: description,
+                description: description
             });
         } finally {
-            setIsSigningIn(null);
+            setIsSigningIn(false);
         }
     };
+    
+    // The page is loading if the main auth provider is loading, or if a sign-in process is active.
+    const isLoading = isAuthLoading || isSigningIn;
 
     // Show a loading screen while the AuthenticationProvider is determining the auth state.
     if (isLoading) {
@@ -128,93 +111,78 @@ export default function LoginPage() {
         );
     }
     
-    // The AuthenticationProvider will handle redirecting away from this page if the user is already logged in.
-    // If not loading, and the user is not logged in, we show the login form.
     return (
-        <>
-            <div className="flex min-h-screen items-center justify-center bg-background p-4">
-                <Card className="w-full max-w-md shadow-2xl">
-                    <CardHeader className="text-center">
-                        <div className="mx-auto mb-4 text-center">
-                        <p className="text-sm font-medium uppercase text-primary">ProcurePortal</p>
-                        <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
+        <div className="flex min-h-screen items-center justify-center bg-background p-4">
+            <Card className="w-full max-w-md shadow-2xl">
+                <CardHeader className="text-center">
+                    <div className="mx-auto mb-4 text-center">
+                    <p className="text-sm font-medium uppercase text-primary">ProcurePortal</p>
+                    <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
+                    </div>
+                    <CardTitle className="text-2xl">Welcome</CardTitle>
+                    <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-4">
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
+                            {isSigningIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                            Sign in with Google
+                        </Button>
+                        <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t" />
                         </div>
-                        <CardTitle className="text-2xl">Welcome</CardTitle>
-                        <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={!!isSigningIn}>
-                                {isSigningIn === 'google' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
-                                Sign in with Google
-                            </Button>
-                            <div className="relative">
-                            <div className="absolute inset-0 flex items-center">
-                                <span className="w-full border-t" />
-                            </div>
-                            <div className="relative flex justify-center text-xs uppercase">
-                                <span className="bg-background px-2 text-muted-foreground">
-                                Or continue with email
-                                </span>
-                            </div>
-                            </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-background px-2 text-muted-foreground">
+                            Or continue with email
+                            </span>
+                        </div>
+                        </div>
 
-                            <form onSubmit={handleEmailSignIn} className="space-y-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="email">Email</Label>
-                                    <Input
-                                        id="email"
-                                        type="email"
-                                        placeholder="admin@procurportal.local"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        required
-                                        disabled={!!isSigningIn}
-                                    />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="password">Password</Label>
-                                    <Input
-                                        id="password"
-                                        type="password"
-                                        placeholder="P@ssword123!"
-                                        value={password}
-                                        onChange={(e) => setPassword(e.target.value)}
-                                        required
-                                        disabled={!!isSigningIn}
-                                    />
-                                </div>
-                                <Button type="submit" className="w-full h-12 text-base" disabled={!!isSigningIn}>
-                                    {isSigningIn === 'email' && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                                    Sign In
-                                </Button>
-                            </form>
-                            <p className="px-8 text-center text-xs text-muted-foreground">
-                                By clicking continue, you agree to our{" "}
-                                <Link href="#" className="underline underline-offset-4 hover:text-primary">
-                                    Terms of Service
-                                </Link>{" "}
-                                and{" "}
-                                <Link href="#" className="underline underline-offset-4 hover:text-primary">
-                                    Privacy Policy
-                                </Link>
-                                .
-                            </p>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-             <AlertDialog open={!!errorDialog} onOpenChange={() => setErrorDialog(null)}>
-                <AlertDialogContent>
-                    <AlertDialogHeader>
-                        <AlertDialogTitle>{errorDialog?.title}</AlertDialogTitle>
-                        <AlertDialogDescription>{errorDialog?.description}</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                        <AlertDialogAction onClick={() => setErrorDialog(null)}>OK</AlertDialogAction>
-                    </AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
-        </>
+                        <form onSubmit={handleEmailSignIn} className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="email">Email</Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    placeholder="admin@procurportal.local"
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="password">Password</Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    placeholder="P@ssword123!"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    required
+                                    disabled={isLoading}
+                                />
+                            </div>
+                            <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
+                                {isSigningIn && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                Sign In
+                            </Button>
+                        </form>
+                        <p className="px-8 text-center text-xs text-muted-foreground">
+                            By clicking continue, you agree to our{" "}
+                            <Link href="#" className="underline underline-offset-4 hover:text-primary">
+                                Terms of Service
+                            </Link>{" "}
+                            and{" "}
+                            <Link href="#" className="underline underline-offset-4 hover:text-primary">
+                                Privacy Policy
+                            </Link>
+                            .
+                        </p>
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
     )
 }

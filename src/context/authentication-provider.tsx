@@ -37,33 +37,16 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // Start as true
   const router = useRouter();
   const pathname = usePathname();
 
-  // Effect 1: Handle Firebase Authentication state changes
+  // Effect 1: Handle Auth State and Profile Fetching
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
-      setUser(authUser);
-      if (!authUser) {
-        // If there's no authenticated user, we're done loading.
-        setProfile(null);
-        setIsLoading(false);
-      }
-    });
-    return () => unsubscribe();
-  }, [firebaseAuth]);
+    if (!firestore) return;
 
-  // Effect 2: Fetch or create user profile from Firestore when user is authenticated
-  useEffect(() => {
-    // Don't proceed if we don't have a user or firestore instance
-    if (!user || !firestore) {
-      // If there's no user object, the first effect already handles setting isLoading to false.
-      return;
-    }
-
-    const fetchOrCreateProfile = async () => {
-      const userRef = doc(firestore, 'users', user.uid);
+    const handleUserProfile = async (authUser: User) => {
+      const userRef = doc(firestore, 'users', authUser.uid);
       try {
         const docSnap = await getDoc(userRef);
         let profileData: UserProfile;
@@ -73,55 +56,65 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           
           const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
           if (specialAdmin && profileData.role !== 'Administrator') {
-            console.log(`Auth Provider: Correcting role for special admin ${'\'\'\''}profileData.email{'\'\'\''}.`);
             await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
             profileData.role = 'Administrator';
             profileData.department = 'Executive';
           }
         } else {
-          console.log(`Auth Provider: No profile for ${'\'\'\''}user.uid{'\'\'\''}. Creating...`);
           const metadataRef = doc(firestore, 'app', 'metadata');
           const metadataSnap = await getDoc(metadataRef);
           const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
           
-          const specialAdmin = testUsers.find(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
+          const specialAdmin = testUsers.find(u => authUser.email && u.email.toLowerCase() === authUser.email.toLowerCase() && u.role === 'Administrator');
 
           let assignedRole = 'Requester';
           if (specialAdmin || needsAdminSetup) {
             assignedRole = 'Administrator';
             if (needsAdminSetup) {
-                console.log('Auth Provider: First user detected. Assigning Administrator role.');
                 await setDoc(metadataRef, { adminIsSetUp: true });
             }
           }
 
           const newProfile = {
-            displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-            email: user.email!,
-            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${'\'\'\''}user.email{'\'\'\''}`,
+            displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+            email: authUser.email!,
+            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${'\'\'\''}authUser.email{'\'\'\''}`,
             role: assignedRole,
             department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
             status: 'Active' as const,
           };
           
           await setDoc(userRef, newProfile);
-          profileData = { id: user.uid, ...newProfile };
+          profileData = { id: authUser.uid, ...newProfile };
         }
         setProfile(profileData);
       } catch (error) {
         console.error("Auth Provider: Error during profile setup.", error);
-        await firebaseAuth.signOut();
+        await firebaseAuth.signOut(); // Sign out on profile error
         setProfile(null);
       } finally {
-        // Profile has been fetched/created or an error occurred. We can stop loading.
-        setIsLoading(false);
+        setIsLoading(false); // End loading ONLY after profile is processed
       }
     };
 
-    fetchOrCreateProfile();
-  }, [user, firestore, firebaseAuth]);
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
+      setUser(authUser);
+      if (authUser) {
+        // User is signed in, fetch their profile.
+        // isLoading remains true until handleUserProfile sets it to false.
+        handleUserProfile(authUser);
+      } else {
+        // No user is signed in. Auth process is complete.
+        setProfile(null);
+        setIsLoading(false);
+      }
+    });
 
-  // Effect 3: Listen for real-time profile updates
+    return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseAuth, firestore]);
+
+  // Effect 2: Listen for real-time profile updates
   useEffect(() => {
     if (!user || !firestore) return;
     
@@ -136,7 +129,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             return prevProfile;
         });
       } else {
-        // This can happen if the user is deleted from the backend.
         setProfile(null);
       }
     });
@@ -144,20 +136,21 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [user, firestore]);
 
-  // Effect 4: Centralized routing logic
+  // Effect 3: Centralized routing logic
   useEffect(() => {
-    // Wait until the loading process is fully complete.
-    if (isLoading) return;
+    if (isLoading) {
+      return; // Do NOTHING until loading is false.
+    }
 
     const isAuthPage = pathname === '/login';
 
     if (profile) {
-      // If user has a profile, they should be on an app page.
+      // User is logged in with a profile.
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
     } else {
-      // If there is no profile (not logged in, or error), they should be on the login page.
+      // User is not logged in.
       if (!isAuthPage) {
         router.replace('/login');
       }
