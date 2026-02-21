@@ -53,6 +53,7 @@ export function RecurringClient() {
                 entity: { type: 'recurringItem', id },
                 timestamp: serverTimestamp()
             });
+            toast({ title: "Recurring item updated" });
         } catch (error: any) {
             console.error("Recurring Item Update Error:", error);
             toast({
@@ -85,6 +86,7 @@ export function RecurringClient() {
                 entity: { type: 'recurringItem', id: docRef.id },
                 timestamp: serverTimestamp()
             });
+            toast({ title: "New item added" });
             setView('list'); // Switch to list view for easier editing
         } catch (error: any) {
              console.error("Add Recurring Item Error:", error);
@@ -113,6 +115,7 @@ export function RecurringClient() {
                     timestamp: serverTimestamp()
                 });
             }
+            toast({ title: "Item removed" });
         } catch (error: any) {
             console.error("Delete Recurring Item Error:", error);
             toast({

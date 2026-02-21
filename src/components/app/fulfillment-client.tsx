@@ -27,9 +27,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { type UserRole } from "@/firebase/auth/use-user";
+import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 
 
@@ -59,6 +59,7 @@ const getStatusBadge = (status: string) => {
 };
 
 export function FulfillmentClient({ items: initialItems, role }: { items: FulfillmentItem[], role: UserRole }) {
+  const { user } = useUser();
   const [items, setItems] = useState(initialItems);
   const [isRecommendDialogOpen, setIsRecommendDialogOpen] = useState(false);
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
@@ -98,7 +99,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   
   const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
-      if (!itemToUpdate || !firestore) return;
+      if (!itemToUpdate || !firestore || !user) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
 
@@ -125,6 +126,18 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               )
           );
 
+          toast({ title: "Fulfillment item updated." });
+
+          await addDoc(collection(firestore, 'auditLogs'), {
+            userId: user.uid,
+            userName: user.displayName,
+            action: 'fulfillment.update',
+            details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
+            entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
+            timestamp: serverTimestamp()
+          });
+
+
       } catch (error: any) {
           console.error("Fulfillment Update Error:", error);
           toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
@@ -142,15 +155,12 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       const newCommentText = `${role}: ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      try {
-        await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
-        toast({ title: "Comment added successfully." });
-        setNewComment("");
-        setIsCommentDialogOpen(false);
-        setSelectedItem(null);
-      } catch (error: any) {
-          // The error toast is already handled in handleItemUpdate
-      }
+      // We call handleItemUpdate which now contains the success toast and audit log
+      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
+
+      setNewComment("");
+      setIsCommentDialogOpen(false);
+      setSelectedItem(null);
   };
 
   return (

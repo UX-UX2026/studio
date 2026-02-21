@@ -202,23 +202,21 @@ export default function UsersPage() {
         if (!adminUser || !firestore) return;
         const userRef = doc(firestore, 'users', userId);
         const updateData = { [field]: value };
+        const user = users?.find(u => u.id === userId);
         
         try {
             await setDoc(userRef, updateData, { merge: true });
             
-            if (field === 'status' && value === 'Active') {
-                const user = users?.find(u => u.id === userId);
-                toast({
-                    title: "User Activated",
-                    description: `${user?.displayName || 'The user'} has been activated.`,
-                });
-            }
-            const user = users?.find(u => u.id === userId);
+            toast({
+                title: "User Updated",
+                description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
+            });
+            
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action: `user.update.${field}`,
-                details: `Updated field '${field}' to '${value}' for user ${user?.displayName || userId}`,
+                details: `Updated field '${String(field)}' to '${value}' for user ${user?.displayName || userId}`,
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
             });
@@ -227,7 +225,7 @@ export default function UsersPage() {
             toast({
                 variant: 'destructive',
                 title: 'Update Failed',
-                description: error.message || `Could not update the user's ${field}.`,
+                description: error.message || `Could not update the user's ${String(field)}.`,
             });
         }
     };
