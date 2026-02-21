@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot, setDoc, Unsubscribe, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { testUsers } from '@/lib/test-data';
 
 // Define the UserProfile shape
@@ -44,7 +44,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   // Effect for handling auth state changes and initial profile load
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuth, async (authUser) => {
-      setIsLoading(true);
       if (authUser) {
         setUser(authUser);
         if (firestore) {
@@ -58,44 +57,39 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
               
               const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
               if (specialAdmin && profileData.role !== 'Administrator') {
-                console.log(`Auth Provider: Correcting role for special admin ${profileData.email}.`);
+                console.log(`Auth Provider: Correcting role for special admin ${'\'\'\''}profileData.email{'\'\'\'}.`);
                 await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
                 profileData.role = 'Administrator';
                 profileData.department = 'Executive';
               }
 
             } else {
-              console.log(`Auth Provider: No profile for ${authUser.uid}. Creating...`);
+              console.log(`Auth Provider: No profile for ${'\'\'\''}authUser.uid{'\'\'\''}. Creating...`);
               const metadataRef = doc(firestore, 'app', 'metadata');
               const metadataSnap = await getDoc(metadataRef);
               const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
               
-              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === authUser.email?.toLowerCase() && u.role === 'Administrator');
+              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === authUser.email!.toLowerCase() && u.role === 'Administrator');
 
               let assignedRole = 'Requester';
               if (specialAdmin || needsAdminSetup) {
                 assignedRole = 'Administrator';
                 if (needsAdminSetup) {
                     console.log('Auth Provider: First user detected. Assigning Administrator role.');
+                    await setDoc(metadataRef, { adminIsSetUp: true });
                 }
               }
 
               const newProfile = {
                 displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
                 email: authUser.email!,
-                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${'\'\'\''}authUser.email{'\'\'\''}`,
                 role: assignedRole,
                 department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
                 status: 'Active' as const,
               };
               
               await setDoc(userRef, newProfile);
-
-              if (needsAdminSetup && assignedRole === 'Administrator') {
-                await setDoc(metadataRef, { adminIsSetUp: true });
-                console.log('Auth Provider: adminIsSetUp flag has been set.');
-              }
-
               profileData = { id: authUser.uid, ...newProfile };
             }
             setProfile(profileData);
@@ -103,17 +97,23 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             console.error("Auth Provider: Error during profile setup.", error);
             await firebaseAuth.signOut();
             setProfile(null);
+          } finally {
+            setIsLoading(false);
           }
+        } else {
+          // Firestore not available
+          setIsLoading(false);
         }
       } else {
+        // No user logged in
         setUser(null);
         setProfile(null);
+        setIsLoading(false);
       }
-      setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firebaseAuth, firestore, router]);
+  }, [firebaseAuth, firestore]);
 
   // Effect for real-time profile updates
   useEffect(() => {
@@ -122,7 +122,14 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     const userRef = doc(firestore, 'users', user.uid);
     const unsubscribe = onSnapshot(userRef, (docSnap) => {
       if (docSnap.exists()) {
-        setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+        setProfile((prevProfile) => {
+            const newProfile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+            // Prevent unnecessary re-renders if profile hasn't changed
+            if (JSON.stringify(prevProfile) !== JSON.stringify(newProfile)) {
+                return newProfile;
+            }
+            return prevProfile;
+        });
       }
     });
 
