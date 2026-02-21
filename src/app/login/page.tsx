@@ -57,9 +57,12 @@ export default function LoginPage() {
                 case 'auth/cancelled-popup-request':
                     description = "The sign-in flow was cancelled. Please try again.";
                     break;
+                case 'auth/operation-not-allowed':
+                    description = "Google Sign-In is not enabled for this project. Please go to the Firebase Console, select your project, go to Authentication > Sign-in method, and enable the Google provider.";
+                    break;
                 case 'auth/internal-error':
                 case 'auth/auth-domain-config-required':
-                    description = "Your Firebase project is not configured correctly for Google Sign-In. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication and that your domain is added to the authorized domains list. If the problem persists, it may be a temporary Firebase service issue.";
+                    description = "Your Firebase project is not configured correctly for Google Sign-In. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure your domain is added to the authorized domains list in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
                     break;
                 default:
                     description = error.message;
