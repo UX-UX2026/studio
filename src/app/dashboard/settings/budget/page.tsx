@@ -144,22 +144,60 @@ export default function BudgetPage() {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                let rows: (string|number)[][];
-                const fileExtension = file.name.split('.').pop()?.toLowerCase();
-
                 const data = e.target?.result;
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false });
                 const sheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[sheetName];
-                rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                const allRows: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
 
-                if (rows.length < 2) throw new Error("File must have a header and at least one data row.");
+                let startRow = -1;
+                let endRow = allRows.length;
 
-                const headers = (rows[0] as string[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
+                for (let i = 0; i < allRows.length; i++) {
+                    const row = allRows[i];
+                    if (startRow === -1 && row.some(cell => typeof cell === 'string' && cell.includes('Actuals vs Budget'))) {
+                        startRow = i;
+                    }
+                    if (row.some(cell => typeof cell === 'string' && cell.includes('Subtotal cash expenses'))) {
+                        endRow = i;
+                        break; // Stop once we find the subtotal
+                    }
+                }
                 
-                setParsedFileData(rows);
-                setFileHeaders(headers);
-                setFilePreview(rows.slice(1, 4));
+                let rowsToParse: (string|number|null)[][];
+                if (startRow !== -1) {
+                    // We found the markers, so we slice the data accordingly.
+                    // Headers are the next row, data starts after that.
+                    rowsToParse = allRows.slice(startRow + 1, endRow);
+                } else {
+                    // Fallback to old behavior if markers are not found
+                    rowsToParse = allRows;
+                }
+
+                if (rowsToParse.filter(r => r.some(c => c !== null && c !== '')).length < 2) {
+                    throw new Error("File must have a header and at least one data row. If using markers, check content between 'Actuals vs Budget' and 'Subtotal cash expenses'.");
+                }
+
+                // Find first non-empty row to be the header
+                let headerIndex = -1;
+                for(let i=0; i < rowsToParse.length; i++) {
+                    if (rowsToParse[i].some(c => c !== null && c !== '')) {
+                        headerIndex = i;
+                        break;
+                    }
+                }
+                
+                if(headerIndex === -1) throw new Error("Could not find a valid header row.");
+
+                const headerRow = rowsToParse[headerIndex];
+                const dataRows = rowsToParse.slice(headerIndex + 1);
+
+                const headers = (headerRow as (string|null)[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
+                const fileDataForParsing = [headerRow, ...dataRows];
+
+                setParsedFileData(fileDataForParsing.map(row => row.map(cell => cell === null ? "" : cell)));
+                setFileHeaders(headers.filter(h => h));
+                setFilePreview(dataRows.slice(0, 3).map(row => row.map(cell => cell === null ? "" : cell)));
 
                 // Guess mappings
                 const guessMapping = (h: string) => {
@@ -224,8 +262,8 @@ export default function BudgetPage() {
             return;
         }
 
-        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
-        const newMonthHeaders = fileHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
+        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => fileHeaders.indexOf(fileHeaders.find(h => h === forecastStart)!)+i);
+        const newMonthHeaders = fileHeaders.slice(fileHeaders.indexOf(forecastStart), fileHeaders.indexOf(forecastEnd) + 1);
         
         try {
             const newItems: Omit<BudgetItem, 'id'>[] = parsedFileData.slice(1).map(row => {
@@ -398,7 +436,7 @@ export default function BudgetPage() {
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None (will be calculated)</SelectItem>
-                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
