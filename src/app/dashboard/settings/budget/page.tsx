@@ -341,10 +341,11 @@ export default function BudgetPage() {
                 };
             }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
-            if (budgetItems) {
-                for (const item of budgetItems) {
-                    await deleteDoc(doc(firestore, 'budgets', item.id));
-                }
+            // Atomically delete old items and add new ones
+            const existingBudgetsQuery = query(collection(firestore, 'budgets'), where('departmentId', '==', selectedDepartmentId));
+            const existingBudgetsSnapshot = await getDocs(existingBudgetsQuery);
+            for (const docToDelete of existingBudgetsSnapshot.docs) {
+                await deleteDoc(doc(firestore, 'budgets', docToDelete.id));
             }
 
             const deptRef = doc(firestore, 'departments', selectedDepartmentId);
@@ -367,7 +368,7 @@ export default function BudgetPage() {
             setIsMappingDialogOpen(false);
         } catch (error: any) {
              console.error("Budget Import Error:", error);
-             toast({ variant: "destructive", title: "Import Failed", description: error.message || "An error occurred during import." });
+             toast({ variant: "destructive", title: "Import Failed", description: error.message || "An unknown error occurred during the import process. Check console for details." });
         }
     };
 
