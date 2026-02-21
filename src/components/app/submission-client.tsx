@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Wand2, Upload, Download } from "lucide-react";
+import { Lock, Plus, Trash2, Wand2, Upload, Download, Calendar as CalendarIcon } from "lucide-react";
 import {
   suggestProcurementCategory,
   SuggestProcurementCategoryOutput,
@@ -32,6 +32,8 @@ import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
 
 
 type Item = {
@@ -98,14 +100,10 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const currentYear = new Date().getFullYear();
-const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock data year format
-
-
 export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
   const [items, setItems] = useState<Item[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState(periods[1]); // Default to Feb 2026
+  const [selectedDate, setSelectedDate] = useState(new Date(new Date().getFullYear() + 2, 1, 1));
+  const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
   const { user } = useUser();
   
   const firestore = useFirestore();
@@ -432,30 +430,30 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         <div className="flex flex-col md:flex-row gap-4 items-end">
             <div className="grid w-full md:max-w-xs items-center gap-1.5">
                 <Label htmlFor="period">Procurement Period</Label>
-                 <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-                    <SelectTrigger id="period">
-                        <SelectValue placeholder="Select period" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {periods.map(p => {
-                            const statusInfo = periodStatuses[p];
-                            return (
-                                <SelectItem key={p} value={p}>
-                                    <div className="flex items-center gap-2">
-                                        {statusInfo && (
-                                            <span className={cn(
-                                                "h-2 w-2 rounded-full",
-                                                statusInfo.status === 'Completed' ? 'bg-green-500' : 'bg-yellow-500'
-                                            )} />
-                                        )}
-                                        {!statusInfo && <span className="h-2 w-2" />}
-                                        {p}
-                                    </div>
-                                </SelectItem>
-                            );
-                        })}
-                    </SelectContent>
-                </Select>
+                 <Popover>
+                    <PopoverTrigger asChild>
+                        <Button
+                            variant={"outline"}
+                            className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !selectedDate && "text-muted-foreground"
+                            )}
+                        >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                        <Calendar
+                            mode="single"
+                            selected={selectedDate}
+                            onSelect={(date) => {
+                                if(date) setSelectedDate(date)
+                            }}
+                            initialFocus
+                        />
+                    </PopoverContent>
+                </Popover>
             </div>
             {userRole === 'Administrator' ? (
                 <div className="grid w-full md:max-w-xs items-center gap-1.5">
