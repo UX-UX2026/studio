@@ -242,7 +242,7 @@ export default function DepartmentsPage() {
                             Add Department
                         </Button>
                     </div>
-                    <div className="overflow-auto">
+                    <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -317,4 +317,3 @@ export default function DepartmentsPage() {
         </>
     );
 }
-

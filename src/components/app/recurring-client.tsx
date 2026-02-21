@@ -197,48 +197,50 @@ export function RecurringClient() {
                     ))}
                 </div>
             ) : (
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Line Item</TableHead>
-                            <TableHead>Frequency</TableHead>
-                            <TableHead>Next Auto-Load</TableHead>
-                            <TableHead className="text-right">Amount</TableHead>
-                            <TableHead className="text-center w-[100px]">Active</TableHead>
-                            <TableHead className="text-center w-[80px]">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {items && items.map(item => (
-                            <TableRow key={item.id}>
-                                <TableCell>
-                                    <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" />
-                                </TableCell>
-                                <TableCell>
-                                    <Input defaultValue={item.category} onBlur={e => handleItemChange(item.id, 'category', e.target.value)} className="bg-transparent border-0" />
-                                </TableCell>
-                                <TableCell>
-                                    <Input defaultValue={item.frequency} onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" />
-                                </TableCell>
-                                <TableCell>
-                                    <Input defaultValue={item.nextLoad} onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" />
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <Input type="number" defaultValue={item.amount} onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" />
-                                </TableCell>
-                                <TableCell className="flex justify-center">
-                                    <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status"/>
-                                </TableCell>
-                                <TableCell className="text-center">
-                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
-                                        <Trash2 className="h-4 w-4 text-destructive"/>
-                                    </Button>
-                                </TableCell>
+                <div className="overflow-auto rounded-lg border">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Line Item</TableHead>
+                                <TableHead>Frequency</TableHead>
+                                <TableHead>Next Auto-Load</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead className="text-center w-[100px]">Active</TableHead>
+                                <TableHead className="text-center w-[80px]">Actions</TableHead>
                             </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                        </TableHeader>
+                        <TableBody>
+                            {items && items.map(item => (
+                                <TableRow key={item.id}>
+                                    <TableCell>
+                                        <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input defaultValue={item.category} onBlur={e => handleItemChange(item.id, 'category', e.target.value)} className="bg-transparent border-0" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input defaultValue={item.frequency} onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" />
+                                    </TableCell>
+                                    <TableCell>
+                                        <Input defaultValue={item.nextLoad} onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" />
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Input type="number" defaultValue={item.amount} onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" />
+                                    </TableCell>
+                                    <TableCell className="flex justify-center">
+                                        <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status"/>
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                                            <Trash2 className="h-4 w-4 text-destructive"/>
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </div>
             )}
         </div>
     );
