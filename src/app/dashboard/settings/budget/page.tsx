@@ -48,10 +48,6 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const excelDateToJSDate = (serial: number) => {
-    return new Date(Math.round((serial - 25569) * 86400 * 1000));
-};
-
 export default function BudgetPage() {
     const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
@@ -63,9 +59,10 @@ export default function BudgetPage() {
 
     // State for mapping dialog
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
-    const [originalFileData, setOriginalFileData] = useState<(string | number | null)[][]>([]);
+    const [originalFileData, setOriginalFileData] = useState<any[][]>([]);
     const [startRow, setStartRow] = useState(1);
     const [endRow, setEndRow] = useState(0);
+    const [isImporting, setIsImporting] = useState(false);
     const [columnMappings, setColumnMappings] = useState<{
         category: string;
         yearTotal: string;
@@ -118,14 +115,10 @@ export default function BudgetPage() {
         }
 
         const headerRow = originalFileData[headerRowIndex];
-        const headers = (headerRow as (string | number | null)[]).map(h => {
+        const headers = (headerRow as any[]).map(h => {
             if (h === null || h === undefined) return "";
-            // Check if it's an Excel date serial number
-            if (typeof h === 'number' && h > 30000 && h < 60000) {
-                const date = excelDateToJSDate(h);
-                if (!isNaN(date.getTime())) {
-                    return format(date, "MMM yyyy");
-                }
+            if (h instanceof Date) {
+                return format(h, "MMM yy");
             }
             return String(h);
         });
@@ -134,9 +127,20 @@ export default function BudgetPage() {
         const dataEndIndex = endRow > 0 ? endRow : originalFileData.length;
         const dataRows = originalFileData.slice(dataStartIndex, dataEndIndex);
 
+        const previewRows = dataRows.map(row => row.map(cell => {
+            if (cell === null || cell === undefined) return "";
+            if (cell instanceof Date) {
+                return format(cell, "yyyy-MM-dd");
+            }
+            if (typeof cell === 'number') {
+                return cell.toLocaleString();
+            }
+            return String(cell);
+        }));
+
         return {
             derivedHeaders: headers,
-            derivedPreview: dataRows.map(row => row.map(cell => cell === null ? "" : cell)),
+            derivedPreview: previewRows,
             dataRowsForImport: dataRows,
         };
     }, [originalFileData, startRow, endRow]);
@@ -225,8 +229,7 @@ export default function BudgetPage() {
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                // IMPORTANT: Use raw: true to get raw Excel values (e.g., numbers for dates)
-                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: true });
+                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
@@ -242,14 +245,12 @@ export default function BudgetPage() {
                     });
                 }
                 
-                // Filter out hidden rows and columns from the raw data
                 const visibleData = allData
                     .filter((_, i) => !hiddenRowIndices.has(i))
                     .map(row => row.filter((_, i) => !hiddenColIndices.has(i)));
                 
                 setOriginalFileData(visibleData);
 
-                // Set sensible defaults for the user to adjust.
                 setStartRow(1);
                 setEndRow(visibleData.length);
                 
@@ -267,44 +268,49 @@ export default function BudgetPage() {
     
     const handleConfirmImport = async () => {
         if (!user || !firestore) return;
-        const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
-
-        const stringifiedHeaders = derivedHeaders.map(h => String(h));
-
-        const categoryIndex = stringifiedHeaders.indexOf(category);
-        const yearTotalIndex = yearTotal ? stringifiedHeaders.indexOf(yearTotal) : -1;
-        const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
-        const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
-
-
-        if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
-            toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category' and 'Forecast' columns." });
-            return;
-        }
-        
-        if (forecastStartIndex > forecastEndIndex) {
-            toast({ variant: "destructive", title: "Invalid Range", description: "The 'Forecast Start Column' must come before the 'Forecast End Column'." });
-            return;
-        }
-
-        const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
-        
+        setIsImporting(true);
         try {
+            const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
+
+            const stringifiedHeaders = derivedHeaders.map(h => String(h));
+
+            const categoryIndex = stringifiedHeaders.indexOf(category);
+            const yearTotalIndex = yearTotal ? stringifiedHeaders.indexOf(yearTotal) : -1;
+            const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
+            const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
+
+
+            if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
+                toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category' and 'Forecast' columns." });
+                return;
+            }
+            
+            if (forecastStartIndex > forecastEndIndex) {
+                toast({ variant: "destructive", title: "Invalid Range", description: "The 'Forecast Start Column' must come before the 'Forecast End Column'." });
+                return;
+            }
+            if (startRow > endRow && endRow !== 0) {
+                toast({ variant: 'destructive', title: 'Invalid Range', description: 'Start row cannot be after end row.' });
+                return;
+            }
+
+            const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
+        
             const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
 
             const newItems: Omit<BudgetItem, 'id'>[] = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
-                if (!categoryValue) return null; // Skip empty rows
+                if (!categoryValue) return null;
 
                 const forecasts = forecastIndices.map(index => {
                     const forecastValueRaw = row[index];
-                    return parseFloat(String(forecastValueRaw || '0').replace(/,/g, '')) || 0;
+                    return typeof forecastValueRaw === 'number' ? forecastValueRaw : 0;
                 });
                 
                 let yearTotalValue: number;
                 if (yearTotalIndex !== -1) {
                     const yearTotalValueRaw = row[yearTotalIndex];
-                    yearTotalValue = parseFloat(String(yearTotalValueRaw || '0').replace(/,/g, '')) || 0;
+                    yearTotalValue = typeof yearTotalValueRaw === 'number' ? yearTotalValueRaw : 0;
                 } else {
                     yearTotalValue = forecasts.reduce((sum, current) => sum + current, 0);
                 }
@@ -318,7 +324,6 @@ export default function BudgetPage() {
                 };
             }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
-            // Atomically delete old items and add new ones
             const existingBudgetsQuery = query(collection(firestore, 'budgets'), where('departmentId', '==', selectedDepartmentId));
             const existingBudgetsSnapshot = await getDocs(existingBudgetsQuery);
             for (const docToDelete of existingBudgetsSnapshot.docs) {
@@ -346,6 +351,8 @@ export default function BudgetPage() {
         } catch (error: any) {
              console.error("Budget Import Error:", error);
              toast({ variant: "destructive", title: "Import Failed", description: error.message || "An unknown error occurred during the import process. Check console for details." });
+        } finally {
+            setIsImporting(false);
         }
     };
 
@@ -541,7 +548,7 @@ export default function BudgetPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {derivedPreview.map((row, rowIndex) => (
+                                        {derivedPreview.slice(0, 100).map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
                                                 {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{String(cell)}</TableCell>)}
                                             </TableRow>
@@ -553,7 +560,10 @@ export default function BudgetPage() {
                     </div>
                     <DialogFooter className="border-t pt-4">
                         <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Cancel</Button>
-                        <Button onClick={handleConfirmImport}>Confirm & Import</Button>
+                        <Button onClick={handleConfirmImport} disabled={isImporting}>
+                             {isImporting && <Loader className="h-4 w-4 mr-2 animate-spin" />}
+                            Confirm & Import
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
