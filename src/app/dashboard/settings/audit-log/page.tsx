@@ -91,7 +91,7 @@ export default function DatabaseLogPage() {
                                 <TableHead>Action</TableHead>
                                 <TableHead>Target</TableHead>
                                 <TableHead>Details</TableHead>
-                                <TableHead className="w-[200px] text-right">Date</TableHead>
+                                <TableHead className="w-[150px] text-right">Date</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -116,7 +116,7 @@ export default function DatabaseLogPage() {
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">{log.details}</TableCell>
                                         <TableCell className="text-right text-muted-foreground">
-                                            {log.timestamp ? format(new Date(log.timestamp.seconds * 1000), "dd MMM yyyy, HH:mm") : 'N/A'}
+                                            {log.timestamp ? format(new Date(log.timestamp.seconds * 1000), "MMM dd") : 'N/A'}
                                         </TableCell>
                                     </TableRow>
                                 ))
