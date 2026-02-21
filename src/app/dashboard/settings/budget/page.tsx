@@ -209,7 +209,7 @@ export default function BudgetPage() {
         const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
         const categoryIndex = fileHeaders.indexOf(category);
-        const yearTotalIndex = fileHeaders.indexOf(yearTotal);
+        const yearTotalIndex = yearTotal ? fileHeaders.indexOf(yearTotal) : -1;
         const forecastStartIndex = fileHeaders.indexOf(forecastStart);
         const forecastEndIndex = fileHeaders.indexOf(forecastEnd);
 
@@ -229,16 +229,23 @@ export default function BudgetPage() {
         
         try {
             const newItems: Omit<BudgetItem, 'id'>[] = parsedFileData.slice(1).map(row => {
-                const values = row.map(v => String(v || '').trim().replace(/"/g, ''));
-                const categoryValue = values[categoryIndex];
+                const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
                 if (!categoryValue) return null; // Skip empty rows
 
-                const yearTotalValue = yearTotalIndex !== -1 ? (parseFloat(values[yearTotalIndex]) || 0) : 0;
-                
                 const forecasts = forecastIndices.map(index => {
-                    const forecastValue = values[index];
-                    return parseFloat(String(forecastValue).replace(/,/g, '')) || 0;
+                    const forecastValueRaw = row[index];
+                    // Handle potential non-numeric values gracefully
+                    return parseFloat(String(forecastValueRaw || '0').replace(/,/g, '')) || 0;
                 });
+                
+                let yearTotalValue: number;
+                if (yearTotalIndex !== -1) {
+                    const yearTotalValueRaw = row[yearTotalIndex];
+                    yearTotalValue = parseFloat(String(yearTotalValueRaw || '0').replace(/,/g, '')) || 0;
+                } else {
+                    // If no year total column is mapped, calculate it from forecasts
+                    yearTotalValue = forecasts.reduce((sum, current) => sum + current, 0);
+                }
 
                 return {
                     departmentId: selectedDepartmentId,
@@ -250,14 +257,17 @@ export default function BudgetPage() {
             }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
             if (budgetItems) {
+                // Clear existing budget items for the department
                 for (const item of budgetItems) {
                     await deleteDoc(doc(firestore, 'budgets', item.id));
                 }
             }
 
+            // Update department with new month headers
             const deptRef = doc(firestore, 'departments', selectedDepartmentId);
             await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
 
+            // Add new budget items
             for (const item of newItems) {
                 await addDoc(collection(firestore, 'budgets'), item);
             }
@@ -389,10 +399,9 @@ export default function BudgetPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Year Total Column (Optional)</Label>
-                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === '--none--' ? '' : v }))}>
+                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                         <SelectItem value="--none--">None</SelectItem>
                                         {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -458,4 +467,3 @@ export default function BudgetPage() {
         </>
     );
 }
-
