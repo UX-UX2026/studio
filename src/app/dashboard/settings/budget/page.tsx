@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 
 type Department = {
     id: string;
@@ -56,9 +57,9 @@ export default function BudgetPage() {
 
     // State for mapping dialog
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
-    const [fileHeaders, setFileHeaders] = useState<string[]>([]);
-    const [filePreview, setFilePreview] = useState<(string|number)[][]>([]);
-    const [parsedFileData, setParsedFileData] = useState<(string|number)[][]>([]);
+    const [originalFileData, setOriginalFileData] = useState<(string | number | null)[][]>([]);
+    const [startRow, setStartRow] = useState(1);
+    const [endRow, setEndRow] = useState(0);
     const [columnMappings, setColumnMappings] = useState<{
         category: string;
         yearTotal: string;
@@ -100,6 +101,77 @@ export default function BudgetPage() {
 
     const selectedDepartmentName = selectedDepartment?.name || '';
 
+    const { derivedHeaders, derivedPreview, derivedDataForImport } = useMemo(() => {
+        if (!originalFileData || originalFileData.length === 0 || startRow === 0) {
+            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+        }
+
+        const startIndex = startRow > 0 ? startRow - 1 : 0;
+        const endIndex = endRow > 0 ? endRow : originalFileData.length;
+        const rowsToParse = originalFileData.slice(startIndex, endIndex);
+
+        if (rowsToParse.filter(r => r && r.some(c => c !== null && c !== '')).length < 1) {
+            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+        }
+
+        let headerIndex = -1;
+        for (let i = 0; i < rowsToParse.length; i++) {
+            if (rowsToParse[i] && rowsToParse[i].some(c => c !== null && c !== '')) {
+                headerIndex = i;
+                break;
+            }
+        }
+
+        if (headerIndex === -1) {
+            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+        }
+
+        const headerRow = rowsToParse[headerIndex];
+        const dataRows = rowsToParse.slice(headerIndex + 1);
+        const headers = (headerRow as (string | null)[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
+
+        return {
+            derivedHeaders: headers,
+            derivedPreview: dataRows.slice(0, 3).map(row => row.map(cell => cell === null ? "" : cell)),
+            derivedDataForImport: [headerRow, ...dataRows].map(row => row.map(cell => cell === null ? "" : cell)),
+        };
+    }, [originalFileData, startRow, endRow]);
+
+    useEffect(() => {
+        if (derivedHeaders.length === 0) return;
+
+        const guessMapping = (h: string) => {
+            if (!h) return null;
+            const lowerH = h.toLowerCase().trim();
+            if (['category', 'line item', 'description', 'expenses'].includes(lowerH)) return 'category';
+            if (['yeartotal', 'year total', 'total'].includes(lowerH)) return 'yearTotal';
+            const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
+            return null;
+        }
+
+        let initialMappings = { category: '', yearTotal: '', forecastStart: '', forecastEnd: '' };
+        const forecastColumns: string[] = [];
+
+        derivedHeaders.forEach(h => {
+            if (!h) return;
+            const mapping = guessMapping(h);
+            if (mapping === 'category' && !initialMappings.category) {
+                initialMappings.category = h;
+            } else if (mapping === 'yearTotal' && !initialMappings.yearTotal) {
+                initialMappings.yearTotal = h;
+            } else if (mapping === 'forecast') {
+                forecastColumns.push(h);
+            }
+        });
+        
+        if (forecastColumns.length > 0) {
+            initialMappings.forecastStart = forecastColumns[0];
+            initialMappings.forecastEnd = forecastColumns[forecastColumns.length - 1];
+        }
+
+        setColumnMappings(initialMappings);
+    }, [derivedHeaders]);
 
     const handleImportClick = () => {
         if (!selectedDepartmentId) {
@@ -146,91 +218,47 @@ export default function BudgetPage() {
             try {
                 const data = e.target?.result;
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const allRows: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                let startRow = -1;
-                let endRow = allRows.length;
+                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+                
+                const hiddenRowIndices = new Set<number>();
+                if (worksheet['!rows']) {
+                    worksheet['!rows'].forEach((row, i) => {
+                        if (row && row.hidden) hiddenRowIndices.add(i);
+                    });
+                }
 
-                for (let i = 0; i < allRows.length; i++) {
-                    const row = allRows[i];
-                    if (startRow === -1 && row.some(cell => typeof cell === 'string' && cell.includes('Actuals vs Budget'))) {
-                        startRow = i;
+                const hiddenColIndices = new Set<number>();
+                if (worksheet['!cols']) {
+                    worksheet['!cols'].forEach((col, i) => {
+                        if (col && col.hidden) hiddenColIndices.add(i);
+                    });
+                }
+
+                const visibleData = allData
+                    .filter((_, i) => !hiddenRowIndices.has(i))
+                    .map(row => row.filter((_, i) => !hiddenColIndices.has(i)));
+                
+                setOriginalFileData(visibleData);
+
+                let startRowIndex = -1;
+                let endRowIndex = visibleData.length;
+
+                for (let i = 0; i < visibleData.length; i++) {
+                    const row = visibleData[i];
+                    if (startRowIndex === -1 && row.some(cell => typeof cell === 'string' && cell.includes('Actuals vs Budget'))) {
+                        startRowIndex = i;
                     }
                     if (row.some(cell => typeof cell === 'string' && cell.includes('Subtotal cash expenses'))) {
-                        endRow = i;
-                        break; // Stop once we find the subtotal
+                        endRowIndex = i;
+                        break; 
                     }
                 }
                 
-                let rowsToParse: (string|number|null)[][];
-                if (startRow !== -1) {
-                    // We found the markers, so we slice the data accordingly.
-                    // Headers are the next row, data starts after that.
-                    rowsToParse = allRows.slice(startRow + 1, endRow);
-                } else {
-                    // Fallback to old behavior if markers are not found
-                    rowsToParse = allRows;
-                }
-
-                if (rowsToParse.filter(r => r.some(c => c !== null && c !== '')).length < 2) {
-                    throw new Error("File must have a header and at least one data row. If using markers, check content between 'Actuals vs Budget' and 'Subtotal cash expenses'.");
-                }
-
-                // Find first non-empty row to be the header
-                let headerIndex = -1;
-                for(let i=0; i < rowsToParse.length; i++) {
-                    if (rowsToParse[i].some(c => c !== null && c !== '')) {
-                        headerIndex = i;
-                        break;
-                    }
-                }
+                setStartRow(startRowIndex !== -1 ? startRowIndex + 1 : 1);
+                setEndRow(endRowIndex < visibleData.length ? endRowIndex : visibleData.length);
                 
-                if(headerIndex === -1) throw new Error("Could not find a valid header row.");
-
-                const headerRow = rowsToParse[headerIndex];
-                const dataRows = rowsToParse.slice(headerIndex + 1);
-
-                const headers = (headerRow as (string|null)[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
-                const fileDataForParsing = [headerRow, ...dataRows];
-
-                setParsedFileData(fileDataForParsing.map(row => row.map(cell => cell === null ? "" : cell)));
-                setFileHeaders(headers.filter(h => h));
-                setFilePreview(dataRows.slice(0, 3).map(row => row.map(cell => cell === null ? "" : cell)));
-
-                // Guess mappings
-                const guessMapping = (h: string) => {
-                    if (!h) return null;
-                    const lowerH = h.toLowerCase().trim();
-                    if (['category', 'line item', 'description', 'expenses'].includes(lowerH)) return 'category';
-                    if (['yeartotal', 'year total', 'total'].includes(lowerH)) return 'yearTotal';
-                    const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
-                    if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
-                    return null;
-                }
-
-                let initialMappings = { category: '', yearTotal: '', forecastStart: '', forecastEnd: '' };
-                const forecastColumns: string[] = [];
-
-                headers.forEach(h => {
-                    if (!h) return;
-                    const mapping = guessMapping(h);
-                    if (mapping === 'category' && !initialMappings.category) {
-                        initialMappings.category = h;
-                    } else if (mapping === 'yearTotal' && !initialMappings.yearTotal) {
-                        initialMappings.yearTotal = h;
-                    } else if (mapping === 'forecast') {
-                        forecastColumns.push(h);
-                    }
-                });
-                
-                if (forecastColumns.length > 0) {
-                    initialMappings.forecastStart = forecastColumns[0];
-                    initialMappings.forecastEnd = forecastColumns[forecastColumns.length - 1];
-                }
-
-                setColumnMappings(initialMappings);
                 setIsMappingDialogOpen(true);
 
             } catch (error: any) {
@@ -246,10 +274,10 @@ export default function BudgetPage() {
     const handleConfirmImport = async () => {
         const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
-        const categoryIndex = fileHeaders.indexOf(category);
-        const yearTotalIndex = yearTotal ? fileHeaders.indexOf(yearTotal) : -1;
-        const forecastStartIndex = fileHeaders.indexOf(forecastStart);
-        const forecastEndIndex = fileHeaders.indexOf(forecastEnd);
+        const categoryIndex = derivedHeaders.indexOf(category);
+        const yearTotalIndex = yearTotal ? derivedHeaders.indexOf(yearTotal) : -1;
+        const forecastStartIndex = derivedHeaders.indexOf(forecastStart);
+        const forecastEndIndex = derivedHeaders.indexOf(forecastEnd);
 
 
         if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
@@ -262,11 +290,15 @@ export default function BudgetPage() {
             return;
         }
 
-        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => fileHeaders.indexOf(fileHeaders.find(h => h === forecastStart)!)+i);
-        const newMonthHeaders = fileHeaders.slice(fileHeaders.indexOf(forecastStart), fileHeaders.indexOf(forecastEnd) + 1);
+        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => derivedHeaders.indexOf(derivedHeaders.find(h => h === forecastStart)!) + i);
+        const newMonthHeaders = derivedHeaders.slice(derivedHeaders.indexOf(forecastStart), derivedHeaders.indexOf(forecastEnd) + 1);
         
         try {
-            const newItems: Omit<BudgetItem, 'id'>[] = parsedFileData.slice(1).map(row => {
+            // Find header row in derived data to slice correctly
+            const headerRowInDerived = derivedDataForImport.find(row => row.includes(category));
+            const dataRowsForImport = headerRowInDerived ? derivedDataForImport.slice(derivedDataForImport.indexOf(headerRowInDerived) + 1) : [];
+
+            const newItems: Omit<BudgetItem, 'id'>[] = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
                 if (!categoryValue) return null; // Skip empty rows
 
@@ -416,17 +448,28 @@ export default function BudgetPage() {
                     <DialogHeader>
                         <DialogTitle>Map Your File Columns</DialogTitle>
                         <DialogDescription>
-                            Match the columns from your file to the required budget fields. We've tried to guess the mappings for you.
+                            Define the data range and match the columns from your file to the required budget fields. Hidden rows/columns are ignored.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex-1 space-y-6 py-4 overflow-y-auto pr-2">
+                        <div className="grid grid-cols-2 gap-4 border-b pb-6">
+                           <div className="space-y-2">
+                                <Label>Start Row</Label>
+                                <Input type="number" value={startRow} onChange={e => setStartRow(parseInt(e.target.value) || 1)} min={1} />
+                            </div>
+                            <div className="space-y-2">
+                                <Label>End Row (0 for end of file)</Label>
+                                <Input type="number" value={endRow} onChange={e => setEndRow(parseInt(e.target.value) || 0)} min={0} />
+                            </div>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                            <div className="space-y-2">
                                 <Label>Category / Line Item Column</Label>
                                 <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -436,7 +479,7 @@ export default function BudgetPage() {
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None (will be calculated)</SelectItem>
-                                        {fileHeaders.map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -445,7 +488,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -454,7 +497,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -466,10 +509,10 @@ export default function BudgetPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            {fileHeaders.map((header, i) => {
-                                                if (!header && fileHeaders.every(h => !h)) return null;
-                                                const forecastStartIndex = fileHeaders.indexOf(columnMappings.forecastStart);
-                                                const forecastEndIndex = fileHeaders.indexOf(columnMappings.forecastEnd);
+                                            {derivedHeaders.map((header, i) => {
+                                                if (!header && derivedHeaders.every(h => !h)) return null;
+                                                const forecastStartIndex = derivedHeaders.indexOf(columnMappings.forecastStart);
+                                                const forecastEndIndex = derivedHeaders.indexOf(columnMappings.forecastEnd);
                                                 
                                                 return (
                                                     <TableHead key={`${header}-${i}`} className={cn(
@@ -482,7 +525,7 @@ export default function BudgetPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {filePreview.map((row, rowIndex) => (
+                                        {derivedPreview.map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
                                                 {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{String(cell)}</TableCell>)}
                                             </TableRow>
