@@ -234,7 +234,6 @@ export default function BudgetPage() {
 
                 const forecasts = forecastIndices.map(index => {
                     const forecastValueRaw = row[index];
-                    // Handle potential non-numeric values gracefully
                     return parseFloat(String(forecastValueRaw || '0').replace(/,/g, '')) || 0;
                 });
                 
@@ -243,7 +242,6 @@ export default function BudgetPage() {
                     const yearTotalValueRaw = row[yearTotalIndex];
                     yearTotalValue = parseFloat(String(yearTotalValueRaw || '0').replace(/,/g, '')) || 0;
                 } else {
-                    // If no year total column is mapped, calculate it from forecasts
                     yearTotalValue = forecasts.reduce((sum, current) => sum + current, 0);
                 }
 
@@ -257,17 +255,14 @@ export default function BudgetPage() {
             }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
             if (budgetItems) {
-                // Clear existing budget items for the department
                 for (const item of budgetItems) {
                     await deleteDoc(doc(firestore, 'budgets', item.id));
                 }
             }
 
-            // Update department with new month headers
             const deptRef = doc(firestore, 'departments', selectedDepartmentId);
             await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
 
-            // Add new budget items
             for (const item of newItems) {
                 await addDoc(collection(firestore, 'budgets'), item);
             }
@@ -379,14 +374,14 @@ export default function BudgetPage() {
             </Card>
             
             <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
-                <DialogContent className="max-w-4xl">
+                <DialogContent className="max-w-4xl flex flex-col max-h-[90dvh]">
                     <DialogHeader>
                         <DialogTitle>Map Your File Columns</DialogTitle>
                         <DialogDescription>
                             Match the columns from your file to the required budget fields. We've tried to guess the mappings for you.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="space-y-6 py-4">
+                    <div className="flex-1 space-y-6 py-4 overflow-y-auto pr-2">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                            <div className="space-y-2">
                                 <Label>Category / Line Item Column</Label>
@@ -399,9 +394,10 @@ export default function BudgetPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Year Total Column (Optional)</Label>
-                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
+                                <Select value={columnMappings.yearTotal || ''} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === 'none' ? '' : v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="none">None (will be calculated)</SelectItem>
                                         {fileHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -450,7 +446,7 @@ export default function BudgetPage() {
                                     <TableBody>
                                         {filePreview.map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
-                                                {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{cell}</TableCell>)}
+                                                {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{String(cell)}</TableCell>)}
                                             </TableRow>
                                         ))}
                                     </TableBody>
@@ -458,7 +454,7 @@ export default function BudgetPage() {
                             </div>
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="border-t pt-4">
                         <Button variant="outline" onClick={() => setIsMappingDialogOpen(false)}>Cancel</Button>
                         <Button onClick={handleConfirmImport}>Confirm & Import</Button>
                     </DialogFooter>

@@ -272,7 +272,7 @@ export default function VendorsPage() {
                             Add Vendor
                         </Button>
                     </div>
-                    <div className="overflow-auto">
+                    <div className="overflow-auto border rounded-lg">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -314,14 +314,14 @@ export default function VendorsPage() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent className="sm:max-w-[500px] flex flex-col max-h-[90dvh]">
                     <DialogHeader>
                         <DialogTitle>{editingVendor ? 'Edit' : 'Add'} Vendor</DialogTitle>
                         <DialogDescription>
                             Fill in the details for the vendor. Click save when you're done.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
+                    <div className="flex-1 grid gap-4 py-4 overflow-y-auto pr-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">Name</Label>
                             <Input id="name" value={name} onChange={e => setName(e.target.value)} className="col-span-3" required />
@@ -368,7 +368,7 @@ export default function VendorsPage() {
                             </Select>
                         </div>
                     </div>
-                    <DialogFooter>
+                    <DialogFooter className="border-t pt-4">
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
@@ -379,4 +379,3 @@ export default function VendorsPage() {
         </>
     );
 }
-

@@ -484,8 +484,8 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
           </div>
       )}
 
-      <div className="-mx-6 overflow-auto">
-        <Table className="min-w-[1200px]">
+      <div className="overflow-auto border rounded-lg">
+        <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-[100px]">Type</TableHead>
@@ -636,4 +636,3 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     </div>
   );
 }
-

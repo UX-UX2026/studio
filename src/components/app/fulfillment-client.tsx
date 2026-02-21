@@ -146,7 +146,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
 
   return (
     <>
-      <div className="overflow-auto">
+      <div className="overflow-auto border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
@@ -255,25 +255,27 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       </Dialog>
       
       <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
-          <DialogContent>
+          <DialogContent className="flex flex-col max-h-[90dvh]">
               <DialogHeader>
                   <DialogTitle>Feedback for {selectedItem?.item}</DialogTitle>
                   <DialogDescription>View history and add new comments.</DialogDescription>
               </DialogHeader>
-              <div className="max-h-[300px] overflow-y-auto space-y-4 p-1">
-                  {selectedItem?.fulfillmentComments && selectedItem.fulfillmentComments.length > 0 ? (
-                      selectedItem.fulfillmentComments.map((comment, index) => (
-                           <div key={index} className="text-sm p-3 rounded-md bg-muted">{comment}</div>
-                      ))
-                  ) : (
-                      <p className="text-sm text-muted-foreground text-center py-4">No comments yet.</p>
-                  )}
+              <div className="flex-1 overflow-y-auto pr-4">
+                <div className="space-y-4">
+                    {selectedItem?.fulfillmentComments && selectedItem.fulfillmentComments.length > 0 ? (
+                        selectedItem.fulfillmentComments.map((comment, index) => (
+                             <div key={index} className="text-sm p-3 rounded-md bg-muted">{comment}</div>
+                        ))
+                    ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No comments yet.</p>
+                    )}
+                </div>
+                <div className="grid gap-2 pt-4">
+                    <Label htmlFor="comment">Add Comment</Label>
+                    <Textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} disabled={!canEdit}/>
+                </div>
               </div>
-              <div className="grid gap-2 pt-4">
-                  <Label htmlFor="comment">Add Comment</Label>
-                  <Textarea id="comment" value={newComment} onChange={e => setNewComment(e.target.value)} disabled={!canEdit}/>
-              </div>
-              <DialogFooter>
+              <DialogFooter className="border-t pt-4">
                   <Button variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
                   <Button onClick={handleAddComment} disabled={!canEdit}>Save Comment</Button>
               </DialogFooter>
