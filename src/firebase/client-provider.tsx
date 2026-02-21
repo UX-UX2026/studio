@@ -3,39 +3,45 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { app, auth, firestore } from './client';
-import { enableIndexedDbPersistence } from 'firebase/firestore';
+import { enableIndexedDbPersistence, getDoc, doc } from 'firebase/firestore';
 import { Loader } from 'lucide-react';
 
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [isPersistenceReady, setIsPersistenceReady] = useState(false);
 
   useEffect(() => {
-    // enableIndexedDbPersistence() is async. We must wait for it to complete
-    // before rendering the rest of the app to prevent "client is offline" errors
-    // on the initial load.
-    enableIndexedDbPersistence(firestore)
-      .then(() => {
-        setIsPersistenceReady(true);
-      })
-      .catch((err) => {
+    const initializeFirebase = async () => {
+      try {
+        await enableIndexedDbPersistence(firestore);
+      } catch (err: any) {
         if (err.code === 'failed-precondition') {
-          // This is a normal scenario in a multi-tab environment.
-          // Persistence is already enabled in another tab, so we can proceed.
           console.warn('Firestore persistence failed: multiple tabs open. This is expected.');
         } else if (err.code === 'unimplemented') {
-          // The current browser does not support all of the features required for persistence.
           console.warn('Firestore persistence is not available in this browser. Proceeding without offline support.');
         } else {
             console.error("An unexpected error occurred while enabling persistence:", err);
         }
-        // In any case, we allow the app to continue rendering.
-        // The persistence just might not be enabled.
-        setIsPersistenceReady(true);
-      });
+      }
+
+      try {
+        // "Warm-up" read to ensure client is online before proceeding.
+        // We use a document that is publicly readable according to firestore.rules.
+        const metadataRef = doc(firestore, 'app', 'metadata');
+        await getDoc(metadataRef);
+      } catch(error) {
+          // This might fail if the user is truly offline for the first time
+          // and the cache is empty. We'll log it but proceed, as onSnapshot
+          // should handle retries.
+          console.warn("Firestore warm-up read failed. This can happen on first load when offline.", error);
+      }
+      
+      // After attempting persistence and warm-up, we declare Firebase ready.
+      setIsPersistenceReady(true);
+    };
+
+    initializeFirebase();
   }, []);
 
-  // This prevents any child components from attempting to use Firestore before
-  // the persistence layer is ready.
   if (!isPersistenceReady) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
