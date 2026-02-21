@@ -2,7 +2,7 @@
 
 import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // This is the public Firebase configuration for your web app.
 export const firebaseConfig = {
@@ -30,20 +30,8 @@ if (!getApps().length) {
 auth = getAuth(app);
 firestore = getFirestore(app);
 
-// Enable offline persistence. This helps manage the initial connection and
-// prevents "client is offline" errors by using a local cache.
-if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(firestore).catch((err) => {
-      if (err.code == 'failed-precondition') {
-          // Multiple tabs open, persistence can only be enabled in one tab at a time.
-          console.warn('Firestore persistence failed: multiple tabs open. This is a normal behavior.');
-      } else if (err.code == 'unimplemented') {
-          // The current browser does not support all of the features required to enable persistence
-          console.warn('Firestore persistence is not available in this browser.');
-      }
-  });
-}
-
+// Persistence is now handled in FirebaseClientProvider to ensure
+// it's enabled before any Firestore operations are attempted.
 
 // Export the initialized services as singletons.
 export { app, auth, firestore };
