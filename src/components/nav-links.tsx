@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -82,11 +81,12 @@ export function NavLinks({ role }: { role: UserRole }) {
           if (state === 'collapsed') {
             return (
               <SidebarMenuItem key={link.label}>
-                  <Link href={visibleSubLinks[0].href} legacyBehavior passHref>
-                      <SidebarMenuButton tooltip={link.label} isActive={isParentActive} asChild>
-                          <a><link.icon /><span>{link.label}</span></a>
-                      </SidebarMenuButton>
-                  </Link>
+                <SidebarMenuButton tooltip={link.label} isActive={isParentActive} asChild>
+                    <Link href={visibleSubLinks[0].href}>
+                      <link.icon />
+                      <span>{link.label}</span>
+                    </Link>
+                </SidebarMenuButton>
               </SidebarMenuItem>
             )
           }
@@ -107,14 +107,12 @@ export function NavLinks({ role }: { role: UserRole }) {
                         const isActive = pathname === subLink.href;
                         return (
                         <SidebarMenuSubItem key={subLink.href}>
-                            <Link href={subLink.href} legacyBehavior passHref>
-                                <SidebarMenuSubButton asChild isActive={isActive}>
-                                    <a>
-                                      {subLink.icon && <subLink.icon />}
-                                      {subLink.label}
-                                    </a>
-                                </SidebarMenuSubButton>
-                            </Link>
+                            <SidebarMenuSubButton asChild isActive={isActive}>
+                                <Link href={subLink.href}>
+                                  {subLink.icon && <subLink.icon />}
+                                  {subLink.label}
+                                </Link>
+                            </SidebarMenuSubButton>
                         </SidebarMenuSubItem>
                         )
                     })}
@@ -128,14 +126,12 @@ export function NavLinks({ role }: { role: UserRole }) {
         const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
         return (
           <SidebarMenuItem key={link.href}>
-            <Link href={link.href} legacyBehavior passHref>
-                <SidebarMenuButton tooltip={link.label} isActive={isActive} asChild>
-                    <a>
-                        <link.icon />
-                        <span>{link.label}</span>
-                    </a>
-                </SidebarMenuButton>
-            </Link>
+            <SidebarMenuButton tooltip={link.label} isActive={isActive} asChild>
+                <Link href={link.href}>
+                    <link.icon />
+                    <span>{link.label}</span>
+                </Link>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         );
       })}
