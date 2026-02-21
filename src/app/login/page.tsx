@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,13 +34,35 @@ export default function LoginPage() {
         setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
         try {
-            await signInWithRedirect(auth, provider);
+            await signInWithPopup(auth, provider);
+            // On success, the AuthenticationProvider will handle the redirect.
         } catch (error: any) {
-            console.error("Google sign-in redirect initiation error:", error);
-             toast({
+            console.error("Google Sign-In Error:", error);
+            let description = "An unexpected error occurred. Please try again.";
+            switch (error.code) {
+                case 'auth/operation-not-allowed':
+                    description = "Google Sign-In is not enabled for this project. Please go to the Firebase Console -> Authentication -> Sign-in method, and enable the Google provider.";
+                    break;
+                case 'auth/popup-blocked':
+                    description = "The sign-in pop-up was blocked by your browser. Please allow pop-ups for this site and try again.";
+                    break;
+                case 'auth/popup-closed-by-user':
+                    description = "You closed the sign-in window before completing the process. Please try again.";
+                    break;
+                case 'auth/unauthorized-domain':
+                    description = "This domain is not authorized to use Firebase Authentication. Please go to the Firebase Console -> Authentication -> Settings -> Authorized domains, and add this application's domain.";
+                    break;
+                case 'auth/internal-error':
+                    description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following: 1) In the Google Cloud Console, ensure the 'Identity Platform' API is enabled for your project. 2) Check your OAuth consent screen configuration. If it's in 'Testing' mode, add your email address as a test user.";
+                    break;
+                default:
+                    description = `An unknown error occurred. (Code: ${error.code})`;
+                    break;
+            }
+            toast({
                 variant: "destructive",
                 title: "Google Sign-In Failed",
-                description: "Could not start the Google sign-in process. Please try again.",
+                description: description,
             });
             setIsSubmitting(false);
         }
@@ -68,10 +90,10 @@ export default function LoginPage() {
                     description = "Email & Password sign-in is not enabled. Please enable it in the Firebase console.";
                     break;
                  case 'auth/internal-error':
-                    description = "An internal error occurred. This often indicates a misconfiguration in your Firebase project. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication. If the problem persists, it may be a temporary Firebase service issue.";
+                    description = "An internal Firebase error occurred. This can indicate a project misconfiguration. Please ensure the 'Identity Platform' API is enabled in your Google Cloud Console.";
                     break;
                 default:
-                    description = error.message;
+                    description = `An unknown error occurred. (Code: ${error.code})`;
             }
              toast({
                 variant: "destructive",
