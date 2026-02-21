@@ -52,6 +52,11 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     };
     const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
       setUser(authUser);
+      // If there's no user, we can immediately stop loading.
+      if (!authUser) {
+        setProfile(null);
+        setIsLoading(false);
+      }
     });
     return () => unsubscribe();
   }, [firebaseAuth]);
@@ -59,10 +64,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   // Effect 2: Handle Profile fetching, creation, and real-time updates.
   // This effect runs whenever the `user` object changes.
   useEffect(() => {
-    // If there's no authenticated user, we clear the profile and finish loading.
+    // If there's no authenticated user, we don't need to do anything.
     if (!user || !firestore) {
-      setProfile(null);
-      setIsLoading(false);
       return;
     }
 
@@ -80,10 +83,12 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           const isSpecialAdmin = user.email && testUsers.some(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
           if (isSpecialAdmin && profileData.role !== 'Administrator') {
             await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-            profileData.role = 'Administrator';
-            profileData.department = 'Executive';
+            // The snapshot listener will re-trigger with the updated role. We can just wait for that.
+            return;
           }
           setProfile(profileData);
+          setIsLoading(false); // SUCCESS: Profile is loaded.
+
         } else {
           // --- Profile does NOT exist, create it ---
           const metadataRef = doc(firestore, 'app', 'metadata');
@@ -110,9 +115,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           };
           
           await setDoc(userRef, newProfile);
-          // After setting, the onSnapshot listener will fire again with the new data,
-          // which will then call setProfile and finish loading.
-          return;
+          // After setting, the onSnapshot listener will fire again with the new data.
+          // We DO NOT set isLoading to false here. We wait for the next snapshot.
         }
       } catch (e: any) {
         console.error("Auth Provider: Error during profile setup (onSnapshot).", e);
@@ -121,10 +125,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           title: "Profile Error",
           description: `There was a problem loading your profile: ${e.message}`,
         });
-        await firebaseAuth.signOut();
-      } finally {
-        // Whether it succeeded or failed, the profile loading process is done for now.
-        setIsLoading(false);
+        if (firebaseAuth) await firebaseAuth.signOut();
+        setIsLoading(false); // ERROR: Stop loading on failure.
       }
     },
     // ---- onSnapshot Error Handler ----
@@ -135,8 +137,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             title: "Connection Error",
             description: "Could not connect to the database to load your profile. Please check your network and try again."
         });
-        firebaseAuth.signOut();
-        setIsLoading(false);
+        if (firebaseAuth) firebaseAuth.signOut();
+        setIsLoading(false); // ERROR: Stop loading on failure.
     });
 
     return () => unsubscribeProfile();
