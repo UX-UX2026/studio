@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { NavLinks } from "@/components/nav-links";
 import {
@@ -24,11 +24,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth, useFirestore } from "@/firebase";
+import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
-import { collection, getDocs, addDoc, query, where, serverTimestamp, limit } from "firebase/firestore";
-import { testUsers, testProcurementRequests } from "@/lib/test-data";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -36,98 +34,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const { user, profile, loading, role } = useUser();
   const router = useRouter();
   const auth = useAuth();
-  const firestore = useFirestore();
 
   const handleSignOut = async () => {
     await signOut(auth);
   };
-
-  useEffect(() => {
-    if (loading || !user || !firestore) {
-        return;
-    }
-    
-    const seedData = async () => {
-      try {
-        // Seed Departments
-        const deptsCol = collection(firestore, 'departments');
-        const defaultDepartments = [
-            { name: 'Executive', budget: 500000 },
-            { name: 'ICT', budget: 250000 },
-            { name: 'Marketing', budget: 150000 },
-            { name: 'Operations', budget: 300000 },
-            { name: 'Human Resources', budget: 100000 },
-            { name: 'Finance', budget: 120000 },
-        ];
-
-        for (const dept of defaultDepartments) {
-            const q = query(deptsCol, where('name', '==', dept.name));
-            const snapshot = await getDocs(q);
-            if (snapshot.empty) {
-                await addDoc(deptsCol, { ...dept, managerId: null });
-            }
-        }
-
-        // Seed Procurement Data
-        const requestsCol = collection(firestore, 'procurementRequests');
-        const q = query(requestsCol, limit(1));
-        const snapshot = await getDocs(q);
-
-        if (!snapshot.empty) {
-            return; // Data already exists
-        }
-
-        console.log("Seeding procurement test data...");
-
-        const usersCol = collection(firestore, 'users');
-        const usersSnapshot = await getDocs(usersCol);
-        const userMap = new Map<string, string>(); // email -> id
-        usersSnapshot.forEach(doc => {
-            userMap.set(doc.data().email.toLowerCase(), doc.id);
-        });
-        
-        const deptsColForSeed = collection(firestore, 'departments');
-        const deptsSnapshot = await getDocs(deptsColForSeed);
-        const deptMap = new Map<string, string>(); // name -> id
-        deptsSnapshot.forEach(doc => {
-            deptMap.set(doc.data().name, doc.id);
-        });
-
-        const requesterRay = testUsers.find(u => u.displayName === 'Requester Ray');
-        const managerMike = testUsers.find(u => u.displayName === 'Manager Mike');
-
-        for (const req of testProcurementRequests) {
-            let submittedById = null;
-            if (req.submittedBy === 'Requester Ray' && requesterRay) {
-                submittedById = userMap.get(requesterRay.email.toLowerCase());
-            } else if (req.submittedBy === 'Manager Mike' && managerMike) {
-                submittedById = userMap.get(managerMike.email.toLowerCase());
-            }
-
-            const departmentId = deptMap.get(req.department);
-
-            if (submittedById && departmentId) {
-                const finalRequest = {
-                    ...req,
-                    departmentId,
-                    submittedById,
-                    createdAt: serverTimestamp()
-                };
-
-                await addDoc(requestsCol, finalRequest);
-            } else {
-                 console.warn(`Could not seed request for ${req.department}. Missing user or department ID.`);
-            }
-        }
-      } catch (error) {
-        console.error("Data seeding error:", error);
-      }
-    };
-
-    seedData();
-
-  }, [loading, user, firestore]);
-
 
   if (loading || !user || !profile) {
     return (
