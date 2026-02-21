@@ -80,29 +80,33 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
           } else {
             // --- Profile does NOT exist, create it ---
-            let isAdmin = false;
-            try {
-                const metadataRef = doc(firestore, 'app', 'metadata');
-                const metadataSnap = await getDoc(metadataRef);
-                const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
-                if (needsAdminSetup) {
-                    isAdmin = true;
-                    await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-                }
-            } catch (e: any) {
-                if (e.code === 'unavailable') {
-                    console.warn("Could not check app metadata due to offline state. Assuming this is not the first admin setup.");
-                } else {
-                    throw e; // Re-throw other errors to be caught by the outer block
+            const isAdminEmail = user.email === 'heinrich@ubuntux.co.za';
+            let isFirstUserAdmin = false;
+
+            if (!isAdminEmail) {
+                try {
+                    const metadataRef = doc(firestore, 'app', 'metadata');
+                    const metadataSnap = await getDoc(metadataRef);
+                    if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+                        isFirstUserAdmin = true;
+                        await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
+                    }
+                } catch (e: any) {
+                    // This can happen if the client is offline. It's safe to just assume
+                    // this isn't the first admin setup and let the user log in as a requester.
+                    // The hardcoded admin email provides a failsafe.
+                    console.warn("Could not check app metadata, possibly due to offline state. Proceeding without first-user admin check.");
                 }
             }
             
+            const isNewUserAdmin = isAdminEmail || isFirstUserAdmin;
+
             const newProfile: Omit<UserProfile, 'id'> = {
               displayName: user.displayName || user.email?.split('@')[0] || 'New User',
               email: user.email!,
               photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-              role: isAdmin ? 'Administrator' : 'Requester',
-              department: isAdmin ? 'Executive' : 'Unassigned',
+              role: isNewUserAdmin ? 'Administrator' : 'Requester',
+              department: isNewUserAdmin ? 'Executive' : 'Unassigned',
               status: 'Active' as const,
             };
             
@@ -127,7 +131,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             title: "Profile Access Error",
             description: `Could not load your profile: ${error.message}. Please contact support.`
         });
-        if (firebaseAuth) firebaseAuth.signOut();
+        if (firebaseAuth) await firebaseAuth.signOut();
         setIsLoading(false);
       }
     );
