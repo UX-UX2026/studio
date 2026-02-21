@@ -6,6 +6,7 @@ import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
 import { testUsers } from '@/lib/test-data';
+import { useToast } from '@/hooks/use-toast';
 
 // Define the UserProfile shape
 export type UserRole = string | null;
@@ -37,107 +38,110 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [isLoading, setIsLoading] = useState(true); // Always start loading
+  const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+  const { toast } = useToast();
 
-  // Effect 1: Handle Auth State and Profile Fetching
+  // Effect 1: Handle Auth State changes ONLY.
+  // This just syncs the Firebase `User` object.
   useEffect(() => {
-    if (!firestore || !firebaseAuth) {
-        setIsLoading(false); // Can't do anything, so stop loading
-        return;
+    if (!firebaseAuth) {
+      setIsLoading(false);
+      return;
+    };
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
+      setUser(authUser);
+    });
+    return () => unsubscribe();
+  }, [firebaseAuth]);
+
+  // Effect 2: Handle Profile fetching, creation, and real-time updates.
+  // This effect runs whenever the `user` object changes.
+  useEffect(() => {
+    // If there's no authenticated user, we clear the profile and finish loading.
+    if (!user || !firestore) {
+      setProfile(null);
+      setIsLoading(false);
+      return;
     }
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (authUser) => {
-      setIsLoading(true); // Set loading true at the start of any auth change
-      if (authUser) {
-        // User is signed in, fetch their profile.
-        const userRef = doc(firestore, 'users', authUser.uid);
-        try {
-            const docSnap = await getDoc(userRef);
-            let profileData: UserProfile;
-
-            if (docSnap.exists()) {
-              profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-              
-              // Ensure heinrich is always admin
-              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
-              if (specialAdmin && profileData.role !== 'Administrator') {
-                await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-                profileData.role = 'Administrator';
-                profileData.department = 'Executive';
-              }
-            } else {
-              // Create new profile
-              const metadataRef = doc(firestore, 'app', 'metadata');
-              const metadataSnap = await getDoc(metadataRef);
-              const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
-              
-              // Check if the new user is the designated special admin
-              const specialAdmin = testUsers.find(u => authUser.email && u.email.toLowerCase() === authUser.email.toLowerCase() && u.role === 'Administrator');
-
-              let assignedRole = 'Requester';
-              if (specialAdmin || needsAdminSetup) {
-                assignedRole = 'Administrator';
-                if (needsAdminSetup) {
-                    await setDoc(metadataRef, { adminIsSetUp: true });
-                }
-              }
-
-              const newProfile = {
-                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-                email: authUser.email!,
-                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                role: assignedRole,
-                department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
-                status: 'Active' as const,
-              };
-              
-              await setDoc(userRef, newProfile);
-              profileData = { id: authUser.uid, ...newProfile };
-            }
-            // Set user and profile state together
-            setUser(authUser);
-            setProfile(profileData);
-        } catch (error) {
-            console.error("Auth Provider: Error during profile setup.", error);
-            await firebaseAuth.signOut(); // Sign out on profile error
-            setUser(null);
-            setProfile(null);
-        }
-      } else {
-        // No user is signed in.
-        setUser(null);
-        setProfile(null);
-      }
-      setIsLoading(false); // End loading ONLY after all async logic for an auth change is done.
-    });
-
-    return () => unsubscribe();
-  }, [firebaseAuth, firestore]);
-
-  // Effect 2: Listen for real-time profile updates
-  useEffect(() => {
-    if (!user || !firestore) return;
-    
+    // A user is authenticated, start the process of getting their profile.
+    setIsLoading(true);
     const userRef = doc(firestore, 'users', user.uid);
-    const unsubscribe = onSnapshot(userRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const newProfileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-        // Only update state if profile has actually changed to prevent loops
-        setProfile(currentProfile => {
-            if (JSON.stringify(currentProfile) !== JSON.stringify(newProfileData)) {
-                return newProfileData;
+
+    const unsubscribeProfile = onSnapshot(userRef, async (docSnap) => {
+      try {
+        if (docSnap.exists()) {
+          // --- Profile exists, use it ---
+          const profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+          
+          // Ensure heinrich is always admin
+          const isSpecialAdmin = user.email && testUsers.some(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
+          if (isSpecialAdmin && profileData.role !== 'Administrator') {
+            await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
+            profileData.role = 'Administrator';
+            profileData.department = 'Executive';
+          }
+          setProfile(profileData);
+        } else {
+          // --- Profile does NOT exist, create it ---
+          const metadataRef = doc(firestore, 'app', 'metadata');
+          const metadataSnap = await getDoc(metadataRef);
+          const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
+          
+          const isSpecialAdmin = user.email && testUsers.some(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
+
+          let assignedRole = 'Requester';
+          if (isSpecialAdmin || needsAdminSetup) {
+            assignedRole = 'Administrator';
+            if (needsAdminSetup) {
+                await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
             }
-            return currentProfile;
+          }
+
+          const newProfile: Omit<UserProfile, 'id'> = {
+            displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+            email: user.email!,
+            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+            role: assignedRole,
+            department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
+            status: 'Active' as const,
+          };
+          
+          await setDoc(userRef, newProfile);
+          // After setting, the onSnapshot listener will fire again with the new data,
+          // which will then call setProfile and finish loading.
+          return;
+        }
+      } catch (e: any) {
+        console.error("Auth Provider: Error during profile setup (onSnapshot).", e);
+        toast({
+          variant: "destructive",
+          title: "Profile Error",
+          description: `There was a problem loading your profile: ${e.message}`,
         });
-      } else {
-        setProfile(null);
+        await firebaseAuth.signOut();
+      } finally {
+        // Whether it succeeded or failed, the profile loading process is done for now.
+        setIsLoading(false);
       }
+    },
+    // ---- onSnapshot Error Handler ----
+    (error) => {
+        console.error("Auth Provider: Firestore listener failed.", error);
+        toast({
+            variant: "destructive",
+            title: "Connection Error",
+            description: "Could not connect to the database to load your profile. Please check your network and try again."
+        });
+        firebaseAuth.signOut();
+        setIsLoading(false);
     });
 
-    return () => unsubscribe();
-  }, [user, firestore]);
+    return () => unsubscribeProfile();
+  }, [user, firestore, firebaseAuth, toast]);
+
 
   // Effect 3: Centralized routing logic
   useEffect(() => {

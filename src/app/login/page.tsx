@@ -3,8 +3,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
-import React, { useState } from "react";
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth as useFirebaseAuthInstance } from "@/firebase";
@@ -34,8 +34,7 @@ export default function LoginPage() {
         setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
         try {
-            await signInWithPopup(auth, provider);
-            // On success, the AuthenticationProvider will handle the redirect.
+            await signInWithRedirect(auth, provider);
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             let description = "An unexpected error occurred. Please try again.";
@@ -106,7 +105,8 @@ export default function LoginPage() {
     
     const isLoading = isAuthLoading || isSubmitting;
 
-    if (isAuthLoading && !isSubmitting) {
+    // A simple loader that shows while the AuthenticationProvider is figuring out the user's state.
+    if (isAuthLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -128,7 +128,7 @@ export default function LoginPage() {
                 <CardContent>
                     <div className="space-y-4">
                         <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
-                            {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
+                            {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Sign in with Google
                         </Button>
                         <div className="relative">
@@ -168,7 +168,7 @@ export default function LoginPage() {
                                 />
                             </div>
                             <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
-                                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
+                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Sign In
                             </Button>
                         </form>
