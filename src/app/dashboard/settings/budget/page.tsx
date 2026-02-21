@@ -136,11 +136,11 @@ export default function BudgetPage() {
         const dataRows = rowsToParse.slice(headerIndex + 1);
         const headers = (headerRow as (string | number | null)[]).map(h => {
             if (h === null || h === undefined) return "";
-            const numHeader = Number(h);
-            if (!isNaN(numHeader) && numHeader > 30000 && numHeader < 60000) { // Plausible range for Excel date serials
-                const date = excelDateToJSDate(numHeader);
+            // Check if header is an Excel date serial number
+            if (typeof h === 'number' && h > 30000 && h < 60000) {
+                const date = excelDateToJSDate(h);
                 if (!isNaN(date.getTime())) {
-                    return format(date, "MMM yyyy"); // Format as "Jun 2026"
+                    return format(date, "MMM yyyy");
                 }
             }
             return String(h);
@@ -148,7 +148,7 @@ export default function BudgetPage() {
 
         return {
             derivedHeaders: headers,
-            derivedPreview: dataRows.slice(0, 3).map(row => row.map(cell => cell === null ? "" : cell)),
+            derivedPreview: dataRows.map(row => row.map(cell => cell === null ? "" : cell)),
             dataRowsForImport: dataRows,
         };
     }, [originalFileData, startRow, endRow]);
@@ -234,10 +234,10 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: false });
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
+                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
@@ -536,7 +536,7 @@ export default function BudgetPage() {
 
                         <div>
                             <Label>Data Preview</Label>
-                            <div className="mt-2 overflow-auto border rounded-lg">
+                            <div className="mt-2 overflow-auto border rounded-lg max-h-64">
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
