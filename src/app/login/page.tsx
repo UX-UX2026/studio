@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,8 +41,37 @@ export default function LoginPage() {
     const handleGoogleSignIn = async () => {
         setIsSigningIn('google');
         const provider = new GoogleAuthProvider();
-        // The AuthenticationProvider will handle the result of this redirect.
-        await signInWithRedirect(auth, provider);
+        try {
+            await signInWithPopup(auth, provider);
+            // On success, the AuthenticationProvider will see the new user and redirect.
+        } catch (error: any) {
+            console.error("Google authentication error:", error);
+            
+            let description = "An unexpected error occurred. Please try again.";
+            // The 403 error the user is seeing often manifests as 'auth/internal-error' or 'auth/auth-domain-config-required'
+            // when using signInWithPopup/Redirect if the project isn't configured correctly.
+            switch (error.code) {
+                case 'auth/popup-closed-by-user':
+                    description = "The sign-in popup was closed before completing the sign-in. Please try again.";
+                    break;
+                case 'auth/cancelled-popup-request':
+                    description = "The sign-in flow was cancelled. Please try again.";
+                    break;
+                case 'auth/internal-error':
+                case 'auth/auth-domain-config-required':
+                    description = "Your Firebase project is not configured correctly for Google Sign-In. Please check the following in your Google Cloud & Firebase consoles: 1) Ensure the 'Identity Platform' API is enabled. 2) Ensure your OAuth consent screen is configured. 3) For Google Sign-In, ensure the provider is enabled in Firebase Authentication and that your domain is added to the authorized domains list. If the problem persists, it may be a temporary Firebase service issue.";
+                    break;
+                default:
+                    description = error.message;
+            }
+
+            setErrorDialog({
+                title: "Login Failed",
+                description: description,
+            });
+        } finally {
+            setIsSigningIn(null);
+        }
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
