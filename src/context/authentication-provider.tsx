@@ -41,81 +41,87 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Effect for handling auth state changes and initial profile load
+  // Effect 1: Handle Firebase Authentication state changes
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (authUser) => {
-      if (authUser) {
-        setUser(authUser);
-        if (firestore) {
-          const userRef = doc(firestore, 'users', authUser.uid);
-          try {
-            const docSnap = await getDoc(userRef);
-            let profileData: UserProfile;
-
-            if (docSnap.exists()) {
-              profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-              
-              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
-              if (specialAdmin && profileData.role !== 'Administrator') {
-                console.log(`Auth Provider: Correcting role for special admin ${'\'\'\''}profileData.email{'\'\'\'}.`);
-                await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-                profileData.role = 'Administrator';
-                profileData.department = 'Executive';
-              }
-
-            } else {
-              console.log(`Auth Provider: No profile for ${'\'\'\''}authUser.uid{'\'\'\''}. Creating...`);
-              const metadataRef = doc(firestore, 'app', 'metadata');
-              const metadataSnap = await getDoc(metadataRef);
-              const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
-              
-              const specialAdmin = testUsers.find(u => u.email.toLowerCase() === authUser.email!.toLowerCase() && u.role === 'Administrator');
-
-              let assignedRole = 'Requester';
-              if (specialAdmin || needsAdminSetup) {
-                assignedRole = 'Administrator';
-                if (needsAdminSetup) {
-                    console.log('Auth Provider: First user detected. Assigning Administrator role.');
-                    await setDoc(metadataRef, { adminIsSetUp: true });
-                }
-              }
-
-              const newProfile = {
-                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-                email: authUser.email!,
-                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${'\'\'\''}authUser.email{'\'\'\''}`,
-                role: assignedRole,
-                department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
-                status: 'Active' as const,
-              };
-              
-              await setDoc(userRef, newProfile);
-              profileData = { id: authUser.uid, ...newProfile };
-            }
-            setProfile(profileData);
-          } catch (error) {
-            console.error("Auth Provider: Error during profile setup.", error);
-            await firebaseAuth.signOut();
-            setProfile(null);
-          } finally {
-            setIsLoading(false);
-          }
-        } else {
-          // Firestore not available
-          setIsLoading(false);
-        }
-      } else {
-        // No user logged in
-        setUser(null);
+    const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
+      setUser(authUser);
+      if (!authUser) {
+        // If there's no authenticated user, we're done loading.
         setProfile(null);
         setIsLoading(false);
       }
     });
-
     return () => unsubscribe();
-  }, [firebaseAuth, firestore]);
+  }, [firebaseAuth]);
 
-  // Effect for real-time profile updates
+  // Effect 2: Fetch or create user profile from Firestore when user is authenticated
+  useEffect(() => {
+    // Don't proceed if we don't have a user or firestore instance
+    if (!user || !firestore) {
+      // If there's no user object, the first effect already handles setting isLoading to false.
+      return;
+    }
+
+    const fetchOrCreateProfile = async () => {
+      const userRef = doc(firestore, 'users', user.uid);
+      try {
+        const docSnap = await getDoc(userRef);
+        let profileData: UserProfile;
+
+        if (docSnap.exists()) {
+          profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+          
+          const specialAdmin = testUsers.find(u => u.email.toLowerCase() === profileData.email.toLowerCase() && u.role === 'Administrator');
+          if (specialAdmin && profileData.role !== 'Administrator') {
+            console.log(`Auth Provider: Correcting role for special admin ${'\'\'\''}profileData.email{'\'\'\''}.`);
+            await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
+            profileData.role = 'Administrator';
+            profileData.department = 'Executive';
+          }
+        } else {
+          console.log(`Auth Provider: No profile for ${'\'\'\''}user.uid{'\'\'\''}. Creating...`);
+          const metadataRef = doc(firestore, 'app', 'metadata');
+          const metadataSnap = await getDoc(metadataRef);
+          const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
+          
+          const specialAdmin = testUsers.find(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
+
+          let assignedRole = 'Requester';
+          if (specialAdmin || needsAdminSetup) {
+            assignedRole = 'Administrator';
+            if (needsAdminSetup) {
+                console.log('Auth Provider: First user detected. Assigning Administrator role.');
+                await setDoc(metadataRef, { adminIsSetUp: true });
+            }
+          }
+
+          const newProfile = {
+            displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+            email: user.email!,
+            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${'\'\'\''}user.email{'\'\'\''}`,
+            role: assignedRole,
+            department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
+            status: 'Active' as const,
+          };
+          
+          await setDoc(userRef, newProfile);
+          profileData = { id: user.uid, ...newProfile };
+        }
+        setProfile(profileData);
+      } catch (error) {
+        console.error("Auth Provider: Error during profile setup.", error);
+        await firebaseAuth.signOut();
+        setProfile(null);
+      } finally {
+        // Profile has been fetched/created or an error occurred. We can stop loading.
+        setIsLoading(false);
+      }
+    };
+
+    fetchOrCreateProfile();
+  }, [user, firestore, firebaseAuth]);
+
+  // Effect 3: Listen for real-time profile updates
   useEffect(() => {
     if (!user || !firestore) return;
     
@@ -124,31 +130,34 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       if (docSnap.exists()) {
         setProfile((prevProfile) => {
             const newProfile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-            // Prevent unnecessary re-renders if profile hasn't changed
             if (JSON.stringify(prevProfile) !== JSON.stringify(newProfile)) {
                 return newProfile;
             }
             return prevProfile;
         });
+      } else {
+        // This can happen if the user is deleted from the backend.
+        setProfile(null);
       }
     });
 
     return () => unsubscribe();
   }, [user, firestore]);
 
-  // Centralized effect for routing
+  // Effect 4: Centralized routing logic
   useEffect(() => {
+    // Wait until the loading process is fully complete.
     if (isLoading) return;
 
     const isAuthPage = pathname === '/login';
 
     if (profile) {
-      // If user has a profile and is on the login page or root, redirect to the dashboard.
+      // If user has a profile, they should be on an app page.
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
     } else {
-      // If user has no profile and is not on the login page, redirect them there.
+      // If there is no profile (not logged in, or error), they should be on the login page.
       if (!isAuthPage) {
         router.replace('/login');
       }
