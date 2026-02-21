@@ -128,7 +128,7 @@ export default function BudgetPage() {
 
         const headerRow = rowsToParse[headerIndex];
         const dataRows = rowsToParse.slice(headerIndex + 1);
-        const headers = (headerRow as (string | null)[]).map(h => (h || '').toString().trim().replace(/"/g, ''));
+        const headers = (headerRow as (string | number | null)[]).map(h => h === null || h === undefined ? "" : h);
 
         return {
             derivedHeaders: headers,
@@ -140,13 +140,14 @@ export default function BudgetPage() {
     useEffect(() => {
         if (derivedHeaders.length === 0) return;
 
-        const guessMapping = (h: string) => {
+        const guessMapping = (h: string | number) => {
             if (!h) return null;
-            const lowerH = h.toLowerCase().trim();
+            const lowerH = String(h).toLowerCase().trim();
             if (['category', 'line item', 'description', 'expenses'].includes(lowerH)) return 'category';
             if (['yeartotal', 'year total', 'total'].includes(lowerH)) return 'yearTotal';
             const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
             if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
+            if (typeof h === 'number' && h > 1 && h < 100000) return 'forecast'; // Heuristic for Excel date serials
             return null;
         }
 
@@ -156,12 +157,13 @@ export default function BudgetPage() {
         derivedHeaders.forEach(h => {
             if (!h) return;
             const mapping = guessMapping(h);
+            const stringH = String(h);
             if (mapping === 'category' && !initialMappings.category) {
-                initialMappings.category = h;
+                initialMappings.category = stringH;
             } else if (mapping === 'yearTotal' && !initialMappings.yearTotal) {
-                initialMappings.yearTotal = h;
+                initialMappings.yearTotal = stringH;
             } else if (mapping === 'forecast') {
-                forecastColumns.push(h);
+                forecastColumns.push(stringH);
             }
         });
         
@@ -217,7 +219,7 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false });
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: false });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
                 const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null });
@@ -274,10 +276,12 @@ export default function BudgetPage() {
     const handleConfirmImport = async () => {
         const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
-        const categoryIndex = derivedHeaders.indexOf(category);
-        const yearTotalIndex = yearTotal ? derivedHeaders.indexOf(yearTotal) : -1;
-        const forecastStartIndex = derivedHeaders.indexOf(forecastStart);
-        const forecastEndIndex = derivedHeaders.indexOf(forecastEnd);
+        const stringifiedHeaders = derivedHeaders.map(h => String(h));
+
+        const categoryIndex = stringifiedHeaders.indexOf(category);
+        const yearTotalIndex = yearTotal ? stringifiedHeaders.indexOf(yearTotal) : -1;
+        const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
+        const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
 
 
         if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
@@ -290,10 +294,27 @@ export default function BudgetPage() {
             return;
         }
 
-        const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => derivedHeaders.indexOf(derivedHeaders.find(h => h === forecastStart)!) + i);
-        const newMonthHeaders = derivedHeaders.slice(derivedHeaders.indexOf(forecastStart), derivedHeaders.indexOf(forecastEnd) + 1);
+        const excelDateToJSDate = (serial: number) => {
+            // Formula to convert Excel serial date to JS Date.
+            // 25569 is the number of days between 1970-01-01 and 1900-01-01, adjusted for Excel's 1900 leap year bug.
+            return new Date(Math.round((serial - 25569) * 86400 * 1000));
+        };
+
+        const newMonthHeaders = derivedHeaders
+            .slice(forecastStartIndex, forecastEndIndex + 1)
+            .map(header => {
+                if (typeof header === 'number' && header > 1 && header < 100000) { // Heuristic check for an Excel date serial
+                    const date = excelDateToJSDate(header);
+                    if (!isNaN(date.getTime())) {
+                        return date.toLocaleString('default', { month: 'short' });
+                    }
+                }
+                return String(header);
+            });
         
         try {
+            const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
+            
             // Find header row in derived data to slice correctly
             const headerRowInDerived = derivedDataForImport.find(row => row.includes(category));
             const dataRowsForImport = headerRowInDerived ? derivedDataForImport.slice(derivedDataForImport.indexOf(headerRowInDerived) + 1) : [];
@@ -469,7 +490,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -479,7 +500,7 @@ export default function BudgetPage() {
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None (will be calculated)</SelectItem>
-                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -488,7 +509,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -497,7 +518,7 @@ export default function BudgetPage() {
                                 <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        {derivedHeaders.filter(h => h).map((h, i) => <SelectItem key={`${h}-${i}`} value={h}>{h}</SelectItem>)}
+                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -511,15 +532,16 @@ export default function BudgetPage() {
                                         <TableRow>
                                             {derivedHeaders.map((header, i) => {
                                                 if (!header && derivedHeaders.every(h => !h)) return null;
-                                                const forecastStartIndex = derivedHeaders.indexOf(columnMappings.forecastStart);
-                                                const forecastEndIndex = derivedHeaders.indexOf(columnMappings.forecastEnd);
+                                                const stringifiedHeaders = derivedHeaders.map(h => String(h));
+                                                const forecastStartIndex = stringifiedHeaders.indexOf(columnMappings.forecastStart);
+                                                const forecastEndIndex = stringifiedHeaders.indexOf(columnMappings.forecastEnd);
                                                 
                                                 return (
                                                     <TableHead key={`${header}-${i}`} className={cn(
-                                                        columnMappings.category === header && "bg-blue-100 dark:bg-blue-900/50",
-                                                        columnMappings.yearTotal === header && "bg-green-100 dark:bg-green-900/50",
+                                                        columnMappings.category === String(header) && "bg-blue-100 dark:bg-blue-900/50",
+                                                        columnMappings.yearTotal === String(header) && "bg-green-100 dark:bg-green-900/50",
                                                         forecastStartIndex !== -1 && forecastEndIndex !== -1 && i >= forecastStartIndex && i <= forecastEndIndex && "bg-yellow-100 dark:bg-yellow-900/50",
-                                                    )}>{header || `Column ${i+1}`}</TableHead>
+                                                    )}>{String(header) || `Column ${i+1}`}</TableHead>
                                                 )
                                             })}
                                         </TableRow>
