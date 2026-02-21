@@ -112,31 +112,14 @@ export default function BudgetPage() {
             return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
-        const startIndex = startRow > 0 ? startRow - 1 : 0;
-        const endIndex = endRow > 0 ? endRow : originalFileData.length;
-        const rowsToParse = originalFileData.slice(startIndex, endIndex);
-
-        if (rowsToParse.filter(r => r && r.some(c => c !== null && c !== '')).length < 1) {
+        const headerRowIndex = startRow > 0 ? startRow - 1 : 0;
+        if (headerRowIndex >= originalFileData.length) {
             return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
-        let headerIndex = -1;
-        for (let i = 0; i < rowsToParse.length; i++) {
-            if (rowsToParse[i] && rowsToParse[i].some(c => c !== null && c !== '')) {
-                headerIndex = i;
-                break;
-            }
-        }
-
-        if (headerIndex === -1) {
-            return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
-        }
-
-        const headerRow = rowsToParse[headerIndex];
-        const dataRows = rowsToParse.slice(headerIndex + 1);
+        const headerRow = originalFileData[headerRowIndex];
         const headers = (headerRow as (string | number | null)[]).map(h => {
             if (h === null || h === undefined) return "";
-            // Check if header is an Excel date serial number
             if (typeof h === 'number' && h > 30000 && h < 60000) {
                 const date = excelDateToJSDate(h);
                 if (!isNaN(date.getTime())) {
@@ -145,6 +128,10 @@ export default function BudgetPage() {
             }
             return String(h);
         });
+
+        const dataStartIndex = headerRowIndex + 1;
+        const dataEndIndex = endRow > 0 ? endRow : originalFileData.length;
+        const dataRows = originalFileData.slice(dataStartIndex, dataEndIndex);
 
         return {
             derivedHeaders: headers,
@@ -237,7 +224,7 @@ export default function BudgetPage() {
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false });
+                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, dateNF: 'mmm yyyy' });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
@@ -479,63 +466,70 @@ export default function BudgetPage() {
                             Define the data range and match the columns from your file to the required budget fields. Hidden rows/columns are ignored.
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="flex-1 space-y-6 py-4 overflow-y-auto pr-2">
-                        <div className="grid grid-cols-2 gap-4 border-b pb-6">
-                           <div className="space-y-2">
-                                <Label>Start Row</Label>
-                                <Input type="number" value={startRow} onChange={e => setStartRow(parseInt(e.target.value) || 1)} min={1} />
-                            </div>
-                            <div className="space-y-2">
-                                <Label>End Row (0 for end of file)</Label>
-                                <Input type="number" value={endRow} onChange={e => setEndRow(parseInt(e.target.value) || 0)} min={0} />
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                           <div className="space-y-2">
-                                <Label>Category / Line Item Column</Label>
-                                <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Year Total Column (Optional)</Label>
-                                <Select 
-                                    value={columnMappings.yearTotal || '--none--'} 
-                                    onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === '--none--' ? '' : v }))}
-                                >
-                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="--none--">None (will be calculated)</SelectItem>
-                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                             <div className="space-y-2">
-                                <Label>Forecast Start Column</Label>
-                                <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label>Forecast End Column</Label>
-                                <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
-                                    <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                                    <SelectContent>
-                                        {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+                    <div className="flex-1 space-y-4 py-4 overflow-y-auto pr-4">
+                        
+                        <div className="p-4 border rounded-lg bg-muted/50">
+                            <h3 className="font-semibold text-foreground mb-4">1. Define Data Range</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                               <div className="space-y-2">
+                                    <Label>Header Row Number</Label>
+                                    <Input type="number" value={startRow} onChange={e => setStartRow(parseInt(e.target.value) || 1)} min={1} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>End Row Number (0 for end of file)</Label>
+                                    <Input type="number" value={endRow} onChange={e => setEndRow(parseInt(e.target.value) || 0)} min={0} />
+                                </div>
                             </div>
                         </div>
 
-                        <div>
-                            <Label>Data Preview</Label>
+                        <div className="p-4 border rounded-lg bg-muted/50">
+                            <h3 className="font-semibold text-foreground mb-4">2. Map Columns</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                               <div className="space-y-2">
+                                    <Label>Category / Line Item Column</Label>
+                                    <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Year Total Column (Optional)</Label>
+                                    <Select 
+                                        value={columnMappings.yearTotal || '--none--'} 
+                                        onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === '--none--' ? '' : v }))}
+                                    >
+                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="--none--">None (will be calculated)</SelectItem>
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                 <div className="space-y-2">
+                                    <Label>Forecast Start Column</Label>
+                                    <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>Forecast End Column</Label>
+                                    <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
+                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                        <SelectContent>
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border rounded-lg bg-muted/50">
+                            <h3 className="font-semibold text-foreground mb-4">3. Preview Data</h3>
                             <div className="mt-2 overflow-auto border rounded-lg max-h-64">
                                 <Table>
                                     <TableHeader>
