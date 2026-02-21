@@ -5,7 +5,6 @@ import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, onSnapshot, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { testUsers } from '@/lib/test-data';
 import { useToast } from '@/hooks/use-toast';
 
 // Define the UserProfile shape
@@ -49,11 +48,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       return;
     };
     
-    // This effect should only run once to set up the auth state listener.
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (authUser) => {
         setUser(authUser);
         if (!authUser) {
-            // If user signs out, clear profile and stop loading.
             setProfile(null);
             setIsLoading(false);
         }
@@ -66,53 +63,46 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user || !firestore) {
       if (!user) {
-        // If there's no user, we're done loading.
         setIsLoading(false);
       }
       return;
     }
 
-    // A user is authenticated, start the process of getting their profile.
-    // We set loading to true here, as we are now fetching a profile.
     setIsLoading(true);
     const userRef = doc(firestore, 'users', user.uid);
 
     const unsubscribeProfile = onSnapshot(userRef, 
-      // Success Callback
       async (docSnap) => {
         try {
           if (docSnap.exists()) {
             const profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-            const isSpecialAdmin = user.email && testUsers.some(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
-            if (isSpecialAdmin && profileData.role !== 'Administrator') {
-                await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-                // The snapshot listener will re-trigger with the updated role. We just wait.
-            } else {
-                setProfile(profileData);
-                setIsLoading(false); // SUCCESS: Profile is loaded.
-            }
+            setProfile(profileData);
+            setIsLoading(false);
           } else {
-             // --- Profile does NOT exist, create it ---
-            const metadataRef = doc(firestore, 'app', 'metadata');
-            const metadataSnap = await getDoc(metadataRef);
-            const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
-            
-            const isSpecialAdmin = user.email && testUsers.some(u => u.email.toLowerCase() === user.email!.toLowerCase() && u.role === 'Administrator');
-
-            let assignedRole = 'Requester';
-            if (isSpecialAdmin || needsAdminSetup) {
-              assignedRole = 'Administrator';
-              if (needsAdminSetup) {
-                  await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-              }
+            // --- Profile does NOT exist, create it ---
+            let isAdmin = false;
+            try {
+                const metadataRef = doc(firestore, 'app', 'metadata');
+                const metadataSnap = await getDoc(metadataRef);
+                const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
+                if (needsAdminSetup) {
+                    isAdmin = true;
+                    await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
+                }
+            } catch (e: any) {
+                if (e.code === 'unavailable') {
+                    console.warn("Could not check app metadata due to offline state. Assuming this is not the first admin setup.");
+                } else {
+                    throw e; // Re-throw other errors to be caught by the outer block
+                }
             }
-
+            
             const newProfile: Omit<UserProfile, 'id'> = {
               displayName: user.displayName || user.email?.split('@')[0] || 'New User',
               email: user.email!,
               photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-              role: assignedRole,
-              department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
+              role: isAdmin ? 'Administrator' : 'Requester',
+              department: isAdmin ? 'Executive' : 'Unassigned',
               status: 'Active' as const,
             };
             
@@ -121,35 +111,24 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             // We DO NOT set isLoading to false here. We wait for the next snapshot.
           }
         } catch (e: any) {
-          console.error("Auth Provider: Error during profile setup/creation.", e);
-          toast({ variant: "destructive", title: "Profile Error", description: `There was a problem setting up your profile: ${e.message}` });
+          // This is a catch-all for unexpected errors during profile creation/retrieval
+          console.error("Auth Provider: A fatal error occurred during profile setup.", e);
+          toast({ variant: "destructive", title: "Profile Error", description: `There was a critical problem setting up your profile: ${e.message}` });
           if (firebaseAuth) await firebaseAuth.signOut();
           setIsLoading(false);
         }
       },
-      // Error Callback
       (error) => {
-        // This is the critical part for handling the "client is offline" error.
-        if (error.code === 'unavailable') {
-            // Firestore is offline. This is not a fatal error.
-            // The SDK will automatically try to reconnect. We just inform the user.
-            console.warn("Could not fetch profile due to offline state. Will retry automatically.", error);
-            toast({
-                title: "You appear to be offline",
-                description: "We'll keep trying to connect to load your profile."
-            });
-            // We DON'T sign out or stop loading. We let the listener retry.
-        } else {
-            // For any other error (permissions, etc.), it's serious.
-            console.error("Auth Provider: Firestore listener failed with a fatal error.", error);
-            toast({
-                variant: "destructive",
-                title: "Profile Access Error",
-                description: `Could not load your profile: ${error.message}. Please contact support.`
-            });
-            if (firebaseAuth) firebaseAuth.signOut();
-            setIsLoading(false); // Stop loading on fatal error.
-        }
+        // This error callback is for the onSnapshot listener itself.
+        // It's the primary place to catch permission errors or truly fatal connection issues.
+        console.error("Auth Provider: Firestore listener failed with a fatal error.", error);
+        toast({
+            variant: "destructive",
+            title: "Profile Access Error",
+            description: `Could not load your profile: ${error.message}. Please contact support.`
+        });
+        if (firebaseAuth) firebaseAuth.signOut();
+        setIsLoading(false);
       }
     );
 
@@ -158,7 +137,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
 
 
   useEffect(() => {
-    // This effect handles routing, and it ONLY runs when loading is complete.
     if (isLoading) {
       return; 
     }
