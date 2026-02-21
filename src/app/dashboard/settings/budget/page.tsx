@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { format } from "date-fns";
 
 type Department = {
     id: string;
@@ -45,6 +46,10 @@ const formatCurrency = (amount: number) => {
       style: "currency",
       currency: "ZAR",
     }).format(amount);
+};
+
+const excelDateToJSDate = (serial: number) => {
+    return new Date(Math.round((serial - 25569) * 86400 * 1000));
 };
 
 export default function BudgetPage() {
@@ -129,7 +134,17 @@ export default function BudgetPage() {
 
         const headerRow = rowsToParse[headerIndex];
         const dataRows = rowsToParse.slice(headerIndex + 1);
-        const headers = (headerRow as (string | number | null)[]).map(h => h === null || h === undefined ? "" : h);
+        const headers = (headerRow as (string | number | null)[]).map(h => {
+            if (h === null || h === undefined) return "";
+            const numHeader = Number(h);
+            if (!isNaN(numHeader) && numHeader > 30000 && numHeader < 60000) { // Plausible range for Excel date serials
+                const date = excelDateToJSDate(numHeader);
+                if (!isNaN(date.getTime())) {
+                    return format(date, "MMM yyyy"); // Format as "Jun 2026"
+                }
+            }
+            return String(h);
+        });
 
         return {
             derivedHeaders: headers,
@@ -148,7 +163,6 @@ export default function BudgetPage() {
             if (['yeartotal', 'year total', 'total'].includes(lowerH)) return 'yearTotal';
             const monthNames = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
             if (monthNames.some(m => lowerH.startsWith(m))) return 'forecast';
-            if (typeof h === 'number' && h > 1 && h < 100000) return 'forecast'; // Heuristic for Excel date serials
             return null;
         }
 
@@ -296,22 +310,7 @@ export default function BudgetPage() {
             return;
         }
 
-        const excelDateToJSDate = (serial: number) => {
-            return new Date(Math.round((serial - 25569) * 86400 * 1000));
-        };
-
-        const newMonthHeaders = derivedHeaders
-            .slice(forecastStartIndex, forecastEndIndex + 1)
-            .map(header => {
-                const numHeader = Number(header);
-                if (!isNaN(numHeader) && numHeader > 1 && numHeader < 100000) { 
-                    const date = excelDateToJSDate(numHeader);
-                    if (!isNaN(date.getTime())) {
-                        return date.toLocaleString('default', { month: 'short' });
-                    }
-                }
-                return String(header);
-            });
+        const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
         
         try {
             const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
@@ -576,5 +575,3 @@ export default function BudgetPage() {
         </>
     );
 }
-
-    
