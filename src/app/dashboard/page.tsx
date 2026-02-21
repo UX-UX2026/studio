@@ -22,6 +22,7 @@ import {
   TrendingDown,
   ClipboardCheck,
   Loader,
+  Rocket,
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -95,9 +96,15 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">Pending Submission</div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-muted-foreground mb-4">
               February 2026 period is awaiting your submission.
             </p>
+            <Button asChild className="w-full">
+              <Link href="/dashboard/procurement">
+                <Rocket className="mr-2 h-4 w-4" />
+                Quick Submit
+              </Link>
+            </Button>
           </CardContent>
         </Card>
         <Card>
@@ -218,4 +225,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

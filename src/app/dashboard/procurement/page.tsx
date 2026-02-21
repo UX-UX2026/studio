@@ -52,7 +52,7 @@ const months = ["January", "February", "March", "April", "May", "June", "July", 
 const currentYear = new Date().getFullYear();
 const periods = months.map(m => `${m} ${currentYear + 2}`); // Matching the mock data year format
 
-export default function ProcurementQuickLaunchPage() {
+export default function ProcurementQuickSubmitPage() {
     const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
@@ -183,7 +183,7 @@ export default function ProcurementQuickLaunchPage() {
     <div className="space-y-6">
         <Card>
             <CardHeader>
-                <CardTitle>Procurement Quick Launch</CardTitle>
+                <CardTitle>Procurement Quick Submit</CardTitle>
                 <CardDescription>
                     A consolidated view of your procurement activities. Select a department and period to begin.
                 </CardDescription>

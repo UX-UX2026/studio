@@ -37,7 +37,7 @@ const allLinks = [
     icon: FileText, 
     roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
     subLinks: [
-      { href: '/dashboard/procurement', label: 'Quick Launch', icon: Rocket, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
+      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
       { href: '/dashboard/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
       { href: '/dashboard/submission', label: 'Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
       { href: '/dashboard/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
@@ -73,7 +73,7 @@ export function NavLinks({ role }: { role: UserRole }) {
     <SidebarMenu>
       {visibleLinks.map((link) => {
         if (link.subLinks) {
-          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
+          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(sublink.roles));
           if (visibleSubLinks.length === 0) return null;
           
           const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
