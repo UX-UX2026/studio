@@ -122,7 +122,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         }
       },
-      (error) => {
+      async (error) => {
         // This error callback is for the onSnapshot listener itself.
         // It's the primary place to catch permission errors or truly fatal connection issues.
         console.error("Auth Provider: Firestore listener failed with a fatal error.", error);
