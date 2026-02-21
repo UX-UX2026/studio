@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -58,7 +59,7 @@ const allLinks = [
         { href: '/dashboard/settings/departments', label: 'Departments', roles: ['Administrator'] },
         { href: '/dashboard/settings/roles', label: 'Roles', roles: ['Administrator'] },
         { href: '/dashboard/settings/budget', label: 'Budget', roles: ['Administrator', 'Procurement Officer'] },
-        { href: '/dashboard/settings/audit-log', label: 'Audit Log', roles: ['Administrator'] },
+        { href: '/dashboard/settings/database-log', label: 'Database Log', roles: ['Administrator'] },
     ]
   },
 ];

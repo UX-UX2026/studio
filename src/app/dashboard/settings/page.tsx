@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -36,7 +37,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/workflow', label: 'Approval Workflow', description: "Define the stages, roles, and permissions for the procurement approval process.", icon: Workflow },
         { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building },
         { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield },
-        { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A chronological log of all significant actions performed within the application.', icon: History }
+        { href: '/dashboard/settings/database-log', label: 'Database Log', description: 'A log of all significant write operations performed on the database.', icon: History }
     ]
 
     return (

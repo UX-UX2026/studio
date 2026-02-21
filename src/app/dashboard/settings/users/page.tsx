@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -24,7 +25,7 @@ import { useRoles, type Role } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
@@ -45,7 +46,7 @@ type Department = {
 
 
 export default function UsersPage() {
-    const { user, role: adminRole, loading: userLoading } = useUser();
+    const { user: adminUser, role: adminRole, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
 
@@ -92,16 +93,16 @@ export default function UsersPage() {
       if (userLoading) {
         return;
       }
-      if (!user) {
+      if (!adminUser) {
         router.push('/dashboard');
         return;
       }
       if (adminRole && adminRole !== 'Administrator') {
         router.push('/dashboard');
       }
-    }, [user, adminRole, userLoading, router]);
+    }, [adminUser, adminRole, userLoading, router]);
     
-    if (loading || !user || !adminRole || adminRole !== 'Administrator') {
+    if (loading || !adminUser || !adminRole || adminRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -126,6 +127,14 @@ export default function UsersPage() {
             setDoc(userRef, userData, { merge: true })
                 .then(() => {
                     toast({ title: "User Updated", description: "User details have been successfully updated." });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: adminUser.uid,
+                        userName: adminUser.displayName,
+                        action: 'user.update',
+                        details: `Updated user: ${email}`,
+                        entity: { type: 'user', id: editingUser.id },
+                        timestamp: serverTimestamp()
+                    });
                 })
                 .catch(() => {
                     const permissionError = new FirestorePermissionError({
@@ -138,8 +147,16 @@ export default function UsersPage() {
         } else {
             const usersCollectionRef = collection(firestore, 'users');
             addDoc(usersCollectionRef, userData)
-                .then(() => {
+                .then((docRef) => {
                     toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: adminUser.uid,
+                        userName: adminUser.displayName,
+                        action: 'user.create',
+                        details: `Invited user: ${email}`,
+                        entity: { type: 'user', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
                 })
                 .catch(() => {
                     const permissionError = new FirestorePermissionError({
@@ -161,9 +178,20 @@ export default function UsersPage() {
 
     const handleDelete = (id: string) => {
         const userRef = doc(firestore, 'users', id);
+        const deletedUser = users?.find(u => u.id === id);
         deleteDoc(userRef)
             .then(() => {
                 toast({ title: "User Deleted", description: "The user has been successfully removed." });
+                if (deletedUser && adminUser) {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: adminUser.uid,
+                        userName: adminUser.displayName,
+                        action: 'user.delete',
+                        details: `Deleted user: ${deletedUser.email}`,
+                        entity: { type: 'user', id: id },
+                        timestamp: serverTimestamp()
+                    });
+                }
             })
             .catch(() => {
                 const permissionError = new FirestorePermissionError({
@@ -191,6 +219,15 @@ export default function UsersPage() {
                         description: `${user?.displayName || 'The user'} has been activated.`,
                     });
                 }
+                const user = users?.find(u => u.id === userId);
+                addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action: `user.update.${field}`,
+                    details: `Updated field '${field}' to '${value}' for user ${user?.displayName || userId}`,
+                    entity: { type: 'user', id: userId },
+                    timestamp: serverTimestamp()
+                });
             })
             .catch(() => {
                 const permissionError = new FirestorePermissionError({
