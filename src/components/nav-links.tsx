@@ -13,6 +13,7 @@ import {
   FilePieChart,
   History,
   Banknote,
+  Rocket,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -36,8 +37,9 @@ const allLinks = [
     icon: FileText, 
     roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
     subLinks: [
+      { href: '/dashboard/procurement', label: 'Quick Launch', icon: Rocket, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
       { href: '/dashboard/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-      { href: '/dashboard/submission', label: 'Period Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
+      { href: '/dashboard/submission', label: 'Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
       { href: '/dashboard/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
     ]
   },
@@ -106,7 +108,10 @@ export function NavLinks({ role }: { role: UserRole }) {
                         <SidebarMenuSubItem key={subLink.href}>
                             <Link href={subLink.href} legacyBehavior passHref>
                                 <SidebarMenuSubButton asChild isActive={isActive}>
-                                    <a>{subLink.label}</a>
+                                    <a>
+                                      {subLink.icon && <subLink.icon />}
+                                      {subLink.label}
+                                    </a>
                                 </SidebarMenuSubButton>
                             </Link>
                         </SidebarMenuSubItem>
