@@ -5,6 +5,7 @@ import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, onSnapshot, setDoc, Unsubscribe, getDoc } from 'firebase/firestore';
+import { testUsers } from '@/lib/test-data';
 
 // Define the UserProfile shape
 export type UserRole = string | null;
@@ -54,8 +55,16 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           const userRef = doc(firestore, 'users', authUser.uid);
           profileUnsubscribe = onSnapshot(userRef, async (docSnap) => {
             if (docSnap.exists()) {
-              setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
-              setIsLoading(false);
+              const userProfile = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+              const specialAdmin = testUsers.find(u => u.email === userProfile.email && u.role === 'Administrator');
+
+              if (specialAdmin && userProfile.role !== 'Administrator') {
+                // Correct the role for this specific user. The listener will be triggered again by this update.
+                await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
+              } else {
+                setProfile(userProfile);
+                setIsLoading(false);
+              }
             } else {
               // This is a new user, create their profile.
               console.log(`Auth Provider: No profile for ${authUser.uid}. Creating...`);
@@ -64,12 +73,15 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                 const metadataSnap = await getDoc(metadataRef);
                 
                 let assignedRole = 'Requester'; // Default role
-                let isFirstAdmin = false;
+                const needsAdminSetup = !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp;
+                
+                const specialAdmin = testUsers.find(u => u.email === authUser.email && u.role === 'Administrator');
 
-                if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+                if (specialAdmin) {
+                    assignedRole = 'Administrator';
+                } else if (needsAdminSetup) {
                   // This is the first user, make them an admin.
                   assignedRole = 'Administrator';
-                  isFirstAdmin = true;
                   console.log('Auth Provider: First user detected. Assigning Administrator role.');
                 }
 
@@ -84,7 +96,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                 
                 await setDoc(userRef, profileData);
 
-                if (isFirstAdmin) {
+                if (needsAdminSetup && assignedRole === 'Administrator') {
                   // After successfully creating the admin user, set the flag.
                   await setDoc(metadataRef, { adminIsSetUp: true });
                   console.log('Auth Provider: adminIsSetUp flag has been set.');
