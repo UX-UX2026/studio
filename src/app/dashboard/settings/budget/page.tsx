@@ -120,6 +120,7 @@ export default function BudgetPage() {
         const headerRow = originalFileData[headerRowIndex];
         const headers = (headerRow as (string | number | null)[]).map(h => {
             if (h === null || h === undefined) return "";
+            // Check if it's an Excel date serial number
             if (typeof h === 'number' && h > 30000 && h < 60000) {
                 const date = excelDateToJSDate(h);
                 if (!isNaN(date.getTime())) {
@@ -224,7 +225,8 @@ export default function BudgetPage() {
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, dateNF: 'mmm yyyy' });
+                // IMPORTANT: Use raw: true to get raw Excel values (e.g., numbers for dates)
+                const allData: (string|number|null)[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: true });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
@@ -239,29 +241,17 @@ export default function BudgetPage() {
                         if (col && col.hidden) hiddenColIndices.add(i);
                     });
                 }
-
+                
+                // Filter out hidden rows and columns from the raw data
                 const visibleData = allData
                     .filter((_, i) => !hiddenRowIndices.has(i))
                     .map(row => row.filter((_, i) => !hiddenColIndices.has(i)));
                 
                 setOriginalFileData(visibleData);
 
-                let startRowIndex = -1;
-                let endRowIndex = visibleData.length;
-
-                for (let i = 0; i < visibleData.length; i++) {
-                    const row = visibleData[i];
-                    if (startRowIndex === -1 && row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('actuals vs budget'))) {
-                        startRowIndex = i;
-                    }
-                    if (row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('subtotal cash expenses'))) {
-                        endRowIndex = i;
-                        break; 
-                    }
-                }
-                
-                setStartRow(startRowIndex !== -1 ? startRowIndex + 1 : 1);
-                setEndRow(endRowIndex < visibleData.length ? endRowIndex : visibleData.length);
+                // Set sensible defaults for the user to adjust.
+                setStartRow(1);
+                setEndRow(visibleData.length);
                 
                 setIsMappingDialogOpen(true);
 
