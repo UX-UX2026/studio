@@ -22,6 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type Department = {
     id: string;
@@ -100,31 +102,54 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
         if (!user) return;
         const departmentData = { name, managerId, budget };
 
         if (editingDepartment) {
             const deptRef = doc(firestore, 'departments', editingDepartment.id);
-            await setDoc(deptRef, departmentData, { merge: true });
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'department.update',
-                details: `Updated department: ${name}`,
-                entity: { type: 'department', id: editingDepartment.id },
-                timestamp: serverTimestamp()
-            });
+            setDoc(deptRef, departmentData, { merge: true })
+                .then(() => {
+                    toast({ title: "Department Updated" });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'department.update',
+                        details: `Updated department: ${name}`,
+                        entity: { type: 'department', id: editingDepartment.id },
+                        timestamp: serverTimestamp()
+                    });
+                })
+                .catch(() => {
+                     const permissionError = new FirestorePermissionError({
+                        path: deptRef.path,
+                        operation: 'update',
+                        requestResourceData: departmentData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         } else {
-            const docRef = await addDoc(collection(firestore, 'departments'), departmentData);
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'department.create',
-                details: `Created department: ${name}`,
-                entity: { type: 'department', id: docRef.id },
-                timestamp: serverTimestamp()
-            });
+            const departmentsCollectionRef = collection(firestore, 'departments');
+            addDoc(departmentsCollectionRef, departmentData)
+                .then((docRef) => {
+                    toast({ title: "Department Created" });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'department.create',
+                        details: `Created department: ${name}`,
+                        entity: { type: 'department', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: departmentsCollectionRef.path,
+                        operation: 'create',
+                        requestResourceData: departmentData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         }
         setEditingDepartment(null);
         setIsDialogOpen(false);
@@ -135,20 +160,32 @@ export default function DepartmentsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = async (id: string) => {
+    const handleDelete = (id: string) => {
         if (!user) return;
         const deptToDelete = departments?.find(d => d.id === id);
-        await deleteDoc(doc(firestore, 'departments', id));
-        if (deptToDelete) {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'department.delete',
-                details: `Deleted department: ${deptToDelete.name}`,
-                entity: { type: 'department', id },
-                timestamp: serverTimestamp()
+        const deptRef = doc(firestore, 'departments', id);
+
+        deleteDoc(deptRef)
+            .then(() => {
+                toast({ title: "Department Deleted" });
+                if (deptToDelete) {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'department.delete',
+                        details: `Deleted department: ${deptToDelete.name}`,
+                        entity: { type: 'department', id },
+                        timestamp: serverTimestamp()
+                    });
+                }
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: deptRef.path,
+                    operation: 'delete',
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
     };
 
     const openAddDialog = () => {
