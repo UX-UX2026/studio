@@ -4,8 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot, setDoc, Unsubscribe } from 'firebase/firestore';
-import { testUsers } from '@/lib/test-data';
+import { doc, onSnapshot, setDoc, Unsubscribe, getDoc } from 'firebase/firestore';
 
 // Define the UserProfile shape
 export type UserRole = string | null;
@@ -58,19 +57,40 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
               setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
               setIsLoading(false);
             } else {
+              // This is a new user, create their profile.
               console.log(`Auth Provider: No profile for ${authUser.uid}. Creating...`);
               try {
-                const matchingTestUser = testUsers.find(tu => tu.email?.toLowerCase() === authUser.email?.toLowerCase());
+                const metadataRef = doc(firestore, 'app', 'metadata');
+                const metadataSnap = await getDoc(metadataRef);
+                
+                let assignedRole = 'Requester'; // Default role
+                let isFirstAdmin = false;
+
+                if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+                  // This is the first user, make them an admin.
+                  assignedRole = 'Administrator';
+                  isFirstAdmin = true;
+                  console.log('Auth Provider: First user detected. Assigning Administrator role.');
+                }
+
                 const profileData = {
                   displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
                   email: authUser.email,
                   photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                  role: matchingTestUser?.role || 'Requester',
-                  department: matchingTestUser?.department || 'Unassigned',
+                  role: assignedRole,
+                  department: assignedRole === 'Administrator' ? 'Executive' : 'Unassigned',
                   status: 'Active' as const,
                 };
+                
                 await setDoc(userRef, profileData);
-                // The onSnapshot listener will automatically fire again with the new data
+
+                if (isFirstAdmin) {
+                  // After successfully creating the admin user, set the flag.
+                  await setDoc(metadataRef, { adminIsSetUp: true });
+                  console.log('Auth Provider: adminIsSetUp flag has been set.');
+                }
+                // The onSnapshot listener will automatically fire again with the new data,
+                // so we don't need to call setProfile here.
               } catch (e) {
                 console.error("Auth Provider: Failed to create user profile.", e);
                 await firebaseAuth.signOut();
