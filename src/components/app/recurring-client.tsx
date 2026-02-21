@@ -9,7 +9,7 @@ import { LayoutGrid, List, Plus, Trash2, Upload, Download, Loader } from "lucide
 import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useUser } from "@/firebase";
-import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 
 type RecurringItem = {
     id: string;
@@ -31,7 +31,7 @@ const formatCurrency = (amount: number) => {
 export function RecurringClient() {
     const firestore = useFirestore();
     const { user } = useUser();
-    const recurringItemsQuery = useMemo(() => collection(firestore, 'recurringItems'), [firestore]);
+    const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), orderBy('name')), [firestore]);
     const { data: items, loading } = useCollection<RecurringItem>(recurringItemsQuery);
     
     const [view, setView] = useState<'grid' | 'list'>('grid');

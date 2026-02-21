@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -24,7 +25,7 @@ import { useRoles, type Role } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, query, orderBy } from "firebase/firestore";
 import { errorEmitter } from "@/firebase/error-emitter";
 import { FirestorePermissionError } from "@/firebase/errors";
 
@@ -49,7 +50,7 @@ export default function UsersPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const usersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
     const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
     
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -313,76 +314,78 @@ export default function UsersPage() {
                             Invite User
                         </Button>
                     </div>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>User</TableHead>
-                                <TableHead>Email</TableHead>
-                                <TableHead className="w-[200px]">Role</TableHead>
-                                <TableHead className="w-[200px]">Department</TableHead>
-                                <TableHead className="w-[120px]">Status</TableHead>
-                                <TableHead className="text-right w-[120px]">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {users && users.map((u) => (
-                                <TableRow key={u.id}>
-                                    <TableCell className="font-medium flex items-center gap-3">
-                                        <Avatar>
-                                            <AvatarImage src={u.photoURL} />
-                                            <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
-                                        </Avatar>
-                                        {u.displayName || u.email}
-                                    </TableCell>
-                                    <TableCell>{u.email}</TableCell>
-                                    <TableCell>
-                                        <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Assign role" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
-                                            <SelectTrigger>
-                                                <SelectValue placeholder="Assign department" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                                            </SelectContent>
-                                        </Select>
-                                    </TableCell>
-                                    <TableCell>
-                                        {u.status === 'Active' ? (
-                                            <Badge variant={'default'} className={'bg-green-600 hover:bg-green-700'}>
-                                                Active
-                                            </Badge>
-                                        ) : (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleUserUpdate(u.id, 'status', 'Active')}
-                                                className="text-yellow-600 border-yellow-500 hover:bg-yellow-100 hover:text-yellow-700"
-                                            >
-                                                Activate User
-                                            </Button>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={() => handleDelete(u.id)}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
-                                    </TableCell>
+                    <div className="overflow-auto rounded-lg border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead className="w-[200px]">Role</TableHead>
+                                    <TableHead className="w-[200px]">Department</TableHead>
+                                    <TableHead className="w-[120px]">Status</TableHead>
+                                    <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {users && users.map((u) => (
+                                    <TableRow key={u.id}>
+                                        <TableCell className="font-medium flex items-center gap-3">
+                                            <Avatar>
+                                                <AvatarImage src={u.photoURL} />
+                                                <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
+                                            </Avatar>
+                                            {u.displayName || u.email}
+                                        </TableCell>
+                                        <TableCell>{u.email}</TableCell>
+                                        <TableCell>
+                                            <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Assign role" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Assign department" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            {u.status === 'Active' ? (
+                                                <Badge variant={'default'} className={'bg-green-600 hover:bg-green-700'}>
+                                                    Active
+                                                </Badge>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleUserUpdate(u.id, 'status', 'Active')}
+                                                    className="text-yellow-600 border-yellow-500 hover:bg-yellow-100 hover:text-yellow-700"
+                                                >
+                                                    Activate User
+                                                </Button>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" onClick={() => handleDelete(u.id)}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </CardContent>
             </Card>
 

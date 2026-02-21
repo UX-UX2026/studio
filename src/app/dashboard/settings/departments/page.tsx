@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 
 type Department = {
     id: string;
@@ -48,7 +48,7 @@ export default function DepartmentsPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: departmentsLoading } = useCollection<Department>(departmentsQuery);
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);

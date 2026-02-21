@@ -2,7 +2,7 @@
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
 
 export type Role = {
   id: string;
@@ -21,7 +21,7 @@ const RolesContext = createContext<RolesContextValue | undefined>(undefined);
 
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
-  const rolesCollection = useMemo(() => collection(firestore, 'roles'), [firestore]);
+  const rolesCollection = useMemo(() => query(collection(firestore, 'roles'), orderBy('name')), [firestore]);
   const { data: roles, loading } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {

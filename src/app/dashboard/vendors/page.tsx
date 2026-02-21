@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 
 type Vendor = {
     id: string;
@@ -49,7 +49,7 @@ export default function VendorsPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const vendorsQuery = useMemo(() => collection(firestore, 'vendors'), [firestore]);
+    const vendorsQuery = useMemo(() => query(collection(firestore, 'vendors'), orderBy('name')), [firestore]);
     const { data: vendors, loading: vendorsLoading } = useCollection<Vendor>(vendorsQuery);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
