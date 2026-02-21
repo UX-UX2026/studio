@@ -148,6 +148,10 @@
                 "items": {
                   "type": "string"
                 }
+              },
+              "estimatedLeadTimeDays": {
+                "type": "number",
+                "description": "The estimated number of days for fulfillment, suggested by AI and adjustable by procurement officers."
               }
             }
           }

@@ -9,6 +9,7 @@ export type ApprovalItem = {
     fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
     receivedQty: number;
     fulfillmentComments: string[];
+    estimatedLeadTimeDays?: number;
 };
 
 export type ApprovalRequest = {

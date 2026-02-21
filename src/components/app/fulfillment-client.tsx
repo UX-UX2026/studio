@@ -80,6 +80,10 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     try {
       const result = await recommendFulfillmentStrategy(item.request as RecommendFulfillmentStrategyInput);
       setRecommendation(result);
+       if (result.estimatedLeadTimeDays) {
+          // This will update firestore and the local state
+          await handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
+      }
     } catch (error) {
       console.error(error);
       toast({
@@ -87,7 +91,6 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
         title: "AI Recommendation Failed",
         description: "Could not fetch fulfillment strategy.",
       });
-      setIsRecommendDialogOpen(false);
     } finally {
       setIsLoading(false);
     }
@@ -154,6 +157,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               <TableHead>Total Qty</TableHead>
               <TableHead>Rcvd Qty</TableHead>
               <TableHead>Outstanding</TableHead>
+              <TableHead>Est. Lead Time</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -175,6 +179,16 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                       />
                   </TableCell>
                   <TableCell className={outstandingQty > 0 ? 'font-bold' : ''}>{outstandingQty}</TableCell>
+                  <TableCell>
+                    <Input
+                        type="number"
+                        value={item.estimatedLeadTimeDays || ''}
+                        onChange={(e) => handleItemUpdate(item.id, 'estimatedLeadTimeDays', parseInt(e.target.value, 10))}
+                        className="w-24"
+                        disabled={!canEdit}
+                        placeholder="Days..."
+                    />
+                  </TableCell>
                   <TableCell>
                       {canEdit ? (
                            <Select value={item.fulfillmentStatus} onValueChange={(value) => handleItemUpdate(item.id, 'fulfillmentStatus', value)}>
