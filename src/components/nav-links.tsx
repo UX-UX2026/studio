@@ -73,7 +73,7 @@ export function NavLinks({ role }: { role: UserRole }) {
     <SidebarMenu>
       {visibleLinks.map((link) => {
         if (link.subLinks) {
-          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(sublink.roles));
+          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
           if (visibleSubLinks.length === 0) return null;
           
           const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
