@@ -76,6 +76,16 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         try {
           if (docSnap.exists()) {
             const profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
+
+            // Failsafe: If this is the admin user, ensure their role is Administrator.
+            // This corrects profiles that may have been created with the wrong role.
+            if (profileData.email === 'heinrich@ubuntux.co.za' && profileData.role !== 'Administrator') {
+              await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
+              // The snapshot listener will fire again with the updated data, so we don't proceed.
+              // This prevents a flash of the wrong UI.
+              return; 
+            }
+
             setProfile(profileData);
             setIsLoading(false);
           } else {
@@ -131,7 +141,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             title: "Profile Access Error",
             description: `Could not load your profile: ${error.message}. Please contact support.`
         });
-        if (firebaseAuth) await firebaseAuth.signOut();
+        if (firebaseAuth) {
+            await firebaseAuth.signOut();
+        }
         setIsLoading(false);
       }
     );
