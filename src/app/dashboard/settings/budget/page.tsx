@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp, writeBatch } from "firebase/firestore";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
@@ -226,7 +226,7 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true, raw: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
                 const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true });
@@ -279,18 +279,20 @@ export default function BudgetPage() {
             const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
             const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
 
-
             if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
                 toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category' and 'Forecast' columns." });
+                setIsImporting(false);
                 return;
             }
             
             if (forecastStartIndex > forecastEndIndex) {
                 toast({ variant: "destructive", title: "Invalid Range", description: "The 'Forecast Start Column' must come before the 'Forecast End Column'." });
+                setIsImporting(false);
                 return;
             }
             if (startRow > endRow && endRow !== 0) {
                 toast({ variant: 'destructive', title: 'Invalid Range', description: 'Start row cannot be after end row.' });
+                setIsImporting(false);
                 return;
             }
 
@@ -324,18 +326,24 @@ export default function BudgetPage() {
                 };
             }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
             
+            const batch = writeBatch(firestore);
+
             const existingBudgetsQuery = query(collection(firestore, 'budgets'), where('departmentId', '==', selectedDepartmentId));
             const existingBudgetsSnapshot = await getDocs(existingBudgetsQuery);
-            for (const docToDelete of existingBudgetsSnapshot.docs) {
-                await deleteDoc(doc(firestore, 'budgets', docToDelete.id));
-            }
+            existingBudgetsSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
 
             const deptRef = doc(firestore, 'departments', selectedDepartmentId);
-            await setDoc(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
+            batch.set(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
 
-            for (const item of newItems) {
-                await addDoc(collection(firestore, 'budgets'), item);
-            }
+            const budgetsCollectionRef = collection(firestore, 'budgets');
+            newItems.forEach(item => {
+                const newDocRef = doc(budgetsCollectionRef);
+                batch.set(newDocRef, item);
+            });
+
+            await batch.commit();
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
@@ -548,7 +556,7 @@ export default function BudgetPage() {
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {derivedPreview.slice(0, 100).map((row, rowIndex) => (
+                                        {derivedPreview.slice(0, 500).map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
                                                 {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{String(cell)}</TableCell>)}
                                             </TableRow>
