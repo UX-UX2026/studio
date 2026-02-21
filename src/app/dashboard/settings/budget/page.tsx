@@ -101,9 +101,9 @@ export default function BudgetPage() {
 
     const selectedDepartmentName = selectedDepartment?.name || '';
 
-    const { derivedHeaders, derivedPreview, derivedDataForImport } = useMemo(() => {
+    const { derivedHeaders, derivedPreview, dataRowsForImport } = useMemo(() => {
         if (!originalFileData || originalFileData.length === 0 || startRow === 0) {
-            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+            return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
         const startIndex = startRow > 0 ? startRow - 1 : 0;
@@ -111,7 +111,7 @@ export default function BudgetPage() {
         const rowsToParse = originalFileData.slice(startIndex, endIndex);
 
         if (rowsToParse.filter(r => r && r.some(c => c !== null && c !== '')).length < 1) {
-            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+            return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
         let headerIndex = -1;
@@ -123,7 +123,7 @@ export default function BudgetPage() {
         }
 
         if (headerIndex === -1) {
-            return { derivedHeaders: [], derivedPreview: [], derivedDataForImport: [] };
+            return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
         const headerRow = rowsToParse[headerIndex];
@@ -133,7 +133,7 @@ export default function BudgetPage() {
         return {
             derivedHeaders: headers,
             derivedPreview: dataRows.slice(0, 3).map(row => row.map(cell => cell === null ? "" : cell)),
-            derivedDataForImport: [headerRow, ...dataRows].map(row => row.map(cell => cell === null ? "" : cell)),
+            dataRowsForImport: dataRows,
         };
     }, [originalFileData, startRow, endRow]);
 
@@ -249,10 +249,10 @@ export default function BudgetPage() {
 
                 for (let i = 0; i < visibleData.length; i++) {
                     const row = visibleData[i];
-                    if (startRowIndex === -1 && row.some(cell => typeof cell === 'string' && cell.includes('Actuals vs Budget'))) {
+                    if (startRowIndex === -1 && row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('actuals vs budget'))) {
                         startRowIndex = i;
                     }
-                    if (row.some(cell => typeof cell === 'string' && cell.includes('Subtotal cash expenses'))) {
+                    if (row.some(cell => typeof cell === 'string' && cell.toLowerCase().includes('subtotal cash expenses'))) {
                         endRowIndex = i;
                         break; 
                     }
@@ -295,16 +295,15 @@ export default function BudgetPage() {
         }
 
         const excelDateToJSDate = (serial: number) => {
-            // Formula to convert Excel serial date to JS Date.
-            // 25569 is the number of days between 1970-01-01 and 1900-01-01, adjusted for Excel's 1900 leap year bug.
             return new Date(Math.round((serial - 25569) * 86400 * 1000));
         };
 
         const newMonthHeaders = derivedHeaders
             .slice(forecastStartIndex, forecastEndIndex + 1)
             .map(header => {
-                if (typeof header === 'number' && header > 1 && header < 100000) { // Heuristic check for an Excel date serial
-                    const date = excelDateToJSDate(header);
+                const numHeader = Number(header);
+                if (!isNaN(numHeader) && numHeader > 1 && numHeader < 100000) { 
+                    const date = excelDateToJSDate(numHeader);
                     if (!isNaN(date.getTime())) {
                         return date.toLocaleString('default', { month: 'short' });
                     }
@@ -314,10 +313,6 @@ export default function BudgetPage() {
         
         try {
             const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
-            
-            // Find header row in derived data to slice correctly
-            const headerRowInDerived = derivedDataForImport.find(row => row.includes(category));
-            const dataRowsForImport = headerRowInDerived ? derivedDataForImport.slice(derivedDataForImport.indexOf(headerRowInDerived) + 1) : [];
 
             const newItems: Omit<BudgetItem, 'id'>[] = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
@@ -496,10 +491,10 @@ export default function BudgetPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Year Total Column (Optional)</Label>
-                                <Select value={columnMappings.yearTotal || ''} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === 'none' ? '' : v }))}>
+                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">None (will be calculated)</SelectItem>
+                                        <SelectItem value="">None (will be calculated)</SelectItem>
                                         {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
