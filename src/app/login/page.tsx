@@ -31,7 +31,7 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const auth = useFirebaseAuthInstance();
-    const { user, isLoading: isAuthLoading } = useAuthentication();
+    const { isLoading } = useAuthentication();
     
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -120,8 +120,7 @@ export default function LoginPage() {
     };
 
     // Show a loading screen while the AuthenticationProvider is determining the auth state.
-    // This includes processing the redirect result from Google.
-    if (isAuthLoading) {
+    if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -129,18 +128,8 @@ export default function LoginPage() {
         );
     }
     
-    // If the provider is done loading and we have a user, it means the login was successful
-    // and we are waiting for the provider to redirect us to the dashboard.
-    if (user) {
-        return (
-            <div className="flex h-screen items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <p className="ml-4">Redirecting...</p>
-            </div>
-        );
-    }
-
-    // If not loading and no user, we are not logged in, so show the login form.
+    // The AuthenticationProvider will handle redirecting away from this page if the user is already logged in.
+    // If not loading, and the user is not logged in, we show the login form.
     return (
         <>
             <div className="flex min-h-screen items-center justify-center bg-background p-4">

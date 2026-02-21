@@ -129,16 +129,22 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     return () => unsubscribe();
   }, [user, firestore]);
 
-  // Effect for routing
+  // Centralized effect for routing
   useEffect(() => {
     if (isLoading) return;
 
     const isAuthPage = pathname === '/login';
 
-    if (profile && isAuthPage) {
-      router.replace('/dashboard');
-    } else if (!profile && !isAuthPage && pathname !== '/') {
-      router.replace('/login');
+    if (profile) {
+      // If user has a profile and is on the login page or root, redirect to the dashboard.
+      if (isAuthPage || pathname === '/') {
+        router.replace('/dashboard');
+      }
+    } else {
+      // If user has no profile and is not on the login page, redirect them there.
+      if (!isAuthPage) {
+        router.replace('/login');
+      }
     }
   }, [isLoading, profile, pathname, router]);
 
