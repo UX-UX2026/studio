@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { onSnapshot, DocumentReference, DocumentData } from 'firebase/firestore';
-import { errorEmitter } from '../error-emitter';
-import { FirestorePermissionError } from '../errors';
+import { useToast } from '@/hooks/use-toast';
 
 export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!ref) {
@@ -28,16 +28,18 @@ export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
       }
       setLoading(false);
     }, (err) => {
-      const permissionError = new FirestorePermissionError({
-        path: ref.path,
-        operation: 'get',
-      });
-      errorEmitter.emit('permission-error', permissionError);
+      console.error("useDoc error:", err);
       setError(err);
       setLoading(false);
+      toast({
+        variant: 'destructive',
+        title: "Error fetching document",
+        description: err.message || "You may not have permission to view this document."
+      });
     });
 
     return () => unsubscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ref]);
 
   return { data, loading, error };

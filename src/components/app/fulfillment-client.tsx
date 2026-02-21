@@ -27,12 +27,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { type UserRole, useUser } from "@/firebase/auth/use-user";
+import { type UserRole } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -118,26 +116,18 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           
           const updatePayload = { items: updatedItems };
 
-          updateDoc(requestRef, updatePayload)
-            .then(() => {
-                // Also update local state for immediate UI feedback
-                setItems(currentItems =>
-                    currentItems.map(item =>
-                        item.id === itemId ? { ...item, [field]: value } : item
-                    )
-                );
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: requestRef.path,
-                    operation: 'update',
-                    requestResourceData: updatePayload
-                });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+          await updateDoc(requestRef, updatePayload);
+          
+          // Also update local state for immediate UI feedback
+          setItems(currentItems =>
+              currentItems.map(item =>
+                  item.id === itemId ? { ...item, [field]: value } : item
+              )
+          );
 
       } catch (error: any) {
-          toast({ variant: 'destructive', title: 'Update failed', description: error.message });
+          console.error("Fulfillment Update Error:", error);
+          toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
       }
   };
   
@@ -152,12 +142,15 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       const newCommentText = `${role}: ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
-
-      toast({ title: "Comment added successfully." });
-      setNewComment("");
-      setIsCommentDialogOpen(false);
-      setSelectedItem(null);
+      try {
+        await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
+        toast({ title: "Comment added successfully." });
+        setNewComment("");
+        setIsCommentDialogOpen(false);
+        setSelectedItem(null);
+      } catch (error: any) {
+          // The error toast is already handled in handleItemUpdate
+      }
   };
 
   return (

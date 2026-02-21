@@ -23,8 +23,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 type Vendor = {
     id: string;
@@ -114,7 +112,7 @@ export default function VendorsPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!user || !firestore) return;
         const vendorData = {
             name,
@@ -126,53 +124,42 @@ export default function VendorsPage() {
             status,
         };
 
-        if (editingVendor) {
-            const vendorRef = doc(firestore, 'vendors', editingVendor.id);
-            setDoc(vendorRef, vendorData, { merge: true })
-                .then(() => {
-                    toast({ title: 'Vendor Updated' });
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: user.uid,
-                        userName: user.displayName,
-                        action: 'vendor.update',
-                        details: `Updated vendor: ${name}`,
-                        entity: { type: 'vendor', id: editingVendor.id },
-                        timestamp: serverTimestamp()
-                    });
-                })
-                .catch(() => {
-                    const permissionError = new FirestorePermissionError({
-                        path: vendorRef.path,
-                        operation: 'update',
-                        requestResourceData: vendorData
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
+        try {
+            if (editingVendor) {
+                const vendorRef = doc(firestore, 'vendors', editingVendor.id);
+                await setDoc(vendorRef, vendorData, { merge: true });
+                toast({ title: 'Vendor Updated' });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'vendor.update',
+                    details: `Updated vendor: ${name}`,
+                    entity: { type: 'vendor', id: editingVendor.id },
+                    timestamp: serverTimestamp()
                 });
-        } else {
-            const vendorsCollectionRef = collection(firestore, 'vendors');
-            addDoc(vendorsCollectionRef, vendorData)
-                .then((docRef) => {
-                    toast({ title: 'Vendor Created' });
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: user.uid,
-                        userName: user.displayName,
-                        action: 'vendor.create',
-                        details: `Created vendor: ${name}`,
-                        entity: { type: 'vendor', id: docRef.id },
-                        timestamp: serverTimestamp()
-                    });
-                })
-                .catch(() => {
-                    const permissionError = new FirestorePermissionError({
-                        path: vendorsCollectionRef.path,
-                        operation: 'create',
-                        requestResourceData: vendorData
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
+            } else {
+                const vendorsCollectionRef = collection(firestore, 'vendors');
+                const docRef = await addDoc(vendorsCollectionRef, vendorData);
+                toast({ title: 'Vendor Created' });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'vendor.create',
+                    details: `Created vendor: ${name}`,
+                    entity: { type: 'vendor', id: docRef.id },
+                    timestamp: serverTimestamp()
                 });
+            }
+            setEditingVendor(null);
+            setIsDialogOpen(false);
+        } catch (error: any) {
+            console.error("Save Vendor Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the vendor.',
+            });
         }
-        setEditingVendor(null);
-        setIsDialogOpen(false);
     };
     
     const handleEdit = (vendor: Vendor) => {
@@ -180,32 +167,32 @@ export default function VendorsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!user || !firestore) return;
         const vendorToDelete = vendors?.find(v => v.id === id);
         const vendorRef = doc(firestore, 'vendors', id);
 
-        deleteDoc(vendorRef)
-            .then(() => {
-                toast({ title: 'Vendor Deleted' });
-                if (vendorToDelete) {
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: user.uid,
-                        userName: user.displayName,
-                        action: 'vendor.delete',
-                        details: `Deleted vendor: ${vendorToDelete.name}`,
-                        entity: { type: 'vendor', id },
-                        timestamp: serverTimestamp()
-                    });
-                }
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: vendorRef.path,
-                    operation: 'delete'
+        try {
+            await deleteDoc(vendorRef);
+            toast({ title: 'Vendor Deleted' });
+            if (vendorToDelete) {
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'vendor.delete',
+                    details: `Deleted vendor: ${vendorToDelete.name}`,
+                    entity: { type: 'vendor', id },
+                    timestamp: serverTimestamp()
                 });
-                errorEmitter.emit('permission-error', permissionError);
+            }
+        } catch (error: any) {
+            console.error("Delete Vendor Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete the vendor.',
             });
+        }
     };
 
     const openAddDialog = () => {

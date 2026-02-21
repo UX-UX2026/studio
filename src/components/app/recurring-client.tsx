@@ -10,8 +10,6 @@ import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 type RecurringItem = {
     id: string;
@@ -40,32 +38,32 @@ export function RecurringClient() {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
+    const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
         if (!user || !firestore) return;
         const itemRef = doc(firestore, 'recurringItems', id);
         const updatePayload = { [field]: value };
-        setDoc(itemRef, updatePayload, { merge: true })
-            .then(() => {
-                addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'recurringItem.update',
-                    details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
-                    entity: { type: 'recurringItem', id },
-                    timestamp: serverTimestamp()
-                });
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: itemRef.path,
-                    operation: 'update',
-                    requestResourceData: updatePayload
-                });
-                errorEmitter.emit('permission-error', permissionError);
+        
+        try {
+            await setDoc(itemRef, updatePayload, { merge: true });
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'recurringItem.update',
+                details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
+                entity: { type: 'recurringItem', id },
+                timestamp: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("Recurring Item Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || 'Could not update recurring item.',
+            });
+        }
     };
 
-    const handleAddItem = () => {
+    const handleAddItem = async () => {
         if (!user || !firestore) return;
         const newItem: Omit<RecurringItem, 'id'> = {
           name: "New Item",
@@ -76,54 +74,53 @@ export function RecurringClient() {
           active: true,
         };
         const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
-        addDoc(recurringItemsCollectionRef, newItem)
-            .then((docRef) => {
-                 if (user) {
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: user.uid,
-                        userName: user.displayName,
-                        action: 'recurringItem.create',
-                        details: `Created new recurring item: "New Item"`,
-                        entity: { type: 'recurringItem', id: docRef.id },
-                        timestamp: serverTimestamp()
-                    });
-                }
-                setView('list'); // Switch to list view for easier editing
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: recurringItemsCollectionRef.path,
-                    operation: 'create',
-                    requestResourceData: newItem
-                });
-                errorEmitter.emit('permission-error', permissionError);
+        
+        try {
+            const docRef = await addDoc(recurringItemsCollectionRef, newItem);
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'recurringItem.create',
+                details: `Created new recurring item: "New Item"`,
+                entity: { type: 'recurringItem', id: docRef.id },
+                timestamp: serverTimestamp()
             });
+            setView('list'); // Switch to list view for easier editing
+        } catch (error: any) {
+             console.error("Add Recurring Item Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Add Failed',
+                description: error.message || 'Could not add new recurring item.',
+            });
+        }
     };
     
-    const handleRemoveItem = (id: string) => {
+    const handleRemoveItem = async (id: string) => {
         if (!user || !firestore) return;
         const itemToRemove = items?.find(i => i.id === id);
         const itemRef = doc(firestore, 'recurringItems', id);
-        deleteDoc(itemRef)
-            .then(() => {
-                if (user && itemToRemove) {
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: user.uid,
-                        userName: user.displayName,
-                        action: 'recurringItem.delete',
-                        details: `Deleted recurring item: "${itemToRemove.name}"`,
-                        entity: { type: 'recurringItem', id },
-                        timestamp: serverTimestamp()
-                    });
-                }
-            })
-            .catch(() => {
-                 const permissionError = new FirestorePermissionError({
-                    path: itemRef.path,
-                    operation: 'delete'
+
+        try {
+            await deleteDoc(itemRef);
+            if (itemToRemove) {
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'recurringItem.delete',
+                    details: `Deleted recurring item: "${itemToRemove.name}"`,
+                    entity: { type: 'recurringItem', id },
+                    timestamp: serverTimestamp()
                 });
-                errorEmitter.emit('permission-error', permissionError);
+            }
+        } catch (error: any) {
+            console.error("Delete Recurring Item Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete recurring item.',
             });
+        }
     };
 
     const handleImportClick = () => {

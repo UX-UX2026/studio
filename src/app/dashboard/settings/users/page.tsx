@@ -26,8 +26,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 type UserProfile = {
     id: string;
@@ -110,7 +108,8 @@ export default function UsersPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
+        if (!adminUser || !firestore) return;
         const isEditing = !!editingUser;
 
         const userData = {
@@ -122,53 +121,42 @@ export default function UsersPage() {
             status: isEditing ? editingUser.status : 'Invited' as const,
         };
 
-        if (isEditing && editingUser) {
-            const userRef = doc(firestore, 'users', editingUser.id);
-            setDoc(userRef, userData, { merge: true })
-                .then(() => {
-                    toast({ title: "User Updated", description: "User details have been successfully updated." });
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: adminUser.uid,
-                        userName: adminUser.displayName,
-                        action: 'user.update',
-                        details: `Updated user: ${email}`,
-                        entity: { type: 'user', id: editingUser.id },
-                        timestamp: serverTimestamp()
-                    });
-                })
-                .catch(() => {
-                    const permissionError = new FirestorePermissionError({
-                        path: userRef.path,
-                        operation: 'update',
-                        requestResourceData: userData,
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
+        try {
+            if (isEditing && editingUser) {
+                const userRef = doc(firestore, 'users', editingUser.id);
+                await setDoc(userRef, userData, { merge: true });
+                toast({ title: "User Updated", description: "User details have been successfully updated." });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action: 'user.update',
+                    details: `Updated user: ${email}`,
+                    entity: { type: 'user', id: editingUser.id },
+                    timestamp: serverTimestamp()
                 });
-        } else {
-            const usersCollectionRef = collection(firestore, 'users');
-            addDoc(usersCollectionRef, userData)
-                .then((docRef) => {
-                    toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: adminUser.uid,
-                        userName: adminUser.displayName,
-                        action: 'user.create',
-                        details: `Invited user: ${email}`,
-                        entity: { type: 'user', id: docRef.id },
-                        timestamp: serverTimestamp()
-                    });
-                })
-                .catch(() => {
-                    const permissionError = new FirestorePermissionError({
-                        path: usersCollectionRef.path,
-                        operation: 'create',
-                        requestResourceData: userData,
-                    });
-                    errorEmitter.emit('permission-error', permissionError);
+            } else {
+                const usersCollectionRef = collection(firestore, 'users');
+                const docRef = await addDoc(usersCollectionRef, userData);
+                toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action: 'user.create',
+                    details: `Invited user: ${email}`,
+                    entity: { type: 'user', id: docRef.id },
+                    timestamp: serverTimestamp()
                 });
+            }
+            setEditingUser(null);
+            setIsDialogOpen(false);
+        } catch (error: any) {
+            console.error("Save User Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the user profile.',
+            });
         }
-        setEditingUser(null);
-        setIsDialogOpen(false);
     };
 
     const handleEdit = (userToEdit: UserProfile) => {
@@ -176,30 +164,33 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
+        if (!adminUser || !firestore) return;
+
         const userRef = doc(firestore, 'users', id);
         const deletedUser = users?.find(u => u.id === id);
-        deleteDoc(userRef)
-            .then(() => {
-                toast({ title: "User Deleted", description: "The user has been successfully removed." });
-                if (deletedUser && adminUser) {
-                    addDoc(collection(firestore, 'auditLogs'), {
-                        userId: adminUser.uid,
-                        userName: adminUser.displayName,
-                        action: 'user.delete',
-                        details: `Deleted user: ${deletedUser.email}`,
-                        entity: { type: 'user', id: id },
-                        timestamp: serverTimestamp()
-                    });
-                }
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: userRef.path,
-                    operation: 'delete',
+
+        try {
+            await deleteDoc(userRef);
+            toast({ title: "User Deleted", description: "The user has been successfully removed." });
+            if (deletedUser && adminUser) {
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action: 'user.delete',
+                    details: `Deleted user: ${deletedUser.email}`,
+                    entity: { type: 'user', id: id },
+                    timestamp: serverTimestamp()
                 });
-                errorEmitter.emit('permission-error', permissionError);
+            }
+        } catch (error: any) {
+             console.error("Delete User Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete the user.',
             });
+        }
     };
 
     const openAddDialog = () => {
@@ -207,36 +198,38 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     }
 
-    const handleUserUpdate = (userId: string, field: keyof UserProfile, value: any) => {
+    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
+        if (!adminUser || !firestore) return;
         const userRef = doc(firestore, 'users', userId);
         const updateData = { [field]: value };
-        setDoc(userRef, updateData, { merge: true })
-            .then(() => {
-                if (field === 'status' && value === 'Active') {
-                    const user = users?.find(u => u.id === userId);
-                    toast({
-                        title: "User Activated",
-                        description: `${user?.displayName || 'The user'} has been activated.`,
-                    });
-                }
+        
+        try {
+            await setDoc(userRef, updateData, { merge: true });
+            
+            if (field === 'status' && value === 'Active') {
                 const user = users?.find(u => u.id === userId);
-                addDoc(collection(firestore, 'auditLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action: `user.update.${field}`,
-                    details: `Updated field '${field}' to '${value}' for user ${user?.displayName || userId}`,
-                    entity: { type: 'user', id: userId },
-                    timestamp: serverTimestamp()
+                toast({
+                    title: "User Activated",
+                    description: `${user?.displayName || 'The user'} has been activated.`,
                 });
-            })
-            .catch(() => {
-                const permissionError = new FirestorePermissionError({
-                    path: userRef.path,
-                    operation: 'update',
-                    requestResourceData: updateData,
-                });
-                errorEmitter.emit('permission-error', permissionError);
+            }
+            const user = users?.find(u => u.id === userId);
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action: `user.update.${field}`,
+                details: `Updated field '${field}' to '${value}' for user ${user?.displayName || userId}`,
+                entity: { type: 'user', id: userId },
+                timestamp: serverTimestamp()
             });
+        } catch (error: any) {
+            console.error("User Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update the user's ${field}.`,
+            });
+        }
     };
 
     const handleImportClick = () => {
@@ -270,7 +263,7 @@ export default function UsersPage() {
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file || !firestore) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {

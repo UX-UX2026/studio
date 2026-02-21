@@ -47,7 +47,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         return;
     }
     
-    const seedDepartments = async () => {
+    const seedData = async () => {
+      try {
+        // Seed Departments
         const deptsCol = collection(firestore, 'departments');
         const defaultDepartments = [
             { name: 'Executive', budget: 500000 },
@@ -65,9 +67,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                 await addDoc(deptsCol, { ...dept, managerId: null });
             }
         }
-    };
 
-    const seedProcurementData = async () => {
+        // Seed Procurement Data
         const requestsCol = collection(firestore, 'procurementRequests');
         const q = query(requestsCol, limit(1));
         const snapshot = await getDocs(q);
@@ -85,8 +86,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             userMap.set(doc.data().email.toLowerCase(), doc.id);
         });
         
-        const deptsCol = collection(firestore, 'departments');
-        const deptsSnapshot = await getDocs(deptsCol);
+        const deptsColForSeed = collection(firestore, 'departments');
+        const deptsSnapshot = await getDocs(deptsColForSeed);
         const deptMap = new Map<string, string>(); // name -> id
         deptsSnapshot.forEach(doc => {
             deptMap.set(doc.data().name, doc.id);
@@ -118,11 +119,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
                  console.warn(`Could not seed request for ${req.department}. Missing user or department ID.`);
             }
         }
+      } catch (error) {
+        console.error("Data seeding error:", error);
+      }
     };
 
-    seedDepartments()
-        .then(seedProcurementData)
-        .catch(console.error);
+    seedData();
 
   }, [loading, user, firestore]);
 

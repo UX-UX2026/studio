@@ -274,7 +274,7 @@ export default function BudgetPage() {
     };
     
     const handleConfirmImport = async () => {
-        if (!user) return;
+        if (!user || !firestore) return;
         const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
         const stringifiedHeaders = derivedHeaders.map(h => String(h));
@@ -366,6 +366,7 @@ export default function BudgetPage() {
             toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
             setIsMappingDialogOpen(false);
         } catch (error: any) {
+             console.error("Budget Import Error:", error);
              toast({ variant: "destructive", title: "Import Failed", description: error.message || "An error occurred during import." });
         }
     };

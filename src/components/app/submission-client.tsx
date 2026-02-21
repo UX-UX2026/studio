@@ -34,8 +34,6 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 
 type Item = {
@@ -359,7 +357,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     });
   };
 
-  const handleSubmitRequest = () => {
+  const handleSubmitRequest = async () => {
     if (!user || !departmentName || !selectedDepartment || !firestore) {
         toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
         return;
@@ -386,7 +384,6 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         timeline[0].actor = user.displayName || 'Requester';
     }
 
-
     const newRequest = {
         department: departmentName,
         departmentId: selectedDepartment,
@@ -401,27 +398,28 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
         items,
     };
 
-    const requestsCollectionRef = collection(firestore, 'procurementRequests');
-    addDoc(requestsCollectionRef, newRequest)
-        .then((docRef) => {
-            addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'request.create',
-                details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(total)}.`,
-                entity: { type: 'procurementRequest', id: docRef.id },
-                timestamp: serverTimestamp()
-            });
-            toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
-        })
-        .catch(() => {
-            const permissionError = new FirestorePermissionError({
-                path: requestsCollectionRef.path,
-                operation: 'create',
-                requestResourceData: newRequest
-            });
-            errorEmitter.emit('permission-error', permissionError);
+    try {
+        const requestsCollectionRef = collection(firestore, 'procurementRequests');
+        const docRef = await addDoc(requestsCollectionRef, newRequest);
+        
+        await addDoc(collection(firestore, 'auditLogs'), {
+            userId: user.uid,
+            userName: user.displayName,
+            action: 'request.create',
+            details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(total)}.`,
+            entity: { type: 'procurementRequest', id: docRef.id },
+            timestamp: serverTimestamp()
         });
+        toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
+
+    } catch (error: any) {
+        console.error("Submit Request Error:", error);
+        toast({
+            variant: "destructive",
+            title: "Submission Failed",
+            description: error.message || "Could not submit the request. You may not have permissions.",
+        });
+    }
   };
 
 
