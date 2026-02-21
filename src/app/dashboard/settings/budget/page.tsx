@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -502,10 +503,13 @@ export default function BudgetPage() {
                             </div>
                             <div className="space-y-2">
                                 <Label>Year Total Column (Optional)</Label>
-                                <Select value={columnMappings.yearTotal} onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v }))}>
+                                <Select 
+                                    value={columnMappings.yearTotal || '--none--'} 
+                                    onValueChange={v => setColumnMappings(m => ({ ...m, yearTotal: v === '--none--' ? '' : v }))}
+                                >
                                     <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="">None (will be calculated)</SelectItem>
+                                        <SelectItem value="--none--">None (will be calculated)</SelectItem>
                                         {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
@@ -572,3 +576,5 @@ export default function BudgetPage() {
         </>
     );
 }
+
+    
