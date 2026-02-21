@@ -22,6 +22,8 @@ import { useRoles, type Role } from "@/lib/roles-provider";
 import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 export default function RolesPage() {
@@ -66,39 +68,58 @@ export default function RolesPage() {
         );
     }
     
-    const handleSave = async () => {
-        if (!name || !user) return;
+    const handleSave = () => {
+        if (!name || !user || !firestore) return;
 
-        try {
-            if (editingRole) {
-                const roleRef = doc(firestore, 'roles', editingRole.id);
-                await setDoc(roleRef, { ...editingRole, name });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'role.update',
-                    details: `Updated role from "${editingRole.name}" to "${name}"`,
-                    entity: { type: 'role', id: editingRole.id },
-                    timestamp: serverTimestamp()
+        if (editingRole) {
+            const roleRef = doc(firestore, 'roles', editingRole.id);
+            const roleData = { ...editingRole, name };
+            setDoc(roleRef, roleData, { merge: true })
+                .then(() => {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'role.update',
+                        details: `Updated role from "${editingRole.name}" to "${name}"`,
+                        entity: { type: 'role', id: editingRole.id },
+                        timestamp: serverTimestamp()
+                    });
+                    toast({ title: 'Role Updated' });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: roleRef.path,
+                        operation: 'update',
+                        requestResourceData: roleData
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
-                toast({ title: 'Role Updated' });
-            } else {
-                const docRef = await addDoc(collection(firestore, 'roles'), { name });
-                 await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'role.create',
-                    details: `Created new role: "${name}"`,
-                    entity: { type: 'role', id: docRef.id },
-                    timestamp: serverTimestamp()
+        } else {
+            const rolesCollectionRef = collection(firestore, 'roles');
+            const roleData = { name };
+            addDoc(rolesCollectionRef, roleData)
+                .then((docRef) => {
+                     addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'role.create',
+                        details: `Created new role: "${name}"`,
+                        entity: { type: 'role', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
+                    toast({ title: 'Role Added' });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: rolesCollectionRef.path,
+                        operation: 'create',
+                        requestResourceData: roleData
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
                 });
-                toast({ title: 'Role Added' });
-            }
-            setEditingRole(null);
-            setIsDialogOpen(false);
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Error saving role', description: error.message });
         }
+        setEditingRole(null);
+        setIsDialogOpen(false);
     };
     
     const handleEdit = (role: Role) => {
@@ -106,25 +127,31 @@ export default function RolesPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = async (id: string) => {
-        if (!user) return;
+    const handleDelete = (id: string) => {
+        if (!user || !firestore) return;
         const roleToDelete = roles.find(r => r.id === id);
         if (!roleToDelete) return;
-
-        try {
-            await deleteDoc(doc(firestore, 'roles', id));
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'role.delete',
-                details: `Deleted role: "${roleToDelete.name}"`,
-                entity: { type: 'role', id: id },
-                timestamp: serverTimestamp()
+        
+        const roleRef = doc(firestore, 'roles', id);
+        deleteDoc(roleRef)
+            .then(() => {
+                addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'role.delete',
+                    details: `Deleted role: "${roleToDelete.name}"`,
+                    entity: { type: 'role', id: id },
+                    timestamp: serverTimestamp()
+                });
+                toast({ title: 'Role Deleted' });
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: roleRef.path,
+                    operation: 'delete'
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            toast({ title: 'Role Deleted' });
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Error deleting role', description: error.message });
-        }
     };
 
     const openAddDialog = () => {

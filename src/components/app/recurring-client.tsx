@@ -10,6 +10,8 @@ import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type RecurringItem = {
     id: string;
@@ -38,22 +40,33 @@ export function RecurringClient() {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
+    const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
+        if (!user || !firestore) return;
         const itemRef = doc(firestore, 'recurringItems', id);
-        await setDoc(itemRef, { [field]: value }, { merge: true });
-        if (user) {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'recurringItem.update',
-                details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
-                entity: { type: 'recurringItem', id },
-                timestamp: serverTimestamp()
+        const updatePayload = { [field]: value };
+        setDoc(itemRef, updatePayload, { merge: true })
+            .then(() => {
+                addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'recurringItem.update',
+                    details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
+                    entity: { type: 'recurringItem', id },
+                    timestamp: serverTimestamp()
+                });
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: itemRef.path,
+                    operation: 'update',
+                    requestResourceData: updatePayload
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
     };
 
-    const handleAddItem = async () => {
+    const handleAddItem = () => {
+        if (!user || !firestore) return;
         const newItem: Omit<RecurringItem, 'id'> = {
           name: "New Item",
           category: "Uncategorized",
@@ -62,33 +75,55 @@ export function RecurringClient() {
           frequency: "Monthly",
           active: true,
         };
-        const docRef = await addDoc(collection(firestore, 'recurringItems'), newItem);
-        if (user) {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'recurringItem.create',
-                details: `Created new recurring item: "New Item"`,
-                entity: { type: 'recurringItem', id: docRef.id },
-                timestamp: serverTimestamp()
+        const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
+        addDoc(recurringItemsCollectionRef, newItem)
+            .then((docRef) => {
+                 if (user) {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'recurringItem.create',
+                        details: `Created new recurring item: "New Item"`,
+                        entity: { type: 'recurringItem', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
+                }
+                setView('list'); // Switch to list view for easier editing
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: recurringItemsCollectionRef.path,
+                    operation: 'create',
+                    requestResourceData: newItem
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
-        setView('list'); // Switch to list view for easier editing
     };
     
-    const handleRemoveItem = async (id: string) => {
+    const handleRemoveItem = (id: string) => {
+        if (!user || !firestore) return;
         const itemToRemove = items?.find(i => i.id === id);
-        await deleteDoc(doc(firestore, 'recurringItems', id));
-        if (user && itemToRemove) {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'recurringItem.delete',
-                details: `Deleted recurring item: "${itemToRemove.name}"`,
-                entity: { type: 'recurringItem', id },
-                timestamp: serverTimestamp()
+        const itemRef = doc(firestore, 'recurringItems', id);
+        deleteDoc(itemRef)
+            .then(() => {
+                if (user && itemToRemove) {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'recurringItem.delete',
+                        details: `Deleted recurring item: "${itemToRemove.name}"`,
+                        entity: { type: 'recurringItem', id },
+                        timestamp: serverTimestamp()
+                    });
+                }
+            })
+            .catch(() => {
+                 const permissionError = new FirestorePermissionError({
+                    path: itemRef.path,
+                    operation: 'delete'
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
     };
 
     const handleImportClick = () => {
@@ -122,7 +157,7 @@ export function RecurringClient() {
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file || !firestore) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {

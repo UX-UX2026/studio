@@ -20,6 +20,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/lib/roles-provider";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, setDoc } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 const allPermissions = [
@@ -147,8 +149,8 @@ export default function WorkflowPage() {
         setWorkflow(newWorkflow);
     };
 
-    const handleSaveWorkflow = async () => {
-        if (!selectedDepartmentId) {
+    const handleSaveWorkflow = () => {
+        if (!selectedDepartmentId || !firestore) {
              toast({
                 variant: "destructive",
                 title: "No Department Selected",
@@ -158,19 +160,23 @@ export default function WorkflowPage() {
         }
         
         const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
-        try {
-            await setDoc(departmentRef, { workflow }, { merge: true });
-            toast({
-                title: "Workflow Saved",
-                description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
+        const payload = { workflow };
+
+        setDoc(departmentRef, payload, { merge: true })
+            .then(() => {
+                toast({
+                    title: "Workflow Saved",
+                    description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
+                });
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: departmentRef.path,
+                    operation: 'update',
+                    requestResourceData: payload
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        } catch (error: any) {
-            toast({
-                variant: "destructive",
-                title: "Save Failed",
-                description: error.message || "An error occurred while saving the workflow.",
-            });
-        }
     };
 
     return (
@@ -298,4 +304,3 @@ export default function WorkflowPage() {
         </Card>
     );
 }
-

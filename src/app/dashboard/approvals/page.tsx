@@ -23,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 const getStatusBadge = (status: string) => {
@@ -157,12 +159,12 @@ export default function ApprovalsPage() {
         );
     }
     
-    const handleApprove = async () => {
+    const handleApprove = () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
-        let toastMessage = {};
+        let toastMessage: {title: string, description: string} | null = null;
 
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -213,25 +215,38 @@ export default function ApprovalsPage() {
             });
         }
 
-        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
-        await updateDoc(requestRef, {
-            status: newStatus,
-            timeline: newTimeline
-        });
+        if (!toastMessage) return;
 
-        await addDoc(collection(firestore, 'auditLogs'), {
-            userId: user.uid,
-            userName: user.displayName,
-            action: 'request.status_change',
-            details: `Updated request ${activeRequest.id.substring(0,8)}... status to "${newStatus}"`,
-            entity: { type: 'procurementRequest', id: selectedRequestId },
-            timestamp: serverTimestamp()
-        });
+        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const updateData = { status: newStatus, timeline: newTimeline };
         
-        toast(toastMessage);
+        const finalToastMessage = toastMessage;
+
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'request.status_change',
+                    details: `Updated request ${activeRequest.id.substring(0,8)}... status to "${newStatus}"`,
+                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                    timestamp: serverTimestamp()
+                };
+
+                addDoc(collection(firestore, 'auditLogs'), auditLogData);
+                toast(finalToastMessage);
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     };
 
-    const handleAddComment = async () => {
+    const handleAddComment = () => {
         if (!activeRequest || !user || !newComment.trim() || !firestore) return;
 
         const commentData = {
@@ -243,27 +258,33 @@ export default function ApprovalsPage() {
                 timeStyle: "short",
             }),
         };
+        const updateData = { comments: arrayUnion(commentData) };
+        const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
 
-        try {
-            const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
-            await updateDoc(requestRef, {
-                comments: arrayUnion(commentData),
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'request.comment',
+                    details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
+                    entity: { type: 'procurementRequest', id: activeRequest.id },
+                    timestamp: serverTimestamp()
+                };
+
+                addDoc(collection(firestore, 'auditLogs'), auditLogData);
+
+                setNewComment("");
+                toast({ title: "Comment added" });
+            })
+            .catch(() => {
+                 const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: { comment: commentData }, // can't send arrayUnion sentinel
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'request.comment',
-                details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
-                entity: { type: 'procurementRequest', id: activeRequest.id },
-                timestamp: serverTimestamp()
-            });
-
-            setNewComment("");
-            toast({ title: "Comment added" });
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "Failed to add comment", description: error.message });
-        }
     };
     
   return (
@@ -468,4 +489,3 @@ export default function ApprovalsPage() {
     </div>
   );
 }
-

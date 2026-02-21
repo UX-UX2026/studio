@@ -31,6 +31,8 @@ import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -98,7 +100,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   
   const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
-      if (!itemToUpdate) return;
+      if (!itemToUpdate || !firestore) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
 
@@ -114,14 +116,25 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               return i;
           });
           
-          await updateDoc(requestRef, { items: updatedItems });
+          const updatePayload = { items: updatedItems };
 
-          // Also update local state for immediate UI feedback
-          setItems(currentItems =>
-              currentItems.map(item =>
-                  item.id === itemId ? { ...item, [field]: value } : item
-              )
-          );
+          updateDoc(requestRef, updatePayload)
+            .then(() => {
+                // Also update local state for immediate UI feedback
+                setItems(currentItems =>
+                    currentItems.map(item =>
+                        item.id === itemId ? { ...item, [field]: value } : item
+                    )
+                );
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updatePayload
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
 
       } catch (error: any) {
           toast({ variant: 'destructive', title: 'Update failed', description: error.message });

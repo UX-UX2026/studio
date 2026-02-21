@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type Vendor = {
     id: string;
@@ -112,8 +114,8 @@ export default function VendorsPage() {
         );
     }
     
-    const handleSave = async () => {
-        if (!user) return;
+    const handleSave = () => {
+        if (!user || !firestore) return;
         const vendorData = {
             name,
             contactPerson,
@@ -126,25 +128,48 @@ export default function VendorsPage() {
 
         if (editingVendor) {
             const vendorRef = doc(firestore, 'vendors', editingVendor.id);
-            await setDoc(vendorRef, vendorData, { merge: true });
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'vendor.update',
-                details: `Updated vendor: ${name}`,
-                entity: { type: 'vendor', id: editingVendor.id },
-                timestamp: serverTimestamp()
-            });
+            setDoc(vendorRef, vendorData, { merge: true })
+                .then(() => {
+                    toast({ title: 'Vendor Updated' });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'vendor.update',
+                        details: `Updated vendor: ${name}`,
+                        entity: { type: 'vendor', id: editingVendor.id },
+                        timestamp: serverTimestamp()
+                    });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: vendorRef.path,
+                        operation: 'update',
+                        requestResourceData: vendorData
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         } else {
-            const docRef = await addDoc(collection(firestore, 'vendors'), vendorData);
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'vendor.create',
-                details: `Created vendor: ${name}`,
-                entity: { type: 'vendor', id: docRef.id },
-                timestamp: serverTimestamp()
-            });
+            const vendorsCollectionRef = collection(firestore, 'vendors');
+            addDoc(vendorsCollectionRef, vendorData)
+                .then((docRef) => {
+                    toast({ title: 'Vendor Created' });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'vendor.create',
+                        details: `Created vendor: ${name}`,
+                        entity: { type: 'vendor', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
+                })
+                .catch(() => {
+                    const permissionError = new FirestorePermissionError({
+                        path: vendorsCollectionRef.path,
+                        operation: 'create',
+                        requestResourceData: vendorData
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
         }
         setEditingVendor(null);
         setIsDialogOpen(false);
@@ -155,20 +180,32 @@ export default function VendorsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = async (id: string) => {
-        if (!user) return;
+    const handleDelete = (id: string) => {
+        if (!user || !firestore) return;
         const vendorToDelete = vendors?.find(v => v.id === id);
-        await deleteDoc(doc(firestore, 'vendors', id));
-        if (vendorToDelete) {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'vendor.delete',
-                details: `Deleted vendor: ${vendorToDelete.name}`,
-                entity: { type: 'vendor', id },
-                timestamp: serverTimestamp()
+        const vendorRef = doc(firestore, 'vendors', id);
+
+        deleteDoc(vendorRef)
+            .then(() => {
+                toast({ title: 'Vendor Deleted' });
+                if (vendorToDelete) {
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid,
+                        userName: user.displayName,
+                        action: 'vendor.delete',
+                        details: `Deleted vendor: ${vendorToDelete.name}`,
+                        entity: { type: 'vendor', id },
+                        timestamp: serverTimestamp()
+                    });
+                }
+            })
+            .catch(() => {
+                const permissionError = new FirestorePermissionError({
+                    path: vendorRef.path,
+                    operation: 'delete'
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-        }
     };
 
     const openAddDialog = () => {
@@ -210,7 +247,7 @@ export default function VendorsPage() {
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
+        if (!file || !firestore) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
