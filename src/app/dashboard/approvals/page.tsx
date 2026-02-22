@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import { useRoles } from "@/lib/roles-provider";
 
 
 const getStatusBadge = (status: string) => {
@@ -53,6 +54,7 @@ export default function ApprovalsPage() {
     const searchParams = useSearchParams();
     const { toast } = useToast();
     const firestore = useFirestore();
+    const { roles, loading: rolesLoading } = useRoles();
 
     const requestsQuery = useMemo(() => {
         if (!firestore || !role) return null;
@@ -81,7 +83,7 @@ export default function ApprovalsPage() {
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
 
-    const loading = userLoading || approvalsLoading;
+    const loading = userLoading || approvalsLoading || rolesLoading;
 
     useEffect(() => {
         const reqId = searchParams.get('id');
@@ -138,19 +140,18 @@ export default function ApprovalsPage() {
 
 
     useEffect(() => {
-      const allowedRoles = ['Executive', 'Administrator', 'Manager', 'Procurement Officer'];
-      if (userLoading) return;
+      if (loading) return;
       if (!user) {
         router.push('/dashboard');
         return;
       }
-      if (role && !allowedRoles.includes(role)) {
-        router.push('/dashboard');
+      const userPerms = roles.find(r => r.name === role)?.permissions || [];
+      if (role !== 'Administrator' && !userPerms.includes('approvals:view')) {
+          router.push('/dashboard');
       }
-    }, [user, role, userLoading, router]);
+    }, [user, role, roles, loading, router]);
     
-    const allowedRoles = useMemo(() => ['Executive', 'Administrator', 'Manager', 'Procurement Officer'], []);
-    if (loading || !user || !role || !allowedRoles.includes(role)) {
+    if (loading || !user || !role) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 
 
 const allPermissions = [
+    { id: 'dashboard:view', label: 'View Main Dashboard' },
     { id: 'procurement:submit', label: 'Create & Submit Requests' },
     { id: 'procurement:summary', label: 'View Procurement Summaries' },
     { id: 'procurement:recurring', label: 'Manage Recurring Items' },
@@ -39,6 +40,7 @@ const allPermissions = [
     { id: 'fulfillment:manage', label: 'Manage Fulfillment Tasks' },
     { id: 'reports:view', label: 'View Reports' },
     { id: 'vendors:manage', 'label': 'Manage Vendors' },
+    { id: 'settings:general', label: 'View General Settings' },
     { id: 'settings:users', label: 'Manage Users' },
     { id: 'settings:departments', label: 'Manage Departments' },
     { id: 'settings:budget', label: 'Manage Budgets' },

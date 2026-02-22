@@ -17,6 +17,7 @@ import { Progress } from "@/components/ui/progress";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
 import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
+import { useRoles } from "@/lib/roles-provider";
 
 
 export type FulfillmentItem = ApprovalItem & {
@@ -31,6 +32,7 @@ export default function FulfillmentPage() {
     const { user, role, department, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
+    const { roles, loading: rolesLoading } = useRoles();
 
     const fulfillmentQuery = useMemo(() => {
         if (!firestore) return null;
@@ -62,16 +64,16 @@ export default function FulfillmentPage() {
 
 
     useEffect(() => {
-      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'];
-      if (userLoading) return;
+      if (userLoading || rolesLoading) return;
       if (!user) {
         router.push('/dashboard');
         return;
       }
-      if (role && !allowedRoles.includes(role)) {
+      const userPerms = roles.find(r => r.name === role)?.permissions || [];
+      if (role !== 'Administrator' && !userPerms.includes('fulfillment:view')) {
         router.push('/dashboard');
       }
-    }, [user, role, userLoading, router]);
+    }, [user, role, roles, userLoading, rolesLoading, router]);
     
     const fulfillmentItemsByDept = useMemo(() => {
         return allFulfillmentItems.reduce((acc, item) => {
@@ -107,10 +109,9 @@ export default function FulfillmentPage() {
         return departmentOrder;
     }, [role, department, departmentOrder]);
     
-    const loading = userLoading || requestsLoading;
+    const loading = userLoading || requestsLoading || rolesLoading;
     
-    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Procurement Assistant'], []);
-    if (loading || !user || !role || !allowedRoles.includes(role)) {
+    if (loading || !user || !role) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

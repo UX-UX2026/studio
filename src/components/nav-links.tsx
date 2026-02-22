@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -27,39 +26,43 @@ import {
 } from '@/components/ui/sidebar';
 import Link from 'next/link';
 import { type UserRole } from '@/firebase/auth/use-user';
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collapsible';
 import { cn } from '@/lib/utils';
+import { useRoles } from '@/lib/roles-provider';
 
+// Define permissions required for each link.
 const allLinks = [
-  { href: '/dashboard', label: 'Overview', icon: LayoutGrid, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'] },
+  // A user must have the 'dashboard:view' permission to see the main dashboard.
+  { href: '/dashboard', label: 'Overview', icon: LayoutGrid, permission: 'dashboard:view' },
   { 
     label: 'Procurement', 
     icon: FileText, 
-    roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'],
+    // A user must have at least one of these permissions to see the parent menu.
+    permissions: ['procurement:submit', 'procurement:summary', 'procurement:recurring'],
     subLinks: [
-      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'] },
-      { href: '/dashboard/procurement-summary', label: 'Summary', roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-      { href: '/dashboard/submission', label: 'Submission', roles: ['Administrator', 'Manager', 'Requester', 'Executive'] },
-      { href: '/dashboard/recurring', label: 'Recurring Items', roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive'] },
+      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit' },
+      { href: '/dashboard/procurement-summary', label: 'Summary', permission: 'procurement:summary' },
+      { href: '/dashboard/submission', label: 'Submission', permission: 'procurement:submit' },
+      { href: '/dashboard/recurring', label: 'Recurring Items', permission: 'procurement:recurring' },
     ]
   },
-  { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, roles: ['Administrator', 'Executive', 'Manager', 'Procurement Officer'] },
-  { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, roles: ['Administrator', 'Procurement Officer', 'Manager', 'Executive', 'Procurement Assistant'] },
-  { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, roles: ['Administrator', 'Manager', 'Procurement Officer', 'Executive'] },
-  { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, roles: ['Administrator', 'Procurement Officer'] },
-  { href: '/dashboard/users', label: 'User Management', icon: Users, roles: ['Administrator'] },
+  { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },
+  { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, permission: 'fulfillment:view' },
+  { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, permission: 'reports:view' },
+  { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
+  { href: '/dashboard/users', label: 'User Management', icon: Users, permission: 'settings:users' },
   { 
     label: 'Settings', 
     icon: Settings, 
-    roles: ['Administrator', 'Procurement Officer'],
+    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog'],
     subLinks: [
-        { href: '/dashboard/settings', label: 'General', roles: ['Administrator'] },
-        { href: '/dashboard/settings/workflow', label: 'Workflow', roles: ['Administrator'] },
-        { href: '/dashboard/settings/departments', label: 'Departments', roles: ['Administrator'] },
-        { href: '/dashboard/settings/roles', label: 'Roles', roles: ['Administrator'] },
-        { href: '/dashboard/settings/budget', label: 'Budget', roles: ['Administrator', 'Procurement Officer'] },
-        { href: '/dashboard/settings/database-log', label: 'Database Log', roles: ['Administrator'] },
+        { href: '/dashboard/settings', label: 'General', permission: 'settings:general' },
+        { href: '/dashboard/settings/workflow', label: 'Workflow', permission: 'settings:workflow' },
+        { href: '/dashboard/settings/departments', label: 'Departments', permission: 'settings:departments' },
+        { href: '/dashboard/settings/roles', label: 'Roles', permission: 'settings:roles' },
+        { href: '/dashboard/settings/budget', label: 'Budget', permission: 'settings:budget' },
+        { href: '/dashboard/settings/database-log', label: 'Database Log', permission: 'settings:auditlog' },
     ]
   },
 ];
@@ -67,14 +70,34 @@ const allLinks = [
 export function NavLinks({ role }: { role: UserRole }) {
   const pathname = usePathname();
   const { state } = useSidebar();
+  const { roles: allRolesData } = useRoles();
 
-  const visibleLinks = role ? allLinks.filter(link => link.roles.includes(role)) : [];
+  const userPermissions = useMemo(() => {
+    if (!role || !allRolesData) return [];
+    const currentUserRole = allRolesData.find(r => r.name === role);
+    return currentUserRole?.permissions || [];
+  }, [role, allRolesData]);
+
+  const hasPermission = (permission: string) => {
+    if (role === 'Administrator') return true;
+    return userPermissions.includes(permission);
+  };
+  
+  const hasAnyPermission = (permissions: string[]) => {
+    if (role === 'Administrator') return true;
+    return permissions.some(p => userPermissions.includes(p));
+  };
 
   return (
     <SidebarMenu>
-      {visibleLinks.map((link) => {
+      {allLinks.map((link) => {
         if (link.subLinks) {
-          const visibleSubLinks = link.subLinks.filter(sublink => role && sublink.roles.includes(role));
+          // Check if user has permission to see the parent link
+          if (!hasAnyPermission(link.permissions || [])) {
+              return null;
+          }
+
+          const visibleSubLinks = link.subLinks.filter(sublink => hasPermission(sublink.permission));
           if (visibleSubLinks.length === 0) return null;
           
           const isParentActive = visibleSubLinks.some(sublink => pathname.startsWith(sublink.href));
@@ -124,17 +147,20 @@ export function NavLinks({ role }: { role: UserRole }) {
           );
         }
         
-        const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
-        return (
-          <SidebarMenuItem key={link.href}>
-            <SidebarMenuButton tooltip={link.label} isActive={isActive} asChild>
-                <Link href={link.href}>
-                    <link.icon />
-                    <span>{link.label}</span>
-                </Link>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        );
+        if (link.permission && hasPermission(link.permission)) {
+            const isActive = link.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(link.href);
+            return (
+            <SidebarMenuItem key={link.href}>
+                <SidebarMenuButton tooltip={link.label} isActive={isActive} asChild>
+                    <Link href={link.href}>
+                        <link.icon />
+                        <span>{link.label}</span>
+                    </Link>
+                </SidebarMenuButton>
+            </SidebarMenuItem>
+            );
+        }
+        return null;
       })}
     </SidebarMenu>
   );
