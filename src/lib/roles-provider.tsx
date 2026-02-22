@@ -7,12 +7,13 @@ import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy } from 'fire
 export type Role = {
   id: string;
   name: string;
+  permissions?: string[];
 };
 
 interface RolesContextValue {
   roles: Role[];
   loading: boolean;
-  addRole: (roleData: { name: string }) => Promise<void>;
+  addRole: (roleData: { name: string, permissions?: string[] }) => Promise<void>;
   updateRole: (role: Role) => Promise<void>;
   deleteRole: (roleId: string) => Promise<void>;
 }
@@ -53,13 +54,14 @@ export function RolesProvider({ children }: { children: ReactNode }) {
     }
   }, [roles, loading, firestore]);
 
-  const addRole = async (roleData: { name: string }) => {
+  const addRole = async (roleData: { name: string, permissions?: string[] }) => {
     await addDoc(collection(firestore, 'roles'), roleData);
   };
 
   const updateRole = async (updatedRole: Role) => {
     const roleRef = doc(firestore, 'roles', updatedRole.id);
-    await setDoc(roleRef, { name: updatedRole.name }, { merge: true });
+    const { id, ...roleData } = updatedRole;
+    await setDoc(roleRef, roleData, { merge: true });
   };
 
   const deleteRole = async (roleId: string) => {

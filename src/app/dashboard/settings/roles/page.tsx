@@ -22,6 +22,29 @@ import { useRoles, type Role } from "@/lib/roles-provider";
 import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+
+
+const allPermissions = [
+    { id: 'procurement:submit', label: 'Create & Submit Requests' },
+    { id: 'procurement:summary', label: 'View Procurement Summaries' },
+    { id: 'procurement:recurring', label: 'Manage Recurring Items' },
+    { id: 'approvals:view', label: 'View Approval Requests' },
+    { id: 'approvals:action', label: 'Approve/Reject/Query Requests' },
+    { id: 'fulfillment:view', label: 'View Fulfillment Dashboard' },
+    { id: 'fulfillment:manage', label: 'Manage Fulfillment Tasks' },
+    { id: 'reports:view', label: 'View Reports' },
+    { id: 'vendors:manage', 'label': 'Manage Vendors' },
+    { id: 'settings:users', label: 'Manage Users' },
+    { id: 'settings:departments', label: 'Manage Departments' },
+    { id: 'settings:budget', label: 'Manage Budgets' },
+    { id: 'settings:roles', label: 'Manage Roles & Permissions' },
+    { id: 'settings:workflow', label: 'Manage Approval Workflows' },
+    { id: 'settings:auditlog', label: 'View Audit Log' },
+];
 
 
 export default function RolesPage() {
@@ -36,6 +59,7 @@ export default function RolesPage() {
     
     // Form state
     const [name, setName] = useState('');
+    const [permissions, setPermissions] = useState<string[]>([]);
 
     useEffect(() => {
         if (userLoading) return;
@@ -52,8 +76,10 @@ export default function RolesPage() {
         if (isDialogOpen) {
             if (editingRole) {
                 setName(editingRole.name);
+                setPermissions(editingRole.permissions || []);
             } else {
                 setName('');
+                setPermissions([]);
             }
         }
     }, [editingRole, isDialogOpen]);
@@ -69,10 +95,11 @@ export default function RolesPage() {
     const handleSave = async () => {
         if (!name || !user || !firestore) return;
 
+        const roleData = { name, permissions };
+
         try {
             if (editingRole) {
                 const roleRef = doc(firestore, 'roles', editingRole.id);
-                const roleData = { ...editingRole, name };
                 await setDoc(roleRef, roleData, { merge: true });
 
                 await addDoc(collection(firestore, 'auditLogs'), {
@@ -86,7 +113,6 @@ export default function RolesPage() {
                 toast({ title: 'Role Updated' });
             } else {
                 const rolesCollectionRef = collection(firestore, 'roles');
-                const roleData = { name };
                 const docRef = await addDoc(rolesCollectionRef, roleData);
                 
                 await addDoc(collection(firestore, 'auditLogs'), {
@@ -143,6 +169,16 @@ export default function RolesPage() {
         }
     };
 
+    const handlePermissionChange = (permissionId: string, isChecked: boolean | 'indeterminate') => {
+        setPermissions(currentPermissions => {
+            if (isChecked) {
+                return [...currentPermissions, permissionId];
+            } else {
+                return currentPermissions.filter(p => p !== permissionId);
+            }
+        });
+    };
+
     const openAddDialog = () => {
         setEditingRole(null);
         setIsDialogOpen(true);
@@ -157,7 +193,7 @@ export default function RolesPage() {
                         Role Management
                     </CardTitle>
                     <CardDescription>
-                        Create, edit, and manage user roles. Permissions are assigned in the code.
+                        Create, edit, and manage user roles and their permissions.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -167,11 +203,12 @@ export default function RolesPage() {
                             Add Role
                         </Button>
                     </div>
-                    <div className="overflow-auto">
+                    <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Role Name</TableHead>
+                                    <TableHead>Permissions</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -179,6 +216,9 @@ export default function RolesPage() {
                                 {roles.map((r) => (
                                     <TableRow key={r.id}>
                                         <TableCell className="font-medium">{r.name}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{r.permissions?.length || 0} permissions</Badge>
+                                        </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(r)}>
                                                 <Edit className="h-4 w-4" />
@@ -196,11 +236,11 @@ export default function RolesPage() {
             </Card>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-3xl flex flex-col max-h-[90vh]">
                     <DialogHeader>
                         <DialogTitle>{editingRole ? 'Edit' : 'Add'} Role</DialogTitle>
                         <DialogDescription>
-                            Enter the name for the role.
+                            Enter the name for the role and assign permissions.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -209,7 +249,24 @@ export default function RolesPage() {
                             <Input id="name" value={name} onChange={e => setName(e.target.value)} className="col-span-3" required />
                         </div>
                     </div>
-                    <DialogFooter>
+                    <div className="flex-1 space-y-4">
+                        <Label>Permissions</Label>
+                        <ScrollArea className="h-72 rounded-md border p-4">
+                             <div className="grid grid-cols-2 gap-4">
+                                {allPermissions.map(p => (
+                                    <Label key={p.id} className="flex items-center gap-2 font-normal cursor-pointer">
+                                        <Checkbox
+                                            id={`perm-${p.id}`}
+                                            checked={permissions.includes(p.id)}
+                                            onCheckedChange={checked => handlePermissionChange(p.id, checked)}
+                                        />
+                                        {p.label}
+                                    </Label>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                    <DialogFooter className="border-t pt-4">
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>

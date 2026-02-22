@@ -284,12 +284,36 @@
     },
     "role": {
       "title": "Role",
-      "description": "Defines a user role within the application.",
+      "description": "Defines a user role and its permissions within the application.",
       "type": "object",
       "properties": {
         "name": {
           "type": "string",
           "description": "The name of the role."
+        },
+        "permissions": {
+          "type": "array",
+          "description": "A list of permission keys granted to this role.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "procurement:submit",
+              "procurement:summary",
+              "procurement:recurring",
+              "approvals:view",
+              "approvals:action",
+              "fulfillment:view",
+              "fulfillment:manage",
+              "reports:view",
+              "vendors:manage",
+              "settings:users",
+              "settings:departments",
+              "settings:budget",
+              "settings:roles",
+              "settings:workflow",
+              "settings:auditlog"
+            ]
+          }
         }
       },
       "required": [
