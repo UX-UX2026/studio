@@ -188,7 +188,7 @@ export default function ProcurementQuickSubmitPage() {
                 : 0;
 
             const variance = procurementTotal - forecastTotal;
-            const isOverBudget = forecastTotal > 0 && procurementTotal > (forecastTotal * 1.05);
+            const isOverBudget = forecastTotal > 0 && procurementTotal > forecastTotal;
 
             return { category, procurementTotal, forecastTotal, variance, isOverBudget };
         }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; }[];
