@@ -152,6 +152,10 @@
               "estimatedLeadTimeDays": {
                 "type": "number",
                 "description": "The estimated number of days for fulfillment, suggested by AI and adjustable by procurement officers."
+              },
+              "comments": {
+                "type": "string",
+                "description": "Comments or justification for this specific line item, especially if it's over budget."
               }
             }
           }

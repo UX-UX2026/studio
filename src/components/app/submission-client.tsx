@@ -41,6 +41,7 @@ type Item = {
   fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
   receivedQty: number;
   fulfillmentComments: string[];
+  comments?: string;
 };
 
 type ApprovalRequest = {
@@ -143,6 +144,7 @@ export function SubmissionClient({
       fulfillmentStatus: 'Pending',
       receivedQty: 0,
       fulfillmentComments: [],
+      comments: "",
     };
     setItems(prev => [...prev, newItem]);
   };
@@ -187,11 +189,11 @@ export function SubmissionClient({
         return;
     }
 
-    const headers: (keyof Item)[] = ['id', 'type', 'description', 'brand', 'qty', 'category', 'unitPrice'];
+    const headers: (keyof Item)[] = ['id', 'type', 'description', 'brand', 'qty', 'category', 'unitPrice', 'comments'];
     const csvContent = [
         headers.join(','),
         ...items.map(item =>
-            headers.map(header => `"${(item as any)[header]}"`).join(',')
+            headers.map(header => `"${(item as any)[header] || ''}"`).join(',')
         )
     ].join('\n');
 
@@ -243,6 +245,7 @@ export function SubmissionClient({
                     fulfillmentStatus: 'Pending',
                     receivedQty: 0,
                     fulfillmentComments: [],
+                    comments: item.comments || "",
                 };
             }).filter((item): item is Item => item !== null);
             
@@ -295,6 +298,7 @@ export function SubmissionClient({
               <TableHead className="w-[150px]">Brand</TableHead>
               <TableHead className="w-[80px]">Qty</TableHead>
               <TableHead className="w-[250px]">Line Item</TableHead>
+              <TableHead className="w-[200px]">Comments</TableHead>
               <TableHead className="w-[120px] text-right">Unit Price</TableHead>
               <TableHead className="w-[120px] text-right">Total</TableHead>
               <TableHead className="w-[80px] text-center">Actions</TableHead>
@@ -378,6 +382,16 @@ export function SubmissionClient({
                       </PopoverContent>
                     </Popover>
                   )}
+                </TableCell>
+                <TableCell>
+                  <Input
+                    type="text"
+                    value={item.comments || ""}
+                    onChange={(e) => handleItemChange(item.id, "comments", e.target.value)}
+                    readOnly={isLocked}
+                    className="bg-transparent border-0"
+                    placeholder="Add a comment..."
+                  />
                 </TableCell>
                 <TableCell>
                   <Input

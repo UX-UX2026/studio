@@ -10,6 +10,7 @@ export type ApprovalItem = {
     receivedQty: number;
     fulfillmentComments: string[];
     estimatedLeadTimeDays?: number;
+    comments?: string;
 };
 
 export type ApprovalRequest = {

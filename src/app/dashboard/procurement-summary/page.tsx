@@ -114,7 +114,12 @@ export default function ProcurementSummaryPage() {
             const variance = procurementTotal - forecastTotal;
             const isOverBudget = forecastTotal > 0 && procurementTotal > (forecastTotal * 1.05);
 
-            return { category, procurementTotal, forecastTotal, variance, isOverBudget };
+            const comments = procurementItems
+                .filter(item => item.category === category && item.comments)
+                .map(item => item.comments)
+                .join('; ');
+
+            return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments };
         }).filter(Boolean);
         
         const totals = lines.reduce((acc, line) => {
@@ -220,6 +225,7 @@ export default function ProcurementSummaryPage() {
                                 <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
                                 <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
                                 <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                <TableHead className="font-bold">Comments</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -232,10 +238,11 @@ export default function ProcurementSummaryPage() {
                                         {item!.isOverBudget && <AlertTriangle className="h-4 w-4" />}
                                         {formatCurrency(item!.variance)}
                                     </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{item!.comments}</TableCell>
                                 </TableRow>
                             )) : (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                                         No data available for the selected department and period.
                                     </TableCell>
                                 </TableRow>
@@ -246,6 +253,7 @@ export default function ProcurementSummaryPage() {
                             <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
                             <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
                             <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                            <TableCell></TableCell>
                         </TableRow>
                     </Table>
                 </div>

@@ -33,6 +33,7 @@ const getStatusBadge = (status: string) => {
         case 'In Fulfillment': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">In Fulfillment</Badge>;
         case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
         case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+        case 'Rejected': return <Badge variant="destructive">{status}</Badge>;
         default: return <Badge variant="secondary">{status}</Badge>
     }
 }
@@ -62,14 +63,14 @@ export default function ApprovalsPage() {
             return query(baseQuery); // All requests
         }
         if (role === 'Executive') {
-            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval']));
+            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised']));
         }
         if (role === 'Manager') {
             if (!department) return null; // Manager must have a department
-            return query(baseQuery, where('status', '==', 'Pending Manager Approval'), where('department', '==', department));
+            return query(baseQuery, where('department', '==', department));
         }
         if (role === 'Procurement Officer') {
-            return query(baseQuery, where('status', '==', 'Approved'));
+            return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
 
         return null; // No requests for other roles on this page
@@ -105,7 +106,7 @@ export default function ApprovalsPage() {
 
 
     const approvalSummary = useMemo(() => {
-        const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved');
+        const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved' || req.status === 'Queries Raised');
         const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
         const byDept = pending.reduce((acc, req) => {
             if (!acc[req.department]) {
@@ -166,7 +167,7 @@ export default function ApprovalsPage() {
 
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
-        if (role === 'Manager' && activeRequest.status === 'Pending Manager Approval') {
+        if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
             toastMessage = {
                 title: "Request Approved",
@@ -181,7 +182,7 @@ export default function ApprovalsPage() {
                 }
                 return step;
             });
-        } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+        } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Approved';
             toastMessage = {
                 title: "Request Approved",
@@ -223,7 +224,7 @@ export default function ApprovalsPage() {
             
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: user.displayName || 'System',
                 action: 'request.status_change',
                 details: `Updated request ${activeRequest.id.substring(0,8)}... status to "${newStatus}"`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -242,6 +243,100 @@ export default function ApprovalsPage() {
             });
         }
     };
+    
+    const handleReject = async () => {
+        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+
+        const newStatus: ApprovalRequest['status'] = 'Rejected';
+        
+        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const updateData = { status: newStatus };
+
+        try {
+            await updateDoc(requestRef, updateData);
+
+            const auditLogData = {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.reject',
+                details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
+                entity: { type: 'procurementRequest', id: selectedRequestId },
+                timestamp: serverTimestamp()
+            };
+            await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+            
+            toast({
+                title: "Request Rejected",
+                description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
+            });
+        } catch (error: any) {
+            console.error("Rejection Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Rejection Failed",
+                description: error.message || "Could not update the request status.",
+            });
+        }
+    };
+    
+    const handleRaiseQuery = async () => {
+        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+
+        if (!newComment.trim()) {
+            toast({
+                variant: "destructive",
+                title: "Comment Required",
+                description: "Please enter a comment in the log before raising a query.",
+            });
+            return;
+        }
+
+        const newStatus: ApprovalRequest['status'] = 'Queries Raised';
+
+        const commentData = {
+            actor: user.displayName || "User",
+            actorId: user.uid,
+            text: newComment,
+            timestamp: new Date().toLocaleString("en-GB", {
+                dateStyle: "medium",
+                timeStyle: "short",
+            }),
+        };
+
+        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const updateData = { 
+            status: newStatus,
+            comments: arrayUnion(commentData)
+        };
+
+        try {
+            await updateDoc(requestRef, updateData);
+
+            const auditLogData = {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.query',
+                details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
+                entity: { type: 'procurementRequest', id: selectedRequestId },
+                timestamp: serverTimestamp()
+            };
+            await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+            
+            setNewComment("");
+            toast({
+                title: "Query Raised",
+                description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
+            });
+        } catch (error: any) {
+            console.error("Raise Query Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Failed to Raise Query",
+                description: error.message || "Could not update the request.",
+            });
+        }
+    };
+
 
     const handleAddComment = async () => {
         if (!activeRequest || !user || !newComment.trim() || !firestore) return;
@@ -263,7 +358,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: user.displayName || 'System',
                 action: 'request.comment',
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
@@ -464,10 +559,10 @@ export default function ApprovalsPage() {
                                         </TabsContent>
                                 </Tabs>
                                 </CardContent>
-                                {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved') && (
+                                {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
                                     <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                        <Button variant="outline"><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                        <Button variant="destructive"><X className="mr-2 h-4 w-4" />Reject</Button>
+                                        <Button variant="outline" onClick={handleRaiseQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                                        <Button variant="destructive" onClick={handleReject}><X className="mr-2 h-4 w-4" />Reject</Button>
                                         <Button onClick={handleApprove}><Check className="mr-2 h-4 w-4" />{role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}</Button>
                                     </CardFooter>
                                 )}
