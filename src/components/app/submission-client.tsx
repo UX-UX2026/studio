@@ -19,7 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Wand2, Upload, Download, Calendar as CalendarIcon } from "lucide-react";
+import { Lock, Plus, Trash2, Wand2, Upload, Download } from "lucide-react";
 import {
   suggestProcurementCategory,
   SuggestProcurementCategoryOutput,
@@ -27,14 +27,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Label } from "@/components/ui/label";
-import { type UserRole, useUser } from "@/firebase/auth/use-user";
+import { type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, addDoc, query, where, serverTimestamp } from "firebase/firestore";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-
 
 type Item = {
   id: number | string;
@@ -49,27 +43,6 @@ type Item = {
   fulfillmentComments: string[];
 };
 
-type RecurringItem = {
-    id: string;
-    category: string;
-    name: string;
-    amount: number;
-    active: boolean;
-};
-
-type WorkflowStage = {
-    id: string;
-    name: string;
-    role: any;
-    permissions: string[];
-};
-
-type Department = {
-    id: string;
-    name: string;
-    workflow?: WorkflowStage[];
-};
-
 type ApprovalRequest = {
     id: string;
     department: string;
@@ -81,7 +54,6 @@ type ApprovalRequest = {
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: Item[];
 };
-
 
 const categories = [
   "Operational Lease/Rental - SA",
@@ -100,86 +72,35 @@ const formatCurrency = (amount: number) => {
   }).format(amount);
 };
 
-export function SubmissionClient({ userRole, userDepartment }: { userRole: UserRole, userDepartment: string | null }) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [selectedDate, setSelectedDate] = useState(new Date(new Date().getFullYear() + 2, 1, 1));
-  const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
-  const { user } = useUser();
-  
-  const firestore = useFirestore();
-  const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
-  const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
-
-  const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), where('active', '==', true)), [firestore]);
-  const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
-
-  useEffect(() => {
-    if (recurringItems) {
-        const recurringSubmissionItems: Item[] = recurringItems.map(item => ({
-            id: item.id,
-            type: "Recurring",
-            description: item.name,
-            brand: item.name.split(" ")[0], // Simple brand extraction
-            qty: 1,
-            category: item.category,
-            unitPrice: item.amount,
-            fulfillmentStatus: 'Pending',
-            receivedQty: 0,
-            fulfillmentComments: [],
-        }));
-        setItems(recurringSubmissionItems);
-    }
-  }, [recurringItems]);
-
-
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('');
-
-  useEffect(() => {
-    if (departments && departments.length > 0 && !selectedDepartment) {
-        if ((userRole === 'Manager' || userRole === 'Requester') && userDepartment) {
-            const departmentFromLive = departments.find(d => d.name === userDepartment);
-            if (departmentFromLive) {
-                setSelectedDepartment(departmentFromLive.id);
-                return;
-            }
-        }
-        // Default for admin or if department not found
-        const defaultDept = departments.find(d => d.name === 'ICT') || departments[0];
-        if (defaultDept) {
-            setSelectedDepartment(defaultDept.id);
-        }
-    }
-  }, [departments, userRole, userDepartment, selectedDepartment]);
-
-
+export function SubmissionClient({ 
+    userRole, 
+    items,
+    setItems,
+    selectedPeriod,
+    onSubmit,
+    allRequests,
+}: { 
+    userRole: UserRole, 
+    items: Item[],
+    setItems: React.Dispatch<React.SetStateAction<Item[]>>,
+    selectedPeriod: string,
+    onSubmit: () => void,
+    allRequests: ApprovalRequest[],
+}) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const departmentName = useMemo(() => {
-      return departments?.find(d => d.id === selectedDepartment)?.name || '';
-  }, [selectedDepartment, departments]);
-
-   const procurementRequestsQuery = useMemo(() => {
-        if (!firestore || !departmentName) return null;
-        return query(
-            collection(firestore, 'procurementRequests'),
-            where('department', '==', departmentName)
-        );
-    }, [firestore, departmentName]);
-
-    const { data: procurementRequests } = useCollection<ApprovalRequest>(procurementRequestsQuery);
-
-    const periodStatuses = useMemo(() => {
-        const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
-        if (procurementRequests) {
-            procurementRequests.forEach(req => {
-                statuses[req.period] = { status: req.status, id: req.id };
-            });
-        }
-        return statuses;
-  }, [procurementRequests]);
+  const periodStatuses = useMemo(() => {
+      const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
+      if (allRequests) {
+          allRequests.forEach(req => {
+              statuses[req.period] = { status: req.status, id: req.id };
+          });
+      }
+      return statuses;
+  }, [allRequests]);
 
 
   const isLocked = useMemo(() => {
@@ -188,15 +109,12 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
 
       const { status } = periodStatusInfo;
       
-      // Lock if completed or pending at executive level
       if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
           return true;
       }
-      // Lock for requesters once submitted to manager
       if (userRole === 'Requester' && status === 'Pending Manager Approval') {
           return true;
       }
-      // Lock for managers if they submitted and it's pending for executive
       if (userRole === 'Manager' && status === 'Pending Executive') {
           return true;
       }
@@ -204,15 +122,6 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       return false;
   }, [selectedPeriod, periodStatuses, userRole]);
 
-  const departmentWorkflow = useMemo(() => {
-    const dept = departments?.find(d => d.id === selectedDepartment);
-    return dept?.workflow;
-  }, [selectedDepartment, departments]);
-
-
-  const total = useMemo(() => {
-    return items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
-  }, [items]);
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
@@ -235,11 +144,11 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
       receivedQty: 0,
       fulfillmentComments: [],
     };
-    setItems([...items, newItem]);
+    setItems(prev => [...prev, newItem]);
   };
 
   const handleRemoveItem = (id: number | string) => {
-    setItems(items.filter((item) => item.id !== id));
+    setItems(prev => prev.filter((item) => item.id !== id));
   };
   
   const handleGetSuggestion = async (description: string, itemId: number | string) => {
@@ -357,72 +266,6 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
     });
   };
 
-  const handleSubmitRequest = async () => {
-    if (!user || !departmentName || !selectedDepartment || !firestore) {
-        toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
-        return;
-    }
-    
-    const defaultTimeline = [
-        { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
-        { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
-        { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
-        { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
-    ];
-    
-    const timeline = departmentWorkflow && departmentWorkflow.length > 0
-      ? departmentWorkflow.map((stage, index) => ({
-          stage: stage.name,
-          actor: stage.role || 'System',
-          date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
-          status: index === 0 ? 'completed' as const : (index === 1 ? 'pending' as const : 'waiting' as const),
-      }))
-      : defaultTimeline;
-    
-    // The first stage is always submission, so let's ensure the actor is the current user.
-    if (timeline.length > 0) {
-        timeline[0].actor = user.displayName || 'Requester';
-    }
-
-    const newRequest = {
-        department: departmentName,
-        departmentId: selectedDepartment,
-        period: selectedPeriod,
-        total,
-        status: 'Pending Manager Approval',
-        submittedBy: user.displayName,
-        submittedById: user.uid,
-        createdAt: serverTimestamp(),
-        timeline: timeline,
-        comments: [],
-        items,
-    };
-
-    try {
-        const requestsCollectionRef = collection(firestore, 'procurementRequests');
-        const docRef = await addDoc(requestsCollectionRef, newRequest);
-        
-        await addDoc(collection(firestore, 'auditLogs'), {
-            userId: user.uid,
-            userName: user.displayName,
-            action: 'request.create',
-            details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(total)}.`,
-            entity: { type: 'procurementRequest', id: docRef.id },
-            timestamp: serverTimestamp()
-        });
-        toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
-
-    } catch (error: any) {
-        console.error("Submit Request Error:", error);
-        toast({
-            variant: "destructive",
-            title: "Submission Failed",
-            description: error.message || "Could not submit the request. You may not have permissions.",
-        });
-    }
-  };
-
-
   return (
     <div className="space-y-6">
        <input
@@ -432,59 +275,6 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
             accept=".csv"
             onChange={handleFileChange}
         />
-      <div className="flex flex-col justify-between gap-4 pb-6 border-b md:flex-row md:items-center">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="grid w-full md:max-w-xs items-center gap-1.5">
-                <Label htmlFor="period">Procurement Period</Label>
-                 <Popover>
-                    <PopoverTrigger asChild>
-                        <Button
-                            variant={"outline"}
-                            className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !selectedDate && "text-muted-foreground"
-                            )}
-                        >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                        <Calendar
-                            mode="single"
-                            selected={selectedDate}
-                            onSelect={(date) => {
-                                if(date) setSelectedDate(date)
-                            }}
-                            initialFocus
-                        />
-                    </PopoverContent>
-                </Popover>
-            </div>
-            {userRole === 'Administrator' ? (
-                <div className="grid w-full md:max-w-xs items-center gap-1.5">
-                    <Label htmlFor="department">Department</Label>
-                    <Select value={selectedDepartment} onValueChange={setSelectedDepartment} disabled={deptsLoading}>
-                        <SelectTrigger id="department">
-                            <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </div>
-            ) : (
-                <div className="grid w-full md:max-w-xs items-center gap-1.5">
-                    <Label>Department</Label>
-                    <Input type="text" value={departmentName} readOnly className="bg-muted/50 border-0" />
-                </div>
-            )}
-        </div>
-        <div className="p-4 text-right rounded-lg bg-primary/10 border-primary/20 border shrink-0">
-            <p className="text-xs font-bold uppercase text-primary">Estimated Period Total</p>
-            <p className="text-2xl font-black text-primary">{formatCurrency(total)}</p>
-        </div>
-      </div>
       
       {isLocked && (
           <div className="flex items-center gap-3 p-3 rounded-lg bg-yellow-100/80 border border-yellow-300 text-yellow-800">
@@ -640,7 +430,7 @@ export function SubmissionClient({ userRole, userDepartment }: { userRole: UserR
           ): (
             <>
               <Button variant="ghost">Save as Draft</Button>
-              <Button className="shadow-lg shadow-primary/20" onClick={handleSubmitRequest}>Submit Period Request</Button>
+              <Button className="shadow-lg shadow-primary/20" onClick={onSubmit}>Submit Period Request</Button>
             </>
           )}
         </div>

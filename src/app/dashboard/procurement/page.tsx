@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -20,6 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { useToast } from "@/hooks/use-toast";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -34,6 +35,7 @@ type Department = {
     id: string;
     name: string;
     budgetHeaders?: string[];
+    workflow?: WorkflowStage[];
 };
 
 type BudgetItem = {
@@ -52,20 +54,46 @@ type RecurringItem = {
     active: boolean;
 };
 
+// Item type is now managed by the parent component
+type Item = {
+  id: number | string;
+  type: "Recurring" | "One-Off";
+  description: string;
+  brand: string;
+  qty: number;
+  category: string;
+  unitPrice: number;
+  fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
+  receivedQty: number;
+  fulfillmentComments: string[];
+};
+
+type WorkflowStage = {
+    id: string;
+    name: string;
+    role: any;
+    permissions: string[];
+};
+
+
 export default function ProcurementQuickSubmitPage() {
     const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
+    const { toast } = useToast();
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<Date>(new Date(new Date().getFullYear() + 2, 1, 1));
     const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
-
+    
+    // State for draft items is lifted up to this parent component
+    const [draftItems, setDraftItems] = useState<Item[]>([]);
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
+    // This query is for checking lock status, it should remain
     const requestsQuery = useMemo(() => collection(firestore, 'procurementRequests'), [firestore]);
     const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
 
@@ -88,22 +116,51 @@ export default function ProcurementQuickSubmitPage() {
                 return;
             }
         }
-        // Fallback for admins or if user dept not found
         if (!selectedDepartmentId && departments.length > 0) {
             setSelectedDepartmentId(departments[0].id);
         }
     }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
 
+    // Effect to initialize and update draft items from recurring items
+    useEffect(() => {
+        if (recurringItems) {
+            const recurringSubmissionItems: Item[] = recurringItems.map(item => ({
+                id: item.id,
+                type: "Recurring",
+                description: item.name,
+                brand: item.name.split(" ")[0],
+                qty: 1,
+                category: item.category,
+                unitPrice: item.amount,
+                fulfillmentStatus: 'Pending',
+                receivedQty: 0,
+                fulfillmentComments: [],
+            }));
+            
+            setDraftItems(currentDraft => {
+                const oneOffItems = currentDraft.filter(i => i.type === 'One-Off');
+                return [...recurringSubmissionItems, ...oneOffItems];
+            });
+        }
+    }, [recurringItems]);
 
+    const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
+
+    // This is the LIVE total for the accordion trigger, based on the current draft
+    const periodSubmissionTotal = useMemo(() => {
+        return draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
+    }, [draftItems]);
+
+    // This summary now uses the live draftItems state
     const summaryData = useMemo(() => {
-        if (!selectedDepartmentId || !selectedPeriod || !allRequests || !budgetItems) {
+        const procurementItems = draftItems;
+        
+        if (!selectedDepartmentId || !selectedPeriod || !budgetItems) {
             return { lines: [], totals: { procurement: 0, forecast: 0, variance: 0 } };
         }
 
-        const selectedRequest = allRequests.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
         const selectedDept = departments?.find(d => d.id === selectedDepartmentId);
-
-        const procurementItems = selectedRequest ? selectedRequest.items : [];
+        
         const monthName = selectedPeriod.split(' ')[0];
         const monthIndex = selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1;
 
@@ -139,17 +196,78 @@ export default function ProcurementQuickSubmitPage() {
 
         return { lines, totals };
 
-    }, [selectedDepartmentId, selectedPeriod, allRequests, budgetItems, departments]);
-
-    const periodSubmissionTotal = useMemo(() => {
-        const selectedRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
-        return selectedRequest?.total || 0;
-    }, [selectedDepartmentId, selectedPeriod, allRequests]);
+    }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
 
     const recurringItemsTotal = useMemo(() => {
         if (!recurringItems) return 0;
         return recurringItems.reduce((sum, item) => sum + item.amount, 0);
     }, [recurringItems]);
+
+    const handleSubmitRequest = async () => {
+        if (!user || !departmentName || !selectedDepartmentId || !firestore) {
+            toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
+            return;
+        }
+        
+        const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
+        
+        const defaultTimeline = [
+            { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
+            { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
+            { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
+            { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
+        ];
+        
+        const timeline = departmentWorkflow && departmentWorkflow.length > 0
+          ? departmentWorkflow.map((stage, index) => ({
+              stage: stage.name,
+              actor: String(stage.role) || 'System',
+              date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
+              status: index === 0 ? 'completed' as const : (index === 1 ? 'pending' as const : 'waiting' as const),
+          }))
+          : defaultTimeline;
+        
+        if (timeline.length > 0) {
+            timeline[0].actor = user.displayName || 'Requester';
+        }
+
+        const newRequest = {
+            department: departmentName,
+            departmentId: selectedDepartmentId,
+            period: selectedPeriod,
+            total: periodSubmissionTotal,
+            status: 'Pending Manager Approval',
+            submittedBy: user.displayName,
+            submittedById: user.uid,
+            createdAt: serverTimestamp(),
+            timeline: timeline,
+            comments: [],
+            items: draftItems,
+        };
+
+        try {
+            const requestsCollectionRef = collection(firestore, 'procurementRequests');
+            const docRef = await addDoc(requestsCollectionRef, newRequest);
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'request.create',
+                details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(periodSubmissionTotal)}.`,
+                entity: { type: 'procurementRequest', id: docRef.id },
+                timestamp: serverTimestamp()
+            });
+            toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
+
+        } catch (error: any) {
+            console.error("Submit Request Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Submission Failed",
+                description: error.message || "Could not submit the request. You may not have permissions.",
+            });
+        }
+    };
     
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
@@ -317,7 +435,14 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </AccordionTrigger>
                 <AccordionContent className="p-4 pt-0">
-                    <SubmissionClient userRole={role} userDepartment={userDepartment} />
+                    <SubmissionClient 
+                        userRole={role} 
+                        items={draftItems}
+                        setItems={setDraftItems}
+                        selectedPeriod={selectedPeriod}
+                        onSubmit={handleSubmitRequest}
+                        allRequests={allRequests || []}
+                    />
                 </AccordionContent>
             </AccordionItem>
             <AccordionItem value="recurring" className="border-0 rounded-lg bg-card shadow-sm">
