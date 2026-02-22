@@ -66,6 +66,7 @@ type Item = {
   fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
   receivedQty: number;
   fulfillmentComments: string[];
+  comments?: string;
 };
 
 type WorkflowStage = {
@@ -418,7 +419,7 @@ export default function ProcurementQuickSubmitPage() {
                             </TableHeader>
                             <TableBody>
                                 {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                    <TableRow key={item.category}>
+                                    <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
                                         <TableCell className="font-medium">{item.category}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
@@ -498,5 +499,7 @@ export default function ProcurementQuickSubmitPage() {
     </div>
   );
 }
+
+    
 
     
