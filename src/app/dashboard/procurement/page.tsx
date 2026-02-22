@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -88,12 +88,13 @@ export default function ProcurementQuickSubmitPage() {
     
     // State for draft items is lifted up to this parent component
     const [draftItems, setDraftItems] = useState<Item[]>([]);
+    const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
+
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
-    // This query is for checking lock status, it should remain
     const requestsQuery = useMemo(() => collection(firestore, 'procurementRequests'), [firestore]);
     const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
 
@@ -121,28 +122,32 @@ export default function ProcurementQuickSubmitPage() {
         }
     }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
 
-    // Effect to initialize and update draft items from recurring items
+    // Effect to initialize or load a draft
     useEffect(() => {
-        if (recurringItems) {
-            const recurringSubmissionItems: Item[] = recurringItems.map(item => ({
+        if (requestsLoading || recurringLoading) return;
+
+        const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
+
+        if (existingRequest) {
+            setDraftItems(existingRequest.items);
+            setEditingRequestId(existingRequest.id);
+        } else {
+            setEditingRequestId(null);
+            const recurringSubmissionItems: Item[] = recurringItems?.map(item => ({
                 id: item.id,
                 type: "Recurring",
                 description: item.name,
-                brand: item.name.split(" ")[0],
+                brand: item.name.split(" ")[0] || '',
                 qty: 1,
                 category: item.category,
                 unitPrice: item.amount,
                 fulfillmentStatus: 'Pending',
                 receivedQty: 0,
                 fulfillmentComments: [],
-            }));
-            
-            setDraftItems(currentDraft => {
-                const oneOffItems = currentDraft.filter(i => i.type === 'One-Off');
-                return [...recurringSubmissionItems, ...oneOffItems];
-            });
+            })) || [];
+            setDraftItems(recurringSubmissionItems);
         }
-    }, [recurringItems]);
+    }, [selectedDepartmentId, selectedPeriod, allRequests, requestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
 
@@ -208,6 +213,18 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
             return;
         }
+
+        if (!editingRequestId) {
+            const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
+            if (existingRequest) {
+                toast({
+                    variant: "destructive",
+                    title: "Submission Already Exists",
+                    description: "A procurement request for this department and period has already been submitted. You cannot create a duplicate.",
+                });
+                return;
+            }
+        }
         
         const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
         
@@ -231,7 +248,7 @@ export default function ProcurementQuickSubmitPage() {
             timeline[0].actor = user.displayName || 'Requester';
         }
 
-        const newRequest = {
+        const requestData = {
             department: departmentName,
             departmentId: selectedDepartmentId,
             period: selectedPeriod,
@@ -239,26 +256,37 @@ export default function ProcurementQuickSubmitPage() {
             status: 'Pending Manager Approval',
             submittedBy: user.displayName,
             submittedById: user.uid,
-            createdAt: serverTimestamp(),
             timeline: timeline,
             comments: [],
             items: draftItems,
         };
 
         try {
-            const requestsCollectionRef = collection(firestore, 'procurementRequests');
-            const docRef = await addDoc(requestsCollectionRef, newRequest);
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'request.create',
-                details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(periodSubmissionTotal)}.`,
-                entity: { type: 'procurementRequest', id: docRef.id },
-                timestamp: serverTimestamp()
-            });
-            toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
-
+            if (editingRequestId) {
+                const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
+                await setDoc(requestRef, requestData, { merge: true });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'request.update',
+                    details: `Updated and submitted request for ${selectedPeriod} for department ${departmentName}.`,
+                    entity: { type: 'procurementRequest', id: editingRequestId },
+                    timestamp: serverTimestamp()
+                });
+                toast({ title: "Request Updated & Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted.` });
+            } else {
+                const requestsCollectionRef = collection(firestore, 'procurementRequests');
+                const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'request.create',
+                    details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(periodSubmissionTotal)}.`,
+                    entity: { type: 'procurementRequest', id: docRef.id },
+                    timestamp: serverTimestamp()
+                });
+                toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
+            }
         } catch (error: any) {
             console.error("Submit Request Error:", error);
             toast({
@@ -470,3 +498,5 @@ export default function ProcurementQuickSubmitPage() {
     </div>
   );
 }
+
+    
