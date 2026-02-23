@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -12,8 +13,8 @@ import {
   ChevronDown,
   FilePieChart,
   History,
-  Banknote,
   Rocket,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -55,14 +56,15 @@ const allLinks = [
   { 
     label: 'Settings', 
     icon: Settings, 
-    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog'],
+    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog', 'settings:errorlog'],
     subLinks: [
         { href: '/dashboard/settings', label: 'General', permission: 'settings:general' },
         { href: '/dashboard/settings/workflow', label: 'Workflow', permission: 'settings:workflow' },
         { href: '/dashboard/settings/departments', label: 'Departments', permission: 'settings:departments' },
         { href: '/dashboard/settings/roles', label: 'Roles', permission: 'settings:roles' },
         { href: '/dashboard/settings/budget', label: 'Budget', permission: 'settings:budget' },
-        { href: '/dashboard/settings/database-log', label: 'Database Log', permission: 'settings:auditlog' },
+        { href: '/dashboard/settings/audit-log', label: 'Audit Log', permission: 'settings:auditlog' },
+        { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog' },
     ]
   },
 ];

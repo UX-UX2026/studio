@@ -75,6 +75,13 @@ service cloud.firestore {
       allow create: if isSignedIn();
     }
     
+    match /errorLogs/{errorLogId} {
+      // Only admins can read the error log
+      allow read: if isAdmin();
+      // Any signed in user can create error log entries (via app logic)
+      allow create: if isSignedIn();
+    }
+    
     match /budgets/{budgetId} {
       allow read, write: if isAdmin() || getRole() == 'Procurement Officer';
     }

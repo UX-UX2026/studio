@@ -311,7 +311,8 @@
               "settings:budget",
               "settings:roles",
               "settings:workflow",
-              "settings:auditlog"
+              "settings:auditlog",
+              "settings:errorlog"
             ]
           }
         }
@@ -456,6 +457,45 @@
         "timestamp"
       ]
     },
+    "errorLog": {
+      "title": "Error Log",
+      "description": "Records a client-side error that occurred within the application.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who encountered the error."
+        },
+        "userName": {
+          "type": "string",
+          "description": "The display name of the user."
+        },
+        "action": {
+          "type": "string",
+          "description": "A key identifying the action being performed when the error occurred."
+        },
+        "errorMessage": {
+          "type": "string",
+          "description": "The error message from the exception."
+        },
+        "errorStack": {
+          "type": "string",
+          "description": "The stack trace of the error, if available."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The server timestamp when the error was recorded."
+        }
+      },
+      "required": [
+        "userId",
+        "userName",
+        "action",
+        "errorMessage",
+        "timestamp"
+      ]
+    },
     "budgetItem": {
       "title": "Budget Item",
       "description": "Represents a single budget line item from an external sheet, associated with a specific department.",
@@ -553,6 +593,12 @@
         "$ref": "#/entities/auditEvent"
       },
       "description": "Collection of all audit trail events for tracking user actions."
+    },
+    "/errorLogs/{errorLogId}": {
+      "schema": {
+        "$ref": "#/entities/errorLog"
+      },
+      "description": "Collection of all client-side application errors for debugging."
     },
     "/budgets/{budgetId}": {
       "schema": {

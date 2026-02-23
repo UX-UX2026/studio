@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -47,6 +48,7 @@ const allPermissions = [
     { id: 'settings:roles', label: 'Manage Roles & Permissions' },
     { id: 'settings:workflow', label: 'Manage Approval Workflows' },
     { id: 'settings:auditlog', label: 'View Audit Log' },
+    { id: 'settings:errorlog', label: 'View Error Log' },
 ];
 
 
@@ -99,17 +101,18 @@ export default function RolesPage() {
         if (!name || !user || !firestore) return;
 
         const roleData = { name, permissions };
+        const action = editingRole ? 'role.update' : 'role.create';
+        const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
 
         try {
             if (editingRole) {
                 const roleRef = doc(firestore, 'roles', editingRole.id);
                 await setDoc(roleRef, roleData, { merge: true });
-
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'role.update',
-                    details: `Updated role from "${editingRole.name}" to "${name}"`,
+                    action,
+                    details,
                     entity: { type: 'role', id: editingRole.id },
                     timestamp: serverTimestamp()
                 });
@@ -117,12 +120,11 @@ export default function RolesPage() {
             } else {
                 const rolesCollectionRef = collection(firestore, 'roles');
                 const docRef = await addDoc(rolesCollectionRef, roleData);
-                
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'role.create',
-                    details: `Created new role: "${name}"`,
+                    action,
+                    details,
                     entity: { type: 'role', id: docRef.id },
                     timestamp: serverTimestamp()
                 });
@@ -132,6 +134,18 @@ export default function RolesPage() {
             setIsDialogOpen(false);
         } catch (error: any) {
             console.error("Save Role Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
@@ -164,6 +178,18 @@ export default function RolesPage() {
             toast({ title: 'Role Deleted' });
         } catch (error: any) {
             console.error("Delete Role Error:", error);
+            try {
+                 await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'role.delete',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
