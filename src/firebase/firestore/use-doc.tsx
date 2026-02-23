@@ -1,28 +1,15 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { onSnapshot, DocumentReference, DocumentData } from 'firebase/firestore';
-
-// Helper to compare references
-function areRefsEqual(r1: DocumentReference | null, r2: DocumentReference | null): boolean {
-    if (!r1 || !r2) return r1 === r2;
-    return r1.isEqual(r2);
-}
 
 export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   
-  const refRef = useRef<DocumentReference | null>(ref);
-
-  if (!areRefsEqual(ref, refRef.current)) {
-      refRef.current = ref;
-  }
-
   useEffect(() => {
-    const currentRef = refRef.current;
-    if (!currentRef) {
+    if (!ref) {
       setData(null);
       setLoading(false);
       return;
@@ -31,7 +18,7 @@ export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = onSnapshot(currentRef, (snapshot) => {
+    const unsubscribe = onSnapshot(ref, (snapshot) => {
       if (snapshot.exists()) {
         setData({ id: snapshot.id, ...snapshot.data() } as T);
       } else {
@@ -46,7 +33,7 @@ export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
     });
 
     return () => unsubscribe();
-  }, [refRef.current]);
+  }, [ref]);
 
   return { data, loading, error };
 }
