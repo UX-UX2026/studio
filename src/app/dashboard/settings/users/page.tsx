@@ -109,7 +109,24 @@ export default function UsersPage() {
     }
     
     const handleSave = async () => {
-        if (!adminUser || !firestore) return;
+        if (!name.trim() || !email.trim() || !userRole) {
+            toast({
+                variant: 'destructive',
+                title: 'Validation Error',
+                description: 'Name, email, and role are required.',
+            });
+            return;
+        }
+
+        if (!adminUser || !firestore) {
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'User or database service not available.',
+            });
+            return;
+        }
+        
         const isEditing = !!editingUser;
         const action = isEditing ? 'user.update' : 'user.create';
 
@@ -124,21 +141,19 @@ export default function UsersPage() {
 
         try {
             let userId: string;
-            let successMessage: string;
 
             if (isEditing && editingUser) {
                 const userRef = doc(firestore, 'users', editingUser.id);
                 await setDoc(userRef, userData, { merge: true });
                 userId = editingUser.id;
-                successMessage = "User Updated";
+                toast({ title: "User Updated", description: "User details have been successfully updated." });
             } else {
                 const usersCollectionRef = collection(firestore, 'users');
                 const docRef = await addDoc(usersCollectionRef, userData);
                 userId = docRef.id;
-                successMessage = "Invitation Sent";
+                toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
             }
             
-            toast({ title: successMessage, description: isEditing ? "User details have been successfully updated." : `An invitation email has been simulated for ${email}.` });
             setEditingUser(null);
             setIsDialogOpen(false);
             
@@ -511,4 +526,3 @@ export default function UsersPage() {
     );
 }
 
-    

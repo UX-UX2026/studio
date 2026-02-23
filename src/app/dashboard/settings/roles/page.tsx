@@ -98,7 +98,23 @@ export default function RolesPage() {
     }
     
     const handleSave = async () => {
-        if (!name || !user || !firestore) return;
+        if (!name.trim()) {
+            toast({
+                variant: 'destructive',
+                title: 'Validation Error',
+                description: 'Role name cannot be empty.',
+            });
+            return;
+        }
+        
+        if (!user || !firestore) {
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'User or database service not available.',
+            });
+            return;
+        };
 
         const roleData = { name, permissions };
         const action = editingRole ? 'role.update' : 'role.create';
@@ -106,21 +122,19 @@ export default function RolesPage() {
 
         try {
             let roleId: string;
-            let successMessage: string;
 
             if (editingRole) {
                 const roleRef = doc(firestore, 'roles', editingRole.id);
                 await setDoc(roleRef, roleData, { merge: true });
                 roleId = editingRole.id;
-                successMessage = 'Role Updated';
+                toast({ title: 'Role Updated' });
             } else {
                 const rolesCollectionRef = collection(firestore, 'roles');
                 const docRef = await addDoc(rolesCollectionRef, roleData);
                 roleId = docRef.id;
-                successMessage = 'Role Added';
+                toast({ title: 'Role Added' });
             }
 
-            toast({ title: successMessage });
             setEditingRole(null);
             setIsDialogOpen(false);
             
@@ -310,4 +324,3 @@ export default function RolesPage() {
     );
 }
 
-    

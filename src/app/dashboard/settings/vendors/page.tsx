@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -113,7 +114,24 @@ export default function VendorsPage() {
     }
     
     const handleSave = async () => {
-        if (!user || !firestore) return;
+        if (!name.trim() || !email.trim() || !category) {
+            toast({
+                variant: 'destructive',
+                title: 'Validation Error',
+                description: 'Name, email, and category are required.',
+            });
+            return;
+        }
+
+        if (!user || !firestore) {
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'User or database service not available.',
+            });
+            return;
+        }
+        
         const vendorData = {
             name,
             contactPerson,
@@ -127,21 +145,19 @@ export default function VendorsPage() {
 
         try {
             let vendorId: string;
-            let successMessage: string;
 
             if (editingVendor) {
                 const vendorRef = doc(firestore, 'vendors', editingVendor.id);
                 await setDoc(vendorRef, vendorData, { merge: true });
                 vendorId = editingVendor.id;
-                successMessage = 'Vendor Updated';
+                toast({ title: 'Vendor Updated' });
             } else {
                 const vendorsCollectionRef = collection(firestore, 'vendors');
                 const docRef = await addDoc(vendorsCollectionRef, vendorData);
                 vendorId = docRef.id;
-                successMessage = 'Vendor Created';
+                toast({ title: 'Vendor Created' });
             }
 
-            toast({ title: successMessage });
             setEditingVendor(null);
             setIsDialogOpen(false);
             
@@ -459,4 +475,3 @@ export default function VendorsPage() {
     );
 }
 
-    

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -101,31 +102,45 @@ export default function DepartmentsPage() {
     }
     
     const handleSave = async () => {
-        if (!user || !firestore) return;
+        if (!name.trim()) {
+            toast({
+                variant: 'destructive',
+                title: 'Validation Error',
+                description: 'Department name cannot be empty.',
+            });
+            return;
+        }
+
+        if (!user || !firestore) {
+             toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'User or database service not available.',
+            });
+            return;
+        }
+
         const departmentData = { name, managerId, budget };
         const action = editingDepartment ? 'department.update' : 'department.create';
 
         try {
             let departmentId: string;
-            let successMessage: string;
 
             if (editingDepartment) {
                 const deptRef = doc(firestore, 'departments', editingDepartment.id);
                 await setDoc(deptRef, departmentData, { merge: true });
                 departmentId = editingDepartment.id;
-                successMessage = "Department Updated";
+                toast({ title: "Department Updated" });
             } else {
                 const departmentsCollectionRef = collection(firestore, 'departments');
                 const docRef = await addDoc(departmentsCollectionRef, departmentData);
                 departmentId = docRef.id;
-                successMessage = "Department Created";
+                toast({ title: "Department Created" });
             }
 
-            toast({ title: successMessage });
             setEditingDepartment(null);
             setIsDialogOpen(false);
             
-            // Fire-and-forget audit log
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
@@ -400,4 +415,3 @@ export default function DepartmentsPage() {
     );
 }
 
-    
