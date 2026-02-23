@@ -162,21 +162,27 @@ export default function WorkflowPage() {
         try {
             await setDoc(departmentRef, payload, { merge: true });
             
-            await addDoc(collection(firestore, 'auditLogs'), {
+            toast({
+                title: "Workflow Saved",
+                description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
+            });
+            
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: 'workflow.update',
                 details: `Updated workflow for department ${departments?.find(d=>d.id === selectedDepartmentId)?.name}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
-            });
+            }).catch(error => console.error("Failed to write to audit log:", error));
             
-            toast({
-                title: "Workflow Saved",
-                description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
-            });
         } catch (error: any) {
             console.error("Save Workflow Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the workflow.',
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -189,11 +195,6 @@ export default function WorkflowPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: error.message || 'Could not save the workflow.',
-            });
         }
     };
 
@@ -322,3 +323,5 @@ export default function WorkflowPage() {
         </Card>
     );
 }
+
+    

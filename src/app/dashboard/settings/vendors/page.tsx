@@ -126,35 +126,41 @@ export default function VendorsPage() {
         const action = editingVendor ? 'vendor.update' : 'vendor.create';
 
         try {
+            let vendorId: string;
+            let successMessage: string;
+
             if (editingVendor) {
                 const vendorRef = doc(firestore, 'vendors', editingVendor.id);
                 await setDoc(vendorRef, vendorData, { merge: true });
-                toast({ title: 'Vendor Updated' });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    details: `Updated vendor: ${name}`,
-                    entity: { type: 'vendor', id: editingVendor.id },
-                    timestamp: serverTimestamp()
-                });
+                vendorId = editingVendor.id;
+                successMessage = 'Vendor Updated';
             } else {
                 const vendorsCollectionRef = collection(firestore, 'vendors');
                 const docRef = await addDoc(vendorsCollectionRef, vendorData);
-                toast({ title: 'Vendor Created' });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    details: `Created vendor: ${name}`,
-                    entity: { type: 'vendor', id: docRef.id },
-                    timestamp: serverTimestamp()
-                });
+                vendorId = docRef.id;
+                successMessage = 'Vendor Created';
             }
+
+            toast({ title: successMessage });
             setEditingVendor(null);
             setIsDialogOpen(false);
+            
+            addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Action on vendor: ${name}`,
+                entity: { type: 'vendor', id: vendorId },
+                timestamp: serverTimestamp()
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Save Vendor Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the vendor.',
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -167,11 +173,6 @@ export default function VendorsPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: error.message || 'Could not save the vendor.',
-            });
         }
     };
     
@@ -189,17 +190,22 @@ export default function VendorsPage() {
             await deleteDoc(vendorRef);
             toast({ title: 'Vendor Deleted' });
             if (vendorToDelete) {
-                await addDoc(collection(firestore, 'auditLogs'), {
+                addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
                     action: 'vendor.delete',
                     details: `Deleted vendor: ${vendorToDelete.name}`,
                     entity: { type: 'vendor', id },
                     timestamp: serverTimestamp()
-                });
+                }).catch(error => console.error("Failed to write to audit log:", error));
             }
         } catch (error: any) {
             console.error("Delete Vendor Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete the vendor.',
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -212,11 +218,6 @@ export default function VendorsPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Delete Failed',
-                description: error.message || 'Could not delete the vendor.',
-            });
         }
     };
 
@@ -457,3 +458,5 @@ export default function VendorsPage() {
         </>
     );
 }
+
+    

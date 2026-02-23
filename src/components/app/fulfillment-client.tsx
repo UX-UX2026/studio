@@ -118,7 +118,8 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           const updatePayload = { items: updatedItems };
 
           await updateDoc(requestRef, updatePayload);
-          
+          toast({ title: "Fulfillment item updated." });
+
           // Also update local state for immediate UI feedback
           setItems(currentItems =>
               currentItems.map(item =>
@@ -126,16 +127,14 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               )
           );
 
-          toast({ title: "Fulfillment item updated." });
-
-          await addDoc(collection(firestore, 'auditLogs'), {
+          addDoc(collection(firestore, 'auditLogs'), {
             userId: user.uid,
             userName: user.displayName,
             action: 'fulfillment.update',
             details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
             timestamp: serverTimestamp()
-          });
+          }).catch(error => console.error("Failed to write to audit log:", error));
 
 
       } catch (error: any) {
@@ -314,3 +313,5 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     </>
   );
 }
+
+    

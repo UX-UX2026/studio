@@ -123,35 +123,41 @@ export default function UsersPage() {
         };
 
         try {
+            let userId: string;
+            let successMessage: string;
+
             if (isEditing && editingUser) {
                 const userRef = doc(firestore, 'users', editingUser.id);
                 await setDoc(userRef, userData, { merge: true });
-                toast({ title: "User Updated", description: "User details have been successfully updated." });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action,
-                    details: `Updated user: ${email}`,
-                    entity: { type: 'user', id: editingUser.id },
-                    timestamp: serverTimestamp()
-                });
+                userId = editingUser.id;
+                successMessage = "User Updated";
             } else {
                 const usersCollectionRef = collection(firestore, 'users');
                 const docRef = await addDoc(usersCollectionRef, userData);
-                toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action,
-                    details: `Invited user: ${email}`,
-                    entity: { type: 'user', id: docRef.id },
-                    timestamp: serverTimestamp()
-                });
+                userId = docRef.id;
+                successMessage = "Invitation Sent";
             }
+            
+            toast({ title: successMessage, description: isEditing ? "User details have been successfully updated." : `An invitation email has been simulated for ${email}.` });
             setEditingUser(null);
             setIsDialogOpen(false);
+            
+            addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                details: isEditing ? `Updated user: ${email}` : `Invited user: ${email}`,
+                entity: { type: 'user', id: userId },
+                timestamp: serverTimestamp()
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Save User Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the user profile.',
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: adminUser.uid,
@@ -164,11 +170,6 @@ export default function UsersPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: error.message || 'Could not save the user profile.',
-            });
         }
     };
 
@@ -186,18 +187,24 @@ export default function UsersPage() {
         try {
             await deleteDoc(userRef);
             toast({ title: "User Deleted", description: "The user has been successfully removed." });
+
             if (deletedUser && adminUser) {
-                await addDoc(collection(firestore, 'auditLogs'), {
+                addDoc(collection(firestore, 'auditLogs'), {
                     userId: adminUser.uid,
                     userName: adminUser.displayName,
                     action: 'user.delete',
                     details: `Deleted user: ${deletedUser.email}`,
                     entity: { type: 'user', id: id },
                     timestamp: serverTimestamp()
-                });
+                }).catch(error => console.error("Failed to write to audit log:", error));
             }
         } catch (error: any) {
              console.error("Delete User Error:", error);
+             toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete the user.',
+            });
              try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: adminUser.uid,
@@ -210,11 +217,6 @@ export default function UsersPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Delete Failed',
-                description: error.message || 'Could not delete the user.',
-            });
         }
     };
 
@@ -238,16 +240,22 @@ export default function UsersPage() {
                 description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
             });
             
-            await addDoc(collection(firestore, 'auditLogs'), {
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action,
                 details: `Updated field '${String(field)}' to '${value}' for user ${user?.displayName || userId}`,
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
-            });
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("User Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update the user's ${String(field)}.`,
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: adminUser.uid,
@@ -260,11 +268,6 @@ export default function UsersPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Update Failed',
-                description: error.message || `Could not update the user's ${String(field)}.`,
-            });
         }
     };
 
@@ -507,3 +510,5 @@ export default function UsersPage() {
         </>
     );
 }
+
+    

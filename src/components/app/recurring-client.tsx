@@ -45,15 +45,17 @@ export function RecurringClient() {
         
         try {
             await setDoc(itemRef, updatePayload, { merge: true });
-            await addDoc(collection(firestore, 'auditLogs'), {
+            toast({ title: "Recurring item updated" });
+
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: 'recurringItem.update',
                 details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
                 entity: { type: 'recurringItem', id },
                 timestamp: serverTimestamp()
-            });
-            toast({ title: "Recurring item updated" });
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Recurring Item Update Error:", error);
             toast({
@@ -78,16 +80,18 @@ export function RecurringClient() {
         
         try {
             const docRef = await addDoc(recurringItemsCollectionRef, newItem);
-            await addDoc(collection(firestore, 'auditLogs'), {
+            toast({ title: "New item added" });
+            setView('list'); // Switch to list view for easier editing
+
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: 'recurringItem.create',
                 details: `Created new recurring item: "New Item"`,
                 entity: { type: 'recurringItem', id: docRef.id },
                 timestamp: serverTimestamp()
-            });
-            toast({ title: "New item added" });
-            setView('list'); // Switch to list view for easier editing
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
              console.error("Add Recurring Item Error:", error);
             toast({
@@ -105,17 +109,18 @@ export function RecurringClient() {
 
         try {
             await deleteDoc(itemRef);
+            toast({ title: "Item removed" });
+            
             if (itemToRemove) {
-                await addDoc(collection(firestore, 'auditLogs'), {
+                addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
                     action: 'recurringItem.delete',
                     details: `Deleted recurring item: "${itemToRemove.name}"`,
                     entity: { type: 'recurringItem', id },
                     timestamp: serverTimestamp()
-                });
+                }).catch(error => console.error("Failed to write to audit log:", error));
             }
-            toast({ title: "Item removed" });
         } catch (error: any) {
             console.error("Delete Recurring Item Error:", error);
             toast({
@@ -312,3 +317,5 @@ export function RecurringClient() {
         </div>
     );
 }
+
+    

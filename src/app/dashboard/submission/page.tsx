@@ -159,34 +159,34 @@ export default function SubmissionPage() {
             if (docId) {
                 const requestRef = doc(firestore, 'procurementRequests', docId);
                 await setDoc(requestRef, requestData, { merge: true });
-                 await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: isDraft ? 'request.draft_update' : 'request.update',
-                    details: `${isDraft ? 'Updated draft' : 'Updated and submitted request'} for ${selectedPeriod}.`,
-                    entity: { type: 'procurementRequest', id: docId },
-                    timestamp: serverTimestamp()
-                });
             } else {
                 const requestsCollectionRef = collection(firestore, 'procurementRequests');
                 const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
                 docId = docRef.id;
                 setEditingRequestId(docId);
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: isDraft ? 'request.draft_create' : 'request.create',
-                    details: `${isDraft ? 'Created draft' : 'Submitted request'} for ${selectedPeriod}.`,
-                    entity: { type: 'procurementRequest', id: docId },
-                    timestamp: serverTimestamp()
-                });
             }
+
             toast({ 
                 title: isDraft ? "Draft Saved" : "Request Submitted", 
                 description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
             });
+
+            addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                details: `${isDraft ? (editingRequestId ? 'Updated draft' : 'Created draft') : 'Submitted request'} for ${selectedPeriod}.`,
+                entity: { type: 'procurementRequest', id: docId },
+                timestamp: serverTimestamp()
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Submit Request Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Submission Failed",
+                description: error.message || "Could not submit the request. You may not have permissions.",
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -199,11 +199,6 @@ export default function SubmissionPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: "destructive",
-                title: "Submission Failed",
-                description: error.message || "Could not submit the request. You may not have permissions.",
-            });
         }
     };
 
@@ -282,3 +277,5 @@ export default function SubmissionPage() {
     </Card>
   );
 }
+
+    

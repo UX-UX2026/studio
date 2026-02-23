@@ -269,6 +269,8 @@ export default function BudgetPage() {
     const handleConfirmImport = async () => {
         if (!user || !firestore) return;
         setIsImporting(true);
+        const action = 'budget.import';
+
         try {
             const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
@@ -280,20 +282,14 @@ export default function BudgetPage() {
             const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
 
             if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
-                toast({ variant: "destructive", title: "Invalid Mapping", description: "Please map 'Category' and 'Forecast' columns." });
-                setIsImporting(false);
-                return;
+                throw new Error("Please map 'Category' and 'Forecast' columns.");
             }
             
             if (forecastStartIndex > forecastEndIndex) {
-                toast({ variant: "destructive", title: "Invalid Range", description: "The 'Forecast Start Column' must come before the 'Forecast End Column'." });
-                setIsImporting(false);
-                return;
+                 throw new Error("The 'Forecast Start Column' must come before the 'Forecast End Column'.");
             }
             if (startRow > endRow && endRow !== 0) {
-                toast({ variant: 'destructive', title: 'Invalid Range', description: 'Start row cannot be after end row.' });
-                setIsImporting(false);
-                return;
+                throw new Error('Start row cannot be after end row.');
             }
 
             const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
@@ -345,20 +341,33 @@ export default function BudgetPage() {
 
             await batch.commit();
 
-            await addDoc(collection(firestore, 'auditLogs'), {
+            toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
+            setIsMappingDialogOpen(false);
+
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'budget.import',
+                action: action,
                 details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
-            });
+            }).catch(error => console.error("Failed to write to audit log:", error));
 
-            toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
-            setIsMappingDialogOpen(false);
         } catch (error: any) {
              console.error("Budget Import Error:", error);
              toast({ variant: "destructive", title: "Import Failed", description: error.message || "An unknown error occurred during the import process. Check console for details." });
+             try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
         } finally {
             setIsImporting(false);
         }
@@ -578,3 +587,5 @@ export default function BudgetPage() {
         </>
     );
 }
+
+    

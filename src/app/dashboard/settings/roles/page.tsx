@@ -105,35 +105,41 @@ export default function RolesPage() {
         const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
 
         try {
+            let roleId: string;
+            let successMessage: string;
+
             if (editingRole) {
                 const roleRef = doc(firestore, 'roles', editingRole.id);
                 await setDoc(roleRef, roleData, { merge: true });
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    details,
-                    entity: { type: 'role', id: editingRole.id },
-                    timestamp: serverTimestamp()
-                });
-                toast({ title: 'Role Updated' });
+                roleId = editingRole.id;
+                successMessage = 'Role Updated';
             } else {
                 const rolesCollectionRef = collection(firestore, 'roles');
                 const docRef = await addDoc(rolesCollectionRef, roleData);
-                await addDoc(collection(firestore, 'auditLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    details,
-                    entity: { type: 'role', id: docRef.id },
-                    timestamp: serverTimestamp()
-                });
-                toast({ title: 'Role Added' });
+                roleId = docRef.id;
+                successMessage = 'Role Added';
             }
+
+            toast({ title: successMessage });
             setEditingRole(null);
             setIsDialogOpen(false);
+            
+            addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details,
+                entity: { type: 'role', id: roleId },
+                timestamp: serverTimestamp()
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Save Role Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the role.',
+            });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -146,11 +152,6 @@ export default function RolesPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: error.message || 'Could not save the role.',
-            });
         }
     };
     
@@ -167,17 +168,24 @@ export default function RolesPage() {
         const roleRef = doc(firestore, 'roles', id);
         try {
             await deleteDoc(roleRef);
-            await addDoc(collection(firestore, 'auditLogs'), {
+            toast({ title: 'Role Deleted' });
+            
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: 'role.delete',
                 details: `Deleted role: "${roleToDelete.name}"`,
                 entity: { type: 'role', id: id },
                 timestamp: serverTimestamp()
-            });
-            toast({ title: 'Role Deleted' });
+            }).catch(error => console.error("Failed to write to audit log:", error));
+
         } catch (error: any) {
             console.error("Delete Role Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Delete Failed',
+                description: error.message || 'Could not delete the role.',
+            });
             try {
                  await addDoc(collection(firestore, 'errorLogs'), {
                     userId: user.uid,
@@ -190,11 +198,6 @@ export default function RolesPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
-            toast({
-                variant: 'destructive',
-                title: 'Delete Failed',
-                description: error.message || 'Could not delete the role.',
-            });
         }
     };
 
@@ -306,3 +309,5 @@ export default function RolesPage() {
         </>
     );
 }
+
+    
