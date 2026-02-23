@@ -55,6 +55,7 @@ export default function VendorsPage() {
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     
     // Form state
     const [name, setName] = useState('');
@@ -114,12 +115,14 @@ export default function VendorsPage() {
     }
     
     const handleSave = async () => {
+        setIsSaving(true);
         if (!name.trim() || !email.trim() || !category) {
             toast({
                 variant: 'destructive',
                 title: 'Validation Error',
                 description: 'Name, email, and category are required.',
             });
+            setIsSaving(false);
             return;
         }
 
@@ -129,6 +132,7 @@ export default function VendorsPage() {
                 title: 'Save Failed',
                 description: 'User or database service not available.',
             });
+            setIsSaving(false);
             return;
         }
         
@@ -189,6 +193,8 @@ export default function VendorsPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
+        } finally {
+            setIsSaving(false);
         }
     };
     
@@ -467,11 +473,13 @@ export default function VendorsPage() {
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSave}>Save Vendor</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                             {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+                             Save Vendor
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
     );
 }
-

@@ -61,6 +61,7 @@ export default function RolesPage() {
     const { roles, loading: rolesLoading } = useRoles();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<Role | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
     
     // Form state
     const [name, setName] = useState('');
@@ -98,12 +99,14 @@ export default function RolesPage() {
     }
     
     const handleSave = async () => {
+        setIsSaving(true);
         if (!name.trim()) {
             toast({
                 variant: 'destructive',
                 title: 'Validation Error',
                 description: 'Role name cannot be empty.',
             });
+            setIsSaving(false);
             return;
         }
         
@@ -113,6 +116,7 @@ export default function RolesPage() {
                 title: 'Save Failed',
                 description: 'User or database service not available.',
             });
+            setIsSaving(false);
             return;
         };
 
@@ -166,6 +170,8 @@ export default function RolesPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
+        } finally {
+            setIsSaving(false);
         }
     };
     
@@ -316,11 +322,13 @@ export default function RolesPage() {
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSave}>Save</Button>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                            {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin" />}
+                            Save
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
         </>
     );
 }
-

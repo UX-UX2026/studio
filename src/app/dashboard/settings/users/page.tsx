@@ -58,6 +58,7 @@ export default function UsersPage() {
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+    const [isSaving, setIsSaving] = useState(false);
 
     // Form state for dialog
     const [name, setName] = useState('');
@@ -109,12 +110,14 @@ export default function UsersPage() {
     }
     
     const handleSave = async () => {
+        setIsSaving(true);
         if (!name.trim() || !email.trim() || !userRole) {
             toast({
                 variant: 'destructive',
                 title: 'Validation Error',
                 description: 'Name, email, and role are required.',
             });
+            setIsSaving(false);
             return;
         }
 
@@ -124,6 +127,7 @@ export default function UsersPage() {
                 title: 'Save Failed',
                 description: 'User or database service not available.',
             });
+            setIsSaving(false);
             return;
         }
         
@@ -185,6 +189,8 @@ export default function UsersPage() {
             } catch (logError) {
                 console.error("Failed to write to error log:", logError);
             }
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -516,7 +522,8 @@ export default function UsersPage() {
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSave}>
+                        <Button onClick={handleSave} disabled={isSaving}>
+                            {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin" />}
                             {editingUser ? 'Save Changes' : <><Send className="mr-2 h-4 w-4" /> Send Invitation</>}
                         </Button>
                     </DialogFooter>
@@ -525,4 +532,3 @@ export default function UsersPage() {
         </>
     );
 }
-
