@@ -102,6 +102,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       if (!itemToUpdate || !firestore || !user) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
+      const action = 'fulfillment.update';
 
       try {
           const requestSnap = await getDoc(requestRef);
@@ -130,7 +131,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           addDoc(collection(firestore, 'auditLogs'), {
             userId: user.uid,
             userName: user.displayName,
-            action: 'fulfillment.update',
+            action: action,
             details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
             timestamp: serverTimestamp()
@@ -140,6 +141,14 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       } catch (error: any) {
           console.error("Fulfillment Update Error:", error);
           toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
+          addDoc(collection(firestore, 'errorLogs'), {
+              userId: user.uid,
+              userName: user.displayName,
+              action: action,
+              errorMessage: error.message,
+              errorStack: error.stack,
+              timestamp: serverTimestamp()
+          }).catch(logError => console.error("Failed to write to error log:", logError));
       }
   };
   
@@ -313,5 +322,3 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     </>
   );
 }
-
-    

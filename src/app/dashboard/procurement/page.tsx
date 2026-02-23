@@ -315,18 +315,16 @@ export default function ProcurementQuickSubmitPage() {
                 title: "Save Failed",
                 description: error.message || "Could not save the request. You may not have permissions.",
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                 console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
     
@@ -535,5 +533,3 @@ export default function ProcurementQuickSubmitPage() {
     </div>
   );
 }
-
-    

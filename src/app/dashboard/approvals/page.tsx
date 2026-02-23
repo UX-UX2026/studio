@@ -242,18 +242,17 @@ export default function ApprovalsPage() {
                 title: "Approval Failed",
                 description: error.message || "Could not update the request status. You may not have permissions.",
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName || 'System',
-                    action: 'request.approve',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            // Fire-and-forget error log
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.approve',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                  console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
     
@@ -289,18 +288,16 @@ export default function ApprovalsPage() {
                 title: "Rejection Failed",
                 description: error.message || "Could not update the request status.",
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName || 'System',
-                    action: 'request.reject',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.reject',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                  console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
     
@@ -359,18 +356,16 @@ export default function ApprovalsPage() {
                 title: "Failed to Raise Query",
                 description: error.message || "Could not update the request.",
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName || 'System',
-                    action: 'request.query',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.query',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                  console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
 
@@ -412,18 +407,16 @@ export default function ApprovalsPage() {
                 title: "Failed to Add Comment",
                 description: error.message || "Could not add the comment. Please try again.",
             });
-             try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName || 'System',
-                    action: 'request.comment',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+             addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.comment',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                  console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
     
@@ -629,5 +622,3 @@ export default function ApprovalsPage() {
     </div>
   );
 }
-
-    

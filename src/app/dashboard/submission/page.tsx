@@ -187,18 +187,16 @@ export default function SubmissionPage() {
                 title: "Submission Failed",
                 description: error.message || "Could not submit the request. You may not have permissions.",
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                 console.error("Failed to write to error log:", logError);
-            }
+            });
         }
     };
 
@@ -277,5 +275,3 @@ export default function SubmissionPage() {
     </Card>
   );
 }
-
-    

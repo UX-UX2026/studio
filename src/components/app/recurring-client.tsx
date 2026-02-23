@@ -42,6 +42,7 @@ export function RecurringClient() {
         if (!user || !firestore) return;
         const itemRef = doc(firestore, 'recurringItems', id);
         const updatePayload = { [field]: value };
+        const action = 'recurringItem.update';
         
         try {
             await setDoc(itemRef, updatePayload, { merge: true });
@@ -50,7 +51,7 @@ export function RecurringClient() {
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'recurringItem.update',
+                action: action,
                 details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
                 entity: { type: 'recurringItem', id },
                 timestamp: serverTimestamp()
@@ -63,6 +64,14 @@ export function RecurringClient() {
                 title: 'Update Failed',
                 description: error.message || 'Could not update recurring item.',
             });
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
         }
     };
 
@@ -77,6 +86,7 @@ export function RecurringClient() {
           active: true,
         };
         const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
+        const action = 'recurringItem.create';
         
         try {
             const docRef = await addDoc(recurringItemsCollectionRef, newItem);
@@ -86,7 +96,7 @@ export function RecurringClient() {
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'recurringItem.create',
+                action: action,
                 details: `Created new recurring item: "New Item"`,
                 entity: { type: 'recurringItem', id: docRef.id },
                 timestamp: serverTimestamp()
@@ -99,6 +109,14 @@ export function RecurringClient() {
                 title: 'Add Failed',
                 description: error.message || 'Could not add new recurring item.',
             });
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
         }
     };
     
@@ -106,6 +124,7 @@ export function RecurringClient() {
         if (!user || !firestore) return;
         const itemToRemove = items?.find(i => i.id === id);
         const itemRef = doc(firestore, 'recurringItems', id);
+        const action = 'recurringItem.delete';
 
         try {
             await deleteDoc(itemRef);
@@ -115,7 +134,7 @@ export function RecurringClient() {
                 addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'recurringItem.delete',
+                    action: action,
                     details: `Deleted recurring item: "${itemToRemove.name}"`,
                     entity: { type: 'recurringItem', id },
                     timestamp: serverTimestamp()
@@ -128,6 +147,14 @@ export function RecurringClient() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete recurring item.',
             });
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
         }
     };
 
@@ -317,5 +344,3 @@ export function RecurringClient() {
         </div>
     );
 }
-
-    
