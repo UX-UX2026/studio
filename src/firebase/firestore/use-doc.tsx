@@ -1,17 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onSnapshot, DocumentReference, DocumentData } from 'firebase/firestore';
-import { useToast } from '@/hooks/use-toast';
+
+// Helper to compare references
+function areRefsEqual(r1: DocumentReference | null, r2: DocumentReference | null): boolean {
+    if (!r1 || !r2) return r1 === r2;
+    return r1.isEqual(r2);
+}
 
 export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { toast } = useToast();
+  
+  const refRef = useRef<DocumentReference | null>(ref);
+
+  if (!areRefsEqual(ref, refRef.current)) {
+      refRef.current = ref;
+  }
 
   useEffect(() => {
-    if (!ref) {
+    const currentRef = refRef.current;
+    if (!currentRef) {
       setData(null);
       setLoading(false);
       return;
@@ -20,27 +31,22 @@ export function useDoc<T>(ref: DocumentReference<DocumentData> | null) {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = onSnapshot(ref, (snapshot) => {
+    const unsubscribe = onSnapshot(currentRef, (snapshot) => {
       if (snapshot.exists()) {
         setData({ id: snapshot.id, ...snapshot.data() } as T);
       } else {
         setData(null);
       }
       setLoading(false);
+      setError(null);
     }, (err) => {
       console.error("useDoc error:", err);
       setError(err);
       setLoading(false);
-      toast({
-        variant: 'destructive',
-        title: "Error fetching document",
-        description: err.message || "You may not have permission to view this document."
-      });
     });
 
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ref]);
+  }, [refRef.current]);
 
   return { data, loading, error };
 }

@@ -1,17 +1,30 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onSnapshot, Query, DocumentData } from 'firebase/firestore';
-import { useToast } from '@/hooks/use-toast';
+
+// Helper to compare queries
+function areQueriesEqual(q1: Query | null, q2: Query | null): boolean {
+  if (!q1 || !q2) return q1 === q2;
+  return q1.isEqual(q2);
+}
 
 export function useCollection<T>(query: Query<DocumentData> | null) {
   const [data, setData] = useState<T[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
-  const { toast } = useToast();
+  
+  // Use a ref to store the query to avoid re-subscribing on every render
+  const queryRef = useRef<Query | null>(query);
+
+  // Update the ref only if the query has actually changed
+  if (!areQueriesEqual(query, queryRef.current)) {
+    queryRef.current = query;
+  }
 
   useEffect(() => {
-    if (!query) {
+    const currentQuery = queryRef.current;
+    if (!currentQuery) {
       setData(null);
       setLoading(false);
       return;
@@ -20,24 +33,19 @@ export function useCollection<T>(query: Query<DocumentData> | null) {
     setLoading(true);
     setError(null);
 
-    const unsubscribe = onSnapshot(query, (snapshot) => {
+    const unsubscribe = onSnapshot(currentQuery, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as T));
       setData(docs);
       setLoading(false);
+      setError(null);
     }, (err) => {
       console.error("useCollection error:", err);
       setError(err);
       setLoading(false);
-      toast({
-        variant: 'destructive',
-        title: "Error fetching data",
-        description: err.message || "You may not have permission to view this collection."
-      });
     });
 
     return () => unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query]);
+  }, [queryRef.current]); // Depend on the stable ref value
 
   return { data, loading, error };
 }
