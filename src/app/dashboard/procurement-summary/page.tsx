@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Loader, AlertTriangle, Calendar as CalendarIcon } from "lucide-react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
@@ -248,13 +249,15 @@ export default function ProcurementSummaryPage() {
                                 </TableRow>
                             )}
                         </TableBody>
-                        <TableRow className="bg-muted hover:bg-muted font-bold">
-                            <TableCell>Subtotal</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
-                            <TableCell></TableCell>
-                        </TableRow>
+                        <TableFooter>
+                            <TableRow className="bg-muted hover:bg-muted font-bold">
+                                <TableCell>Subtotal</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                                <TableCell></TableCell>
+                            </TableRow>
+                        </TableFooter>
                     </Table>
                 </div>
             )}
@@ -262,5 +265,3 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
-
-    
