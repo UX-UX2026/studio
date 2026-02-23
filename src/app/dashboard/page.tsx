@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useMemo } from 'react';
@@ -23,6 +24,7 @@ import {
   ClipboardCheck,
   Loader,
   Rocket,
+  DatabaseZap,
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -30,6 +32,18 @@ import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
 import { useFirestore, useCollection } from '@/firebase';
 import { collection, query, orderBy, limit, where } from 'firebase/firestore';
+import { formatDistanceToNow } from 'date-fns';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+
+
+type AuditEvent = {
+    id: string;
+    userName: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
+};
+
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -52,6 +66,17 @@ export default function DashboardPage() {
   }, [firestore]);
 
   const { data: fulfillmentRequests, loading: fulfillmentLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
+
+  const auditLogsQuery = useMemo(() => {
+      if (!firestore) return null;
+      return query(
+          collection(firestore, 'auditLogs'),
+          orderBy('timestamp', 'desc'),
+          limit(5)
+      );
+  }, [firestore]);
+
+  const { data: recentLogs, loading: logsLoading } = useCollection<AuditEvent>(auditLogsQuery);
 
   const allFulfillmentItems = useMemo(() => {
       if (!fulfillmentRequests) return [];
@@ -165,63 +190,104 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Recent Procurement Requests</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                A summary of recent requests and their current status.
-              </p>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Recent Procurement Requests</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  A summary of recent requests and their current status.
+                </p>
+              </div>
+              <Button asChild variant="outline">
+                <Link href="/dashboard/approvals">View All Requests</Link>
+              </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Request ID</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Submitted By</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Value</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {requestsLoading ? (
+                      <TableRow>
+                          <TableCell colSpan={5} className="text-center h-24">
+                              <Loader className="h-6 w-6 animate-spin mx-auto" />
+                          </TableCell>
+                      </TableRow>
+                  ) : recentRequests && recentRequests.length > 0 ? (
+                    recentRequests.map((req) => (
+                      <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
+                        <TableCell className="font-medium">
+                          <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
+                        </TableCell>
+                        <TableCell>{req.period}</TableCell>
+                        <TableCell>{req.submittedBy}</TableCell>
+                        <TableCell>{getStatusBadge(req.status)}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatCurrency(req.total)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                      <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
+                              No procurement requests found.
+                          </TableCell>
+                      </TableRow>
+                  )}
+                </TableBody>
+              </Table>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/dashboard/approvals">View All Requests</Link>
-            </Button>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Request ID</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Submitted By</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Value</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requestsLoading ? (
-                    <TableRow>
-                        <TableCell colSpan={5} className="text-center">
-                            <Loader className="h-6 w-6 animate-spin mx-auto" />
-                        </TableCell>
-                    </TableRow>
-                ) : recentRequests && recentRequests.length > 0 ? (
-                  recentRequests.map((req) => (
-                    <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
-                      <TableCell className="font-medium">
-                        <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
-                      </TableCell>
-                      <TableCell>{req.period}</TableCell>
-                      <TableCell>{req.submittedBy}</TableCell>
-                      <TableCell>{getStatusBadge(req.status)}</TableCell>
-                      <TableCell className="text-right font-mono">
-                        {formatCurrency(req.total)}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                    <TableRow>
-                        <TableCell colSpan={5} className="text-center text-muted-foreground">
-                            No procurement requests found.
-                        </TableCell>
-                    </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <DatabaseZap className="h-5 w-5 text-primary"/>
+                Database Status: Recent Activity
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Showing the last 5 write operations to the database.
+              </p>
+          </CardHeader>
+          <CardContent>
+             {logsLoading ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader className="h-6 w-6 animate-spin" />
+                </div>
+            ) : recentLogs && recentLogs.length > 0 ? (
+              <div className="space-y-4">
+                {recentLogs.map(log => (
+                  <div key={log.id} className="flex items-center gap-3">
+                    <Avatar className="h-9 w-9">
+                      <AvatarFallback>{log.userName?.charAt(0) || 'S'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium leading-tight">{log.details}</p>
+                      <p className="text-xs text-muted-foreground">
+                        by {log.userName} &bull; {log.timestamp ? formatDistanceToNow(new Date(log.timestamp.seconds * 1000), { addSuffix: true }) : 'just now'}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+                <div className="flex items-center justify-center h-24 text-muted-foreground">
+                  No recent activity found in the database.
+                </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
