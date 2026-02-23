@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -6,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { Loader, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, orderBy } from "firebase/firestore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -74,63 +72,42 @@ export default function ErrorLogPage() {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <div className="overflow-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[200px]">User</TableHead>
-                                <TableHead>Action</TableHead>
-                                <TableHead>Error Message</TableHead>
-                                <TableHead className="w-[180px] text-right">Date</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {errorLogs && errorLogs.length > 0 ? (
-                                errorLogs.map(log => (
-                                    <Accordion type="single" collapsible className="w-full" asChild>
-                                        <AccordionItem value={log.id} asChild>
-                                             <tr key={log.id} className="border-b">
-                                                <TableCell>
-                                                    <div className="flex items-center gap-2">
-                                                        <Avatar className="h-8 w-8">
-                                                            <AvatarFallback>{log.userName?.charAt(0) || 'U'}</AvatarFallback>
-                                                        </Avatar>
-                                                        <span className="font-medium">{log.userName}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell><Badge variant="outline">{log.action}</Badge></TableCell>
-                                                <TableCell className="max-w-md">
-                                                    <AccordionTrigger className="py-0 hover:no-underline text-left">
-                                                        <p className="truncate text-destructive font-medium">{log.errorMessage}</p>
-                                                    </AccordionTrigger>
-                                                </TableCell>
-                                                <TableCell className="text-right text-muted-foreground">
-                                                    {log.timestamp ? `${formatDistanceToNow(new Date(log.timestamp.seconds * 1000))} ago` : 'N/A'}
-                                                </TableCell>
-                                                <AccordionContent asChild>
-                                                   <tr className="bg-muted/50">
-                                                        <TableCell colSpan={4} className="p-4">
-                                                            <h4 className="font-semibold">Error Stack Trace:</h4>
-                                                            <pre className="mt-2 whitespace-pre-wrap rounded-md bg-background p-3 text-xs text-muted-foreground font-mono">
-                                                                {log.errorStack || "No stack trace available."}
-                                                            </pre>
-                                                        </TableCell>
-                                                    </tr>
-                                                </AccordionContent>
-                                            </tr>
-                                        </AccordionItem>
-                                    </Accordion>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
-                                        No errors recorded yet.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
-                </div>
+                <Accordion type="single" collapsible className="w-full space-y-2">
+                     {errorLogs && errorLogs.length > 0 ? (
+                        errorLogs.map(log => (
+                            <AccordionItem value={log.id} key={log.id} className="border rounded-lg bg-card shadow-sm">
+                                <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                                    <div className="flex items-center gap-4 text-left w-full">
+                                        <Avatar className="h-9 w-9 hidden sm:flex">
+                                            <AvatarFallback>{log.userName?.charAt(0)?.toUpperCase() || 'U'}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="font-semibold text-destructive truncate ">{log.errorMessage}</p>
+                                            <p className="text-sm text-muted-foreground">
+                                                {log.userName} during <Badge variant="outline" className="text-xs font-normal">{log.action}</Badge>
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-sm text-muted-foreground text-right pl-4">
+                                        {log.timestamp ? `${formatDistanceToNow(new Date(log.timestamp.seconds * 1000))} ago` : 'N/A'}
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4">
+                                    <div className="border-t pt-4">
+                                        <h4 className="font-semibold">Full Error Details:</h4>
+                                        <pre className="mt-2 whitespace-pre-wrap rounded-md bg-muted p-3 text-xs text-muted-foreground font-mono">
+                                            {log.errorStack || "No stack trace available."}
+                                        </pre>
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))
+                    ) : (
+                         <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
+                            <p className="text-muted-foreground">No errors recorded yet.</p>
+                        </div>
+                    )}
+                </Accordion>
             </CardContent>
         </Card>
     );
