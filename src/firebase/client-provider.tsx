@@ -60,5 +60,5 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
   const firebase = { app, auth, firestore };
 
-  return <FirebaseProvider value={value}>{children}</FirebaseProvider>;
+  return <FirebaseProvider value={firebase}>{children}</FirebaseProvider>;
 }
