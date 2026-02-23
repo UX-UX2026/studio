@@ -188,10 +188,16 @@ export default function ProcurementQuickSubmitPage() {
                 : 0;
 
             const variance = procurementTotal - forecastTotal;
-            const isOverBudget = forecastTotal > 0 && procurementTotal > forecastTotal;
+            const isOverBudget = procurementTotal > forecastTotal;
 
-            return { category, procurementTotal, forecastTotal, variance, isOverBudget };
-        }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; }[];
+            const comments = procurementItems
+                .filter(item => item.category === category && item.comments)
+                .map(item => item.comments)
+                .join('; ');
+
+
+            return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments };
+        }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; }[];
         
         const totals = lines.reduce((acc, line) => {
             acc.procurement += line.procurementTotal;
@@ -209,29 +215,36 @@ export default function ProcurementQuickSubmitPage() {
         return recurringItems.reduce((sum, item) => sum + item.amount, 0);
     }, [recurringItems]);
 
-    const handleSubmitRequest = async () => {
+    const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !departmentName || !selectedDepartmentId || !firestore) {
-            toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
+            toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
         }
 
-        if (!editingRequestId) {
-            const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
-            if (existingRequest) {
-                toast({
-                    variant: "destructive",
-                    title: "Submission Already Exists",
-                    description: "A procurement request for this department and period has already been submitted. You cannot create a duplicate.",
-                });
-                return;
-            }
+        const activePipelineRequest = allRequests?.find(req => 
+            req.departmentId === selectedDepartmentId && 
+            req.period === selectedPeriod &&
+            req.id !== editingRequestId &&
+            !['Draft', 'Completed', 'Rejected', 'Queries Raised'].includes(req.status)
+        );
+
+        if (role !== 'Administrator' && activePipelineRequest) {
+            toast({
+                variant: "destructive",
+                title: "Active Submission Exists",
+                description: "A request for this period is already in the approval process. You cannot submit another.",
+            });
+            return;
         }
+
+        const newStatus = isDraft ? 'Draft' : 'Pending Manager Approval';
+        const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         
         const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
         
         const defaultTimeline = [
             { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
-            { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
+            { stage: "Manager Review", actor: "Manager", date: null, status: newStatus === 'Draft' ? 'waiting' : ('pending' as const) },
             { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
             { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
         ];
@@ -241,59 +254,71 @@ export default function ProcurementQuickSubmitPage() {
               stage: stage.name,
               actor: String(stage.role) || 'System',
               date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
-              status: index === 0 ? 'completed' as const : (index === 1 ? 'pending' as const : 'waiting' as const),
+              status: index === 0 ? 'completed' as const : (index === 1 && !isDraft ? 'pending' as const : 'waiting' as const),
           }))
           : defaultTimeline;
         
         if (timeline.length > 0) {
             timeline[0].actor = user.displayName || 'Requester';
+            if(isDraft) {
+                for (let i = 1; i < timeline.length; i++) {
+                    timeline[i].status = 'waiting';
+                }
+            }
         }
 
         const requestData = {
             department: departmentName,
             departmentId: selectedDepartmentId,
             period: selectedPeriod,
-            total: periodSubmissionTotal,
-            status: 'Pending Manager Approval',
+            total: submissionTotal,
+            status: newStatus,
             submittedBy: user.displayName,
             submittedById: user.uid,
             timeline: timeline,
-            comments: [],
+            comments: editingRequestId ? allRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: draftItems,
         };
 
         try {
-            if (editingRequestId) {
-                const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
+            let docId = editingRequestId;
+            if (docId) {
+                const requestRef = doc(firestore, 'procurementRequests', docId);
                 await setDoc(requestRef, requestData, { merge: true });
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'request.update',
-                    details: `Updated and submitted request for ${selectedPeriod} for department ${departmentName}.`,
-                    entity: { type: 'procurementRequest', id: editingRequestId },
+                    action: isDraft ? 'request.draft_update' : 'request.update',
+                    details: `${isDraft ? 'Updated draft' : 'Updated and submitted request'} for ${selectedPeriod}.`,
+                    entity: { type: 'procurementRequest', id: docId },
                     timestamp: serverTimestamp()
                 });
-                toast({ title: "Request Updated & Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted.` });
             } else {
                 const requestsCollectionRef = collection(firestore, 'procurementRequests');
                 const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
+                docId = docRef.id;
+                setEditingRequestId(docId); // Start tracking the new draft's ID
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'request.create',
-                    details: `Submitted request for ${selectedPeriod} for department ${departmentName} with total ${formatCurrency(periodSubmissionTotal)}.`,
-                    entity: { type: 'procurementRequest', id: docRef.id },
+                    action: isDraft ? 'request.draft_create' : 'request.create',
+                    details: `${isDraft ? 'Created draft' : 'Submitted request'} for ${selectedPeriod}.`,
+                    entity: { type: 'procurementRequest', id: docId },
                     timestamp: serverTimestamp()
                 });
-                toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
             }
+
+            toast({ 
+                title: isDraft ? "Draft Saved" : "Request Submitted", 
+                description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
+            });
+
         } catch (error: any) {
-            console.error("Submit Request Error:", error);
+            console.error("Save Request Error:", error);
             toast({
                 variant: "destructive",
-                title: "Submission Failed",
-                description: error.message || "Could not submit the request. You may not have permissions.",
+                title: "Save Failed",
+                description: error.message || "Could not save the request. You may not have permissions.",
             });
         }
     };
@@ -415,6 +440,7 @@ export default function ProcurementQuickSubmitPage() {
                                     <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
                                     <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                    <TableHead className="font-bold">Comments</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -427,10 +453,11 @@ export default function ProcurementQuickSubmitPage() {
                                             {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
                                             {formatCurrency(item.variance)}
                                         </TableCell>
+                                         <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                                             No data available for the selected department and period.
                                         </TableCell>
                                     </TableRow>
@@ -441,6 +468,7 @@ export default function ProcurementQuickSubmitPage() {
                                 <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                                <TableCell></TableCell>
                             </TableRow>
                         </Table>
                     </div>
@@ -469,7 +497,8 @@ export default function ProcurementQuickSubmitPage() {
                         items={draftItems}
                         setItems={setDraftItems}
                         selectedPeriod={selectedPeriod}
-                        onSubmit={handleSubmitRequest}
+                        onSaveDraft={() => handleSaveRequest(true)}
+                        onSubmitRequest={() => handleSaveRequest(false)}
                         allRequests={allRequests || []}
                     />
                 </AccordionContent>
@@ -503,3 +532,4 @@ export default function ProcurementQuickSubmitPage() {
     
 
     
+

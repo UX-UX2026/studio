@@ -78,14 +78,16 @@ export function SubmissionClient({
     items,
     setItems,
     selectedPeriod,
-    onSubmit,
+    onSaveDraft,
+    onSubmitRequest,
     allRequests,
 }: { 
     userRole: UserRole, 
     items: Item[],
     setItems: React.Dispatch<React.SetStateAction<Item[]>>,
     selectedPeriod: string,
-    onSubmit: () => void,
+    onSaveDraft: () => void,
+    onSubmitRequest: () => void,
     allRequests: ApprovalRequest[],
 }) {
   const { toast } = useToast();
@@ -113,7 +115,7 @@ export function SubmissionClient({
       if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
           return true;
       }
-      if (userRole === 'Requester' && status === 'Pending Manager Approval') {
+      if (userRole === 'Requester' && (status === 'Pending Manager Approval' || status === 'Pending Executive')) {
           return true;
       }
       if (userRole === 'Manager' && status === 'Pending Executive') {
@@ -443,8 +445,8 @@ export function SubmissionClient({
             <Button onClick={handleRequestEdit}>Request Edit</Button>
           ): (
             <>
-              <Button variant="ghost">Save as Draft</Button>
-              <Button className="shadow-lg shadow-primary/20" onClick={onSubmit}>Submit Period Request</Button>
+              <Button variant="ghost" onClick={onSaveDraft}>Save as Draft</Button>
+              <Button className="shadow-lg shadow-primary/20" onClick={onSubmitRequest}>Submit For Approval</Button>
             </>
           )}
         </div>

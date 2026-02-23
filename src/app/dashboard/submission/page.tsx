@@ -38,6 +38,16 @@ type Department = {
     workflow?: any[];
 };
 
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-ZA", {
+        style: "currency",
+        currency: "ZAR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(amount);
+};
+
+
 export default function SubmissionPage() {
     const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
@@ -76,20 +86,37 @@ export default function SubmissionPage() {
         }
     }, [selectedPeriod, allRequests, requestsLoading, deptsLoading, userDepartment, departments]);
 
-    const handleSubmitRequest = async () => {
+    const handleSaveRequest = async (isDraft: boolean) => {
         const department = departments?.find(d => d.name === userDepartment);
         if (!user || !userDepartment || !department || !firestore) {
-            toast({ variant: "destructive", title: "Cannot submit", description: "User or department information is missing." });
+            toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
         }
 
+        const activePipelineRequest = allRequests?.find(req => 
+            req.departmentId === department.id && 
+            req.period === selectedPeriod &&
+            req.id !== editingRequestId &&
+            !['Draft', 'Completed', 'Rejected', 'Queries Raised'].includes(req.status)
+        );
+
+        if (role !== 'Administrator' && activePipelineRequest) {
+            toast({
+                variant: "destructive",
+                title: "Active Submission Exists",
+                description: "A request for this period is already in the approval process. You cannot submit another.",
+            });
+            return;
+        }
+
+        const newStatus = isDraft ? 'Draft' : 'Pending Manager Approval';
         const periodSubmissionTotal = items.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
 
         const departmentWorkflow = department?.workflow;
         
         const defaultTimeline = [
             { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
-            { stage: "Manager Review", actor: "Manager", date: null, status: 'pending' as const },
+            { stage: "Manager Review", actor: "Manager", date: null, status: newStatus === 'Draft' ? 'waiting' : ('pending' as const) },
             { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
             { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
         ];
@@ -99,12 +126,17 @@ export default function SubmissionPage() {
               stage: stage.name,
               actor: String(stage.role) || 'System',
               date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
-              status: index === 0 ? 'completed' as const : (index === 1 ? 'pending' as const : 'waiting' as const),
+              status: index === 0 ? 'completed' as const : (index === 1 && !isDraft ? 'pending' as const : 'waiting' as const),
           }))
           : defaultTimeline;
         
         if (timeline.length > 0) {
             timeline[0].actor = user.displayName || 'Requester';
+            if(isDraft) {
+                for (let i = 1; i < timeline.length; i++) {
+                    timeline[i].status = 'waiting';
+                }
+            }
         }
 
         const requestData = {
@@ -112,24 +144,45 @@ export default function SubmissionPage() {
             departmentId: department.id,
             period: selectedPeriod,
             total: periodSubmissionTotal,
-            status: 'Pending Manager Approval',
+            status: newStatus,
             submittedBy: user.displayName,
             submittedById: user.uid,
             timeline: timeline,
-            comments: [],
+            comments: editingRequestId ? allRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: items,
         };
 
         try {
-            if (editingRequestId) {
-                const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
+            let docId = editingRequestId;
+            if (docId) {
+                const requestRef = doc(firestore, 'procurementRequests', docId);
                 await setDoc(requestRef, requestData, { merge: true });
-                 toast({ title: "Request Updated & Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted.` });
+                 await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: isDraft ? 'request.draft_update' : 'request.update',
+                    details: `${isDraft ? 'Updated draft' : 'Updated and submitted request'} for ${selectedPeriod}.`,
+                    entity: { type: 'procurementRequest', id: docId },
+                    timestamp: serverTimestamp()
+                });
             } else {
                 const requestsCollectionRef = collection(firestore, 'procurementRequests');
-                await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
-                toast({ title: "Request Submitted", description: `Your procurement request for ${selectedPeriod} has been submitted for manager approval.` });
+                const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
+                docId = docRef.id;
+                setEditingRequestId(docId);
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: isDraft ? 'request.draft_create' : 'request.create',
+                    details: `${isDraft ? 'Created draft' : 'Submitted request'} for ${selectedPeriod}.`,
+                    entity: { type: 'procurementRequest', id: docId },
+                    timestamp: serverTimestamp()
+                });
             }
+            toast({ 
+                title: isDraft ? "Draft Saved" : "Request Submitted", 
+                description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
+            });
         } catch (error: any) {
             console.error("Submit Request Error:", error);
             toast({
@@ -207,7 +260,8 @@ export default function SubmissionPage() {
             items={items}
             setItems={setItems}
             selectedPeriod={selectedPeriod}
-            onSubmit={handleSubmitRequest}
+            onSaveDraft={() => handleSaveRequest(true)}
+            onSubmitRequest={() => handleSaveRequest(false)}
             allRequests={allRequests || []}
         />
       </CardContent>
