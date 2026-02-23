@@ -44,8 +44,6 @@ const allLinks = [
     subLinks: [
       { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit' },
       { href: '/dashboard/procurement-summary', label: 'Summary', permission: 'procurement:summary' },
-      { href: '/dashboard/submission', label: 'Submission', permission: 'procurement:submit' },
-      { href: '/dashboard/recurring', label: 'Recurring Items', permission: 'procurement:recurring' },
     ]
   },
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },
