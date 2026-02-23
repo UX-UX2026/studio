@@ -280,6 +280,8 @@ export default function ProcurementQuickSubmitPage() {
             items: draftItems,
         };
 
+        const action = isDraft ? 'request.draft_save' : 'request.submit';
+
         try {
             let docId = editingRequestId;
             if (docId) {
@@ -315,6 +317,18 @@ export default function ProcurementQuickSubmitPage() {
 
         } catch (error: any) {
             console.error("Save Request Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Save Failed",
@@ -532,4 +546,5 @@ export default function ProcurementQuickSubmitPage() {
     
 
     
+
 

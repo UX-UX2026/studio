@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/lib/roles-provider";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, setDoc } from "firebase/firestore";
+import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
 
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
@@ -147,7 +147,7 @@ export default function WorkflowPage() {
     };
 
     const handleSaveWorkflow = async () => {
-        if (!selectedDepartmentId || !firestore) {
+        if (!selectedDepartmentId || !firestore || !user) {
              toast({
                 variant: "destructive",
                 title: "No Department Selected",
@@ -161,12 +161,34 @@ export default function WorkflowPage() {
 
         try {
             await setDoc(departmentRef, payload, { merge: true });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'workflow.update',
+                details: `Updated workflow for department ${departments?.find(d=>d.id === selectedDepartmentId)?.name}.`,
+                entity: { type: 'department', id: selectedDepartmentId },
+                timestamp: serverTimestamp()
+            });
+            
             toast({
                 title: "Workflow Saved",
                 description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
             });
         } catch (error: any) {
             console.error("Save Workflow Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'workflow.update',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',

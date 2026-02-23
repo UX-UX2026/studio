@@ -226,8 +226,8 @@ export default function ApprovalsPage() {
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.status_change',
-                details: `Updated request ${activeRequest.id.substring(0,8)}... status to "${newStatus}"`,
+                action: 'request.approve',
+                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
@@ -237,6 +237,18 @@ export default function ApprovalsPage() {
 
         } catch (error: any) {
             console.error("Approval Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action: 'request.approve',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                 console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Approval Failed",
@@ -272,6 +284,18 @@ export default function ApprovalsPage() {
             });
         } catch (error: any) {
             console.error("Rejection Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action: 'request.reject',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                 console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Rejection Failed",
@@ -330,6 +354,18 @@ export default function ApprovalsPage() {
             });
         } catch (error: any) {
             console.error("Raise Query Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action: 'request.query',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                 console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Failed to Raise Query",
@@ -372,6 +408,18 @@ export default function ApprovalsPage() {
 
         } catch (error: any) {
             console.error("Add Comment Error:", error);
+             try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action: 'request.comment',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                 console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Failed to Add Comment",

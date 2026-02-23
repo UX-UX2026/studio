@@ -103,6 +103,7 @@ export default function DepartmentsPage() {
     const handleSave = async () => {
         if (!user || !firestore) return;
         const departmentData = { name, managerId, budget };
+        const action = editingDepartment ? 'department.update' : 'department.create';
 
         try {
             if (editingDepartment) {
@@ -112,7 +113,7 @@ export default function DepartmentsPage() {
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'department.update',
+                    action,
                     details: `Updated department: ${name}`,
                     entity: { type: 'department', id: editingDepartment.id },
                     timestamp: serverTimestamp()
@@ -126,7 +127,7 @@ export default function DepartmentsPage() {
                 await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'department.create',
+                    action,
                     details: `Created department: ${name}`,
                     entity: { type: 'department', id: docRef.id },
                     timestamp: serverTimestamp()
@@ -137,6 +138,18 @@ export default function DepartmentsPage() {
             setIsDialogOpen(false);
         } catch(error: any) {
             console.error("Save Department Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
@@ -170,6 +183,18 @@ export default function DepartmentsPage() {
             }
         } catch (error: any) {
             console.error("Delete Department Error:", error);
+             try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: 'department.delete',
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: 'destructive',
                 title: 'Deletion Failed',

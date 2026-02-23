@@ -152,6 +152,8 @@ export default function SubmissionPage() {
             items: items,
         };
 
+        const action = isDraft ? 'request.draft_save' : 'request.submit';
+
         try {
             let docId = editingRequestId;
             if (docId) {
@@ -185,6 +187,18 @@ export default function SubmissionPage() {
             });
         } catch (error: any) {
             console.error("Submit Request Error:", error);
+            try {
+                await addDoc(collection(firestore, 'errorLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack,
+                    timestamp: serverTimestamp()
+                });
+            } catch (logError) {
+                console.error("Failed to write to error log:", logError);
+            }
             toast({
                 variant: "destructive",
                 title: "Submission Failed",
