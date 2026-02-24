@@ -1,134 +1,118 @@
-
 'use client';
 
-import { useUser } from "@/firebase/auth/use-user";
-import { useRouter } from "next/navigation";
-import { useEffect, useMemo } from "react";
-import { Loader, History } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, orderBy } from "firebase/firestore";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { useState } from 'react';
+import { useFirestore, useUser } from "@/firebase";
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Loader, AlertTriangle, CheckCircle, DatabaseZap } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
-type AuditEvent = {
-    id: string;
-    userId: string;
-    userName: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-    entity?: {
-        type: string;
-        id: string;
-    };
-};
+type TestStatus = 'idle' | 'testing' | 'success' | 'error';
 
-export default function DatabaseLogPage() {
-    const { user, role, loading: userLoading } = useUser();
-    const router = useRouter();
+export default function DatabaseDiagnosticPage() {
     const firestore = useFirestore();
+    const { user } = useUser();
+    const [status, setStatus] = useState<TestStatus>('idle');
+    const [error, setError] = useState<string | null>(null);
+    const { toast } = useToast();
 
-    const auditLogsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'auditLogs'), orderBy('timestamp', 'desc'));
-    }, [firestore]);
-
-    const { data: auditLogs, loading: logsLoading } = useCollection<AuditEvent>(auditLogsQuery);
-
-    useEffect(() => {
-        if (userLoading) return;
-        if (!user) {
-          router.push('/dashboard');
-          return;
+    const handleTestConnection = async () => {
+        if (!firestore || !user) {
+            toast({
+                variant: 'destructive',
+                title: 'Prerequisites Missing',
+                description: 'Firestore service or user is not available.',
+            });
+            return;
         }
-        if (role && role !== 'Administrator') {
-            router.push('/dashboard');
+
+        setStatus('testing');
+        setError(null);
+
+        const testDocRef = doc(firestore, '_diagnostics', `test_${Date.now()}`);
+        const testData = {
+            message: 'This is a diagnostic write test from the app.',
+            userId: user.uid,
+            timestamp: serverTimestamp(),
+        };
+
+        try {
+            await setDoc(testDocRef, testData);
+            setStatus('success');
+            toast({
+                title: 'Connection Successful',
+                description: 'A test document was successfully written to Firestore.',
+            });
+        } catch (e: any) {
+            console.error('Database Diagnostic Error:', e);
+            setStatus('error');
+            setError(e.message || 'An unknown error occurred.');
+            toast({
+                variant: 'destructive',
+                title: 'Connection Failed',
+                description: e.message || 'Could not write to the database.',
+            });
         }
-    }, [user, role, userLoading, router]);
+    };
 
-    const loading = userLoading || logsLoading;
-
-    if (loading || !user || role !== 'Administrator') {
-        return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
+    const renderStatus = () => {
+        switch (status) {
+            case 'testing':
+                return (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader className="h-4 w-4 animate-spin" />
+                        Attempting to write a test document...
+                    </div>
+                );
+            case 'success':
+                return (
+                    <div className="flex items-center gap-2 text-green-600">
+                        <CheckCircle className="h-4 w-4" />
+                        Success! The database connection is working correctly.
+                    </div>
+                );
+            case 'error':
+                return (
+                    <div className="flex flex-col gap-2 text-destructive">
+                        <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4" />
+                            Connection Failed. The application could not write to the database.
+                        </div>
+                        <p className="font-mono bg-muted p-2 rounded-md text-xs">{error}</p>
+                    </div>
+                );
+            case 'idle':
+            default:
+                return <p className="text-muted-foreground">Click the button to test the database connection.</p>;
+        }
+    };
     
-    const getActionBadge = (action: string) => {
-        const actionType = action.split('.')[0];
-        switch(actionType) {
-            case 'user': return <Badge variant="outline" className="text-blue-500 border-blue-500">{action}</Badge>;
-            case 'request': return <Badge variant="outline" className="text-orange-500 border-orange-500">{action}</Badge>;
-            case 'department': return <Badge variant="outline" className="text-purple-500 border-purple-500">{action}</Badge>;
-            case 'role': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">{action}</Badge>;
-            case 'vendor': return <Badge variant="outline" className="text-green-500 border-green-500">{action}</Badge>;
-            default: return <Badge variant="secondary">{action}</Badge>;
-        }
-    }
-
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <History className="h-6 w-6 text-primary" />
-                    Database Log
+                    <DatabaseZap className="h-6 w-6 text-primary" />
+                    Database Connection Test
                 </CardTitle>
                 <CardDescription>
-                    A chronological log of all significant write operations (create, update, delete) performed within the application.
+                    This tool attempts a direct write to your Firestore database to verify the connection.
+                    You can't "ping" Firestore from a terminal, but this test serves the same purpose.
                 </CardDescription>
             </CardHeader>
-            <CardContent>
-                <div className="overflow-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-[200px]">User</TableHead>
-                                <TableHead>Action</TableHead>
-                                <TableHead>Target</TableHead>
-                                <TableHead>Details</TableHead>
-                                <TableHead className="w-[150px] text-right">Date</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {auditLogs && auditLogs.length > 0 ? (
-                                auditLogs.map(log => (
-                                    <TableRow key={log.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-2">
-                                                <Avatar className="h-8 w-8">
-                                                    <AvatarFallback>{log.userName?.charAt(0) || 'U'}</AvatarFallback>
-                                                </Avatar>
-                                                <span className="font-medium">{log.userName}</span>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>{getActionBadge(log.action)}</TableCell>
-                                        <TableCell>
-                                            {log.entity ? (
-                                                <Badge variant="outline">{log.entity.type} / {log.entity.id.substring(0,6)}...</Badge>
-                                            ) : (
-                                                'N/A'
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground">{log.details}</TableCell>
-                                        <TableCell className="text-right text-muted-foreground">
-                                            {log.timestamp ? format(new Date(log.timestamp.seconds * 1000), "MMM dd") : 'N/A'}
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            ) : (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                        No database events recorded yet.
-                                    </TableCell>
-                                </TableRow>
-                            )}
-                        </TableBody>
-                    </Table>
+            <CardContent className="space-y-6">
+                <Button onClick={handleTestConnection} disabled={status === 'testing'}>
+                    {status === 'testing' ? (
+                        <>
+                            <Loader className="mr-2 h-4 w-4 animate-spin" />
+                            Running Test...
+                        </>
+                    ) : (
+                        'Run Connection Test'
+                    )}
+                </Button>
+                <div className="p-4 border rounded-lg min-h-[80px] flex items-center justify-center">
+                    {renderStatus()}
                 </div>
             </CardContent>
         </Card>
