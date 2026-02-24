@@ -100,43 +100,52 @@ export default function RolesPage() {
     }
     
     const handleSave = () => {
-        log('--- RUNNING DIAGNOSTIC WRITE TEST ---');
+        if (!user || !firestore) return;
         setIsSaving(true);
-        
-        if (!firestore || !user) {
-            log('Diagnostic failed: Firestore or user not available.');
-            toast({ variant: 'destructive', title: 'Diagnostic Failed', description: 'Firestore or user not available.' });
-            setIsSaving(false);
-            return;
+        const action = editingRole ? 'role.update' : 'role.create';
+
+        const roleData = { name, permissions };
+        let promise;
+
+        if (editingRole) {
+            promise = setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true });
+        } else {
+            promise = addDoc(collection(firestore, 'roles'), roleData);
         }
 
-        const testDocRef = doc(firestore, 'diagnostic_writes', `test_${Date.now()}`);
-        const testData = {
-            timestamp: new Date(),
-            userId: user.uid,
-            page: 'roles',
-            message: 'This is a diagnostic write test.'
-        };
+        promise.then(async (docRef) => {
+            const finalRoleId = editingRole ? editingRole.id : docRef.id;
 
-        log('Attempting to write a test document...', { path: testDocRef.path, data: testData });
+            toast({ title: editingRole ? 'Role Updated' : 'Role Created' });
 
-        setDoc(testDocRef, testData)
-            .then(() => {
-                log('--- DIAGNOSTIC WRITE SUCCEEDED ---');
-                toast({ title: "Diagnostic Write Succeeded", description: "The test write to the database was successful. You can now try your original action again on another page." });
-            })
-            .catch((error: any) => {
-                log('--- DIAGNOSTIC WRITE FAILED ---', { code: error.code, message: error.message });
-                toast({
-                    variant: 'destructive',
-                    title: 'Diagnostic Write Failed',
-                    description: `The test write failed: ${error.message}`,
-                });
-            })
-            .finally(() => {
-                log('--- DIAGNOSTIC TEST COMPLETE ---');
-                setIsSaving(false);
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: editingRole ? `Updated role: "${name}"` : `Created role: "${name}"`,
+                entity: { type: 'role', id: finalRoleId },
+                timestamp: serverTimestamp()
             });
+
+            setEditingRole(null);
+            setIsDialogOpen(false);
+        }).catch((error) => {
+            console.error("Save Role Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: error.message || 'Could not save the role. You may not have permissions.',
+            });
+            logErrorToFirestore({
+                userId: user?.uid,
+                userName: user?.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        }).finally(() => {
+            setIsSaving(false);
+        });
     };
     
     const handleEdit = (role: Role) => {
@@ -150,6 +159,7 @@ export default function RolesPage() {
         if (!roleToDelete) return;
         const action = 'role.delete';
         
+        setIsSaving(true);
         deleteDoc(doc(firestore, 'roles', id)).then(() => {
             toast({ title: 'Role Deleted' });
             
@@ -160,7 +170,7 @@ export default function RolesPage() {
                 details: `Deleted role: "${roleToDelete.name}"`,
                 entity: { type: 'role', id: id },
                 timestamp: serverTimestamp()
-            }).catch(e => console.error("Failed to write audit log for role deletion.", e));
+            });
 
         }).catch((error: any) => {
             console.error("Delete Role Error:", error);
@@ -176,6 +186,8 @@ export default function RolesPage() {
                  errorMessage: error.message,
                  errorStack: error.stack,
             });
+        }).finally(() => {
+            setIsSaving(false);
         });
     };
 
