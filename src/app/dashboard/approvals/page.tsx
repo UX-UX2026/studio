@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -24,6 +25,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 
 const getStatusBadge = (status: string) => {
@@ -242,14 +244,13 @@ export default function ApprovalsPage() {
                 title: "Approval Failed",
                 description: error.message || "Could not update the request status. You may not have permissions.",
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action: 'request.approve',
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
+            });
         });
     };
     
@@ -260,6 +261,7 @@ export default function ApprovalsPage() {
         
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
         const updateData = { status: newStatus };
+        const action = 'request.reject';
 
         updateDoc(requestRef, updateData).then(() => {
             toast({
@@ -270,7 +272,7 @@ export default function ApprovalsPage() {
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.reject',
+                action,
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
@@ -284,14 +286,13 @@ export default function ApprovalsPage() {
                 title: "Rejection Failed",
                 description: error.message || "Could not update the request status.",
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.reject',
+                action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
+            });
         });
     };
     
@@ -324,6 +325,7 @@ export default function ApprovalsPage() {
             status: newStatus,
             comments: arrayUnion(commentData)
         };
+        const action = 'request.query';
 
         updateDoc(requestRef, updateData).then(() => {
             toast({
@@ -335,7 +337,7 @@ export default function ApprovalsPage() {
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.query',
+                action,
                 details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
@@ -349,14 +351,13 @@ export default function ApprovalsPage() {
                 title: "Failed to Raise Query",
                 description: error.message || "Could not update the request.",
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.query',
+                action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
+            });
         });
     };
 
@@ -375,6 +376,7 @@ export default function ApprovalsPage() {
         };
         const updateData = { comments: arrayUnion(commentData) };
         const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
+        const action = 'request.comment';
 
         updateDoc(requestRef, updateData).then(() => {
             toast({ title: "Comment added" });
@@ -383,7 +385,7 @@ export default function ApprovalsPage() {
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.comment',
+                action,
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
                 timestamp: serverTimestamp()
@@ -397,14 +399,13 @@ export default function ApprovalsPage() {
                 title: "Failed to Add Comment",
                 description: error.message || "Could not add the comment. Please try again.",
             });
-             addDoc(collection(firestore, 'errorLogs'), {
+             logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.comment',
+                action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
+            });
         });
     };
     

@@ -97,55 +97,50 @@ export default function RolesPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
+        if (!name.trim()) {
+            toast({
+                variant: 'destructive',
+                title: 'Validation Error',
+                description: 'Role name cannot be empty.',
+            });
+            return;
+        }
+        
+        if (!user || !firestore) {
+            toast({
+                variant: 'destructive',
+                title: 'Save Failed',
+                description: 'User or database service not available.',
+            });
+            return;
+        };
+
         setIsSaving(true);
         const action = editingRole ? 'role.update' : 'role.create';
-        try {
-            if (!name.trim()) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Validation Error',
-                    description: 'Role name cannot be empty.',
-                });
-                return;
-            }
-            
-            if (!user || !firestore) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Save Failed',
-                    description: 'User or database service not available.',
-                });
-                return;
-            };
+        const roleData = { name, permissions };
+        
+        const writePromise = editingRole
+            ? setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true })
+            : addDoc(collection(firestore, 'roles'), roleData);
 
-            const roleData = { name, permissions };
-            
-            let roleId: string;
-            if (editingRole) {
-                const roleRef = doc(firestore, 'roles', editingRole.id);
-                await setDoc(roleRef, roleData, { merge: true });
-                roleId = editingRole.id;
-            } else {
-                const docRef = await addDoc(collection(firestore, 'roles'), roleData);
-                roleId = docRef.id;
-            }
-
+        writePromise.then((docRef) => {
+            const roleId = editingRole ? editingRole.id : docRef.id;
             const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
             toast({ title: editingRole ? 'Role Updated' : 'Role Added' });
             
-            await addDoc(collection(firestore, 'auditLogs'), {
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
                 details,
                 entity: { type: 'role', id: roleId },
                 timestamp: serverTimestamp()
-            });
+            }).catch(e => console.error("Failed to write to audit log", e));
 
             setEditingRole(null);
             setIsDialogOpen(false);
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Save Role Error:", error);
             toast({
                 variant: 'destructive',
@@ -153,16 +148,16 @@ export default function RolesPage() {
                 description: error.message || 'Could not save the role.',
                 duration: 9000,
             });
-            await logErrorToFirestore({
+            logErrorToFirestore({
                 userId: user?.uid,
                 userName: user?.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        } finally {
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
     
     const handleEdit = (role: Role) => {
@@ -170,41 +165,39 @@ export default function RolesPage() {
         setIsDialogOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = (id: string) => {
         if (!user || !firestore) return;
         const roleToDelete = roles.find(r => r.id === id);
         if (!roleToDelete) return;
         const action = 'role.delete';
         
-        try {
-            const roleRef = doc(firestore, 'roles', id);
-            await deleteDoc(roleRef);
+        deleteDoc(doc(firestore, 'roles', id)).then(() => {
             toast({ title: 'Role Deleted' });
             
-            await addDoc(collection(firestore, 'auditLogs'), {
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
                 details: `Deleted role: "${roleToDelete.name}"`,
                 entity: { type: 'role', id: id },
                 timestamp: serverTimestamp()
-            });
+            }).catch(e => console.error("Failed to write audit log for role deletion.", e));
 
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Delete Role Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the role.',
             });
-            await logErrorToFirestore({
+            logErrorToFirestore({
                  userId: user.uid,
                  userName: user.displayName,
                  action,
                  errorMessage: error.message,
                  errorStack: error.stack,
             });
-        }
+        });
     };
 
     const handlePermissionChange = (permissionId: string, isChecked: boolean | 'indeterminate') => {
