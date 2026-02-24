@@ -23,6 +23,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 type Department = {
     id: string;
@@ -102,69 +103,70 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         setIsSaving(true);
-        if (!name.trim()) {
-            toast({
-                variant: 'destructive',
-                title: 'Validation Error',
-                description: 'Department name cannot be empty.',
-            });
-            setIsSaving(false);
-            return;
-        }
-
-        if (!user || !firestore) {
-             toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: 'User or database service not available.',
-            });
-            setIsSaving(false);
-            return;
-        }
-
-        const departmentData = { name, managerId, budget };
         const action = editingDepartment ? 'department.update' : 'department.create';
-        
-        const promise = editingDepartment
-            ? setDoc(doc(firestore, 'departments', editingDepartment.id), departmentData, { merge: true }).then(() => editingDepartment!.id)
-            : addDoc(collection(firestore, 'departments'), departmentData).then(docRef => docRef.id);
+        try {
+            if (!name.trim()) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Validation Error',
+                    description: 'Department name cannot be empty.',
+                });
+                return;
+            }
 
-        promise.then(departmentId => {
+            if (!user || !firestore) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Save Failed',
+                    description: 'User or database service not available.',
+                });
+                return;
+            }
+
+            const departmentData = { name, managerId, budget };
+            
+            let departmentId: string;
+            if (editingDepartment) {
+                const deptRef = doc(firestore, 'departments', editingDepartment.id);
+                await setDoc(deptRef, departmentData, { merge: true });
+                departmentId = editingDepartment.id;
+            } else {
+                const docRef = await addDoc(collection(firestore, 'departments'), departmentData);
+                departmentId = docRef.id;
+            }
+
             toast({ title: editingDepartment ? "Department Updated" : "Department Created" });
             
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
                 details: editingDepartment ? `Updated department: ${name}` : `Created department: ${name}`,
                 entity: { type: 'department', id: departmentId },
                 timestamp: serverTimestamp()
-            }).catch(auditError => {
-                console.error("Failed to write to audit log:", auditError);
             });
             
             setEditingDepartment(null);
             setIsDialogOpen(false);
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Save Department Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the department. You may not have permissions.',
             });
-            addDoc(collection(firestore, 'errorLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
+            await logErrorToFirestore({
+                userId: user?.uid,
+                userName: user?.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        }).finally(() => {
+            });
+        } finally {
             setIsSaving(false);
-        });
+        }
     };
     
     const handleEdit = (department: Department) => {
@@ -172,39 +174,40 @@ export default function DepartmentsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!user || !firestore) return;
         const deptToDelete = departments?.find(d => d.id === id);
-        const deptRef = doc(firestore, 'departments', id);
+        const action = 'department.delete';
 
-        deleteDoc(deptRef).then(() => {
+        try {
+            const deptRef = doc(firestore, 'departments', id);
+            await deleteDoc(deptRef);
             toast({ title: "Department Deleted" });
             if (deptToDelete) {
-                addDoc(collection(firestore, 'auditLogs'), {
+                await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
-                    action: 'department.delete',
+                    action,
                     details: `Deleted department: ${deptToDelete.name}`,
                     entity: { type: 'department', id },
                     timestamp: serverTimestamp()
-                }).catch(auditError => console.error("Failed to write to audit log:", auditError));
+                });
             }
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Delete Department Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Deletion Failed',
                 description: error.message || 'Could not delete the department.',
             });
-             addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'department.delete',
+                action,
                 errorMessage: error.message,
-                errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        });
+                errorStack: error.stack
+            });
+        }
     };
 
     const openAddDialog = () => {
@@ -253,7 +256,7 @@ export default function DepartmentsPage() {
         if (!file || !firestore) return;
 
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -279,10 +282,9 @@ export default function DepartmentsPage() {
                     };
                 });
                 
-                newDepts.forEach(dept => {
-                    addDoc(collection(firestore, 'departments'), dept)
-                        .catch(err => console.error("Error importing department row:", err));
-                });
+                for (const dept of newDepts) {
+                    await addDoc(collection(firestore, 'departments'), dept);
+                }
 
                 toast({ title: "Import Successful", description: `${newDepts.length} departments were added.` });
             } catch (error: any) {
