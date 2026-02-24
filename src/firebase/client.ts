@@ -9,7 +9,7 @@ export const firebaseConfig = {
   "projectId": "uxprocurementportal",
   "appId": "1:699115796238:web:1a8435d8a8b134d1c1a2f9",
   "storageBucket": "uxprocurementportal.appspot.com",
-  "apiKey": "AIzaSyA_REDACTED_API_KEY",
+  "apiKey": "AIzaSyC0a7a01BI-REDACTED",
   "authDomain": "uxprocurementportal.firebaseapp.com",
   "messagingSenderId": "699115796238"
 };
