@@ -100,75 +100,43 @@ export default function RolesPage() {
     }
     
     const handleSave = () => {
-        log('handleSave triggered for Roles page.');
+        log('--- RUNNING DIAGNOSTIC WRITE TEST ---');
         setIsSaving(true);
-
-        if (!name.trim()) {
-            toast({ variant: 'destructive', title: 'Validation Error', description: 'Role name cannot be empty.' });
+        
+        if (!firestore || !user) {
+            log('Diagnostic failed: Firestore or user not available.');
+            toast({ variant: 'destructive', title: 'Diagnostic Failed', description: 'Firestore or user not available.' });
             setIsSaving(false);
             return;
         }
-        
-        if (!user || !firestore) {
-            toast({ variant: 'destructive', title: 'Save Failed', description: 'User or database service not available.' });
-            setIsSaving(false);
-            return;
+
+        const testDocRef = doc(firestore, 'diagnostic_writes', `test_${Date.now()}`);
+        const testData = {
+            timestamp: new Date(),
+            userId: user.uid,
+            page: 'roles',
+            message: 'This is a diagnostic write test.'
         };
 
-        const action = editingRole ? 'role.update' : 'role.create';
-        const roleData = { name, permissions };
-        log('Prepared role data for saving.', { roleData });
-        
-        let writePromise;
-        let roleId;
+        log('Attempting to write a test document...', { path: testDocRef.path, data: testData });
 
-        if (editingRole) {
-            roleId = editingRole.id;
-            log(`Updating existing role with ID: ${roleId}`);
-            writePromise = setDoc(doc(firestore, 'roles', roleId), roleData, { merge: true });
-        } else {
-            const newRoleRef = doc(collection(firestore, 'roles'));
-            roleId = newRoleRef.id;
-            log(`Creating new role with generated ID: ${roleId}`);
-            writePromise = setDoc(newRoleRef, roleData);
-        }
-
-        log('Calling setDoc. Waiting for promise to settle...');
-        writePromise.then(() => {
-            log('setDoc promise resolved successfully.');
-            const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
-            toast({ title: editingRole ? 'Role Updated' : 'Role Added' });
-            
-            addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action,
-                details,
-                entity: { type: 'role', id: roleId },
-                timestamp: serverTimestamp()
+        setDoc(testDocRef, testData)
+            .then(() => {
+                log('--- DIAGNOSTIC WRITE SUCCEEDED ---');
+                toast({ title: "Diagnostic Write Succeeded", description: "The test write to the database was successful. You can now try your original action again on another page." });
+            })
+            .catch((error: any) => {
+                log('--- DIAGNOSTIC WRITE FAILED ---', { code: error.code, message: error.message });
+                toast({
+                    variant: 'destructive',
+                    title: 'Diagnostic Write Failed',
+                    description: `The test write failed: ${error.message}`,
+                });
+            })
+            .finally(() => {
+                log('--- DIAGNOSTIC TEST COMPLETE ---');
+                setIsSaving(false);
             });
-
-            setEditingRole(null);
-            setIsDialogOpen(false);
-        }).catch((error: any) => {
-            log('setDoc promise REJECTED.', { name: error.name, code: error.code, message: error.message });
-            console.error("Save Role Error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: error.message || 'Could not save the role.',
-            });
-            logErrorToFirestore({
-                userId: user?.uid,
-                userName: user?.displayName,
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }).finally(() => {
-            log('setDoc promise settled. Running finally block.');
-            setIsSaving(false);
-        });
     };
     
     const handleEdit = (role: Role) => {
