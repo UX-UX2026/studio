@@ -72,17 +72,15 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     const userRef = doc(firestore, 'users', user.uid);
 
     const unsubscribeProfile = onSnapshot(userRef, 
-      async (docSnap) => {
+      (docSnap) => {
         try {
           if (docSnap.exists()) {
             const profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
 
-            // Failsafe: If this is the admin user, ensure their role is Administrator.
-            // This corrects profiles that may have been created with the wrong role.
             if (profileData.email === 'heinrich@ubuntux.co.za' && profileData.role !== 'Administrator') {
-              await setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true });
-              // The snapshot listener will fire again with the updated data, so we don't proceed.
-              // This prevents a flash of the wrong UI.
+              // This is a non-blocking write. The onSnapshot listener will handle the update.
+              setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true })
+                .catch(e => console.error("Failed to self-correct admin role:", e));
               return; 
             }
 
@@ -90,51 +88,57 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             setIsLoading(false);
           } else {
             // --- Profile does NOT exist, create it ---
-            const isAdminEmail = user.email === 'heinrich@ubuntux.co.za';
-            let isFirstUserAdmin = false;
-
-            if (!isAdminEmail) {
-                try {
-                    const metadataRef = doc(firestore, 'app', 'metadata');
-                    const metadataSnap = await getDoc(metadataRef);
-                    if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
-                        isFirstUserAdmin = true;
-                        await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-                    }
-                } catch (e: any) {
-                    // This can happen if the client is offline. It's safe to just assume
-                    // this isn't the first admin setup and let the user log in as a requester.
-                    // The hardcoded admin email provides a failsafe.
-                    console.warn("Could not check app metadata, possibly due to offline state. Proceeding without first-user admin check.");
+            getDoc(doc(firestore, 'app', 'metadata')).then(metadataSnap => {
+                const isAdminEmail = user.email === 'heinrich@ubuntux.co.za';
+                let isFirstUserAdmin = false;
+                
+                if (!isAdminEmail && (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp)) {
+                    isFirstUserAdmin = true;
+                    setDoc(doc(firestore, 'app', 'metadata'), { adminIsSetUp: true }, { merge: true })
+                      .catch(e => console.error("Failed to set adminIsSetUp flag:", e));
                 }
-            }
-            
-            const isNewUserAdmin = isAdminEmail || isFirstUserAdmin;
 
-            const newProfile: Omit<UserProfile, 'id'> = {
-              displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-              email: user.email!,
-              photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-              role: isNewUserAdmin ? 'Administrator' : 'Requester',
-              department: isNewUserAdmin ? 'Executive' : 'Unassigned',
-              status: 'Active' as const,
-            };
-            
-            await setDoc(userRef, newProfile);
-            // After setting, the onSnapshot listener will fire again with the new data.
-            // We DO NOT set isLoading to false here. We wait for the next snapshot.
+                const isNewUserAdmin = isAdminEmail || isFirstUserAdmin;
+
+                const newProfile: Omit<UserProfile, 'id'> = {
+                  displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+                  email: user.email!,
+                  photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                  role: isNewUserAdmin ? 'Administrator' : 'Requester',
+                  department: isNewUserAdmin ? 'Executive' : 'Unassigned',
+                  status: 'Active' as const,
+                };
+                
+                // This is a non-blocking write. The onSnapshot listener will pick up the new profile.
+                setDoc(userRef, newProfile).catch(e => {
+                  console.error("Auth Provider: A fatal error occurred during profile creation.", e);
+                  toast({ variant: "destructive", title: "Profile Creation Failed", description: `Could not create your profile: ${e.message}` });
+                  if (firebaseAuth) firebaseAuth.signOut();
+                });
+            }).catch(e => {
+                 console.warn("Could not check app metadata, possibly due to offline state. Proceeding without first-user admin check.", e);
+                 // Failsafe for offline mode on first login
+                 const newProfile: Omit<UserProfile, 'id'> = {
+                    displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+                    email: user.email!,
+                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                    role: 'Requester',
+                    department: 'Unassigned',
+                    status: 'Active' as const,
+                 };
+                 setDoc(userRef, newProfile).catch(err => {
+                    console.error("Auth Provider: A fatal error occurred during offline profile creation.", err);
+                 });
+            });
           }
         } catch (e: any) {
-          // This is a catch-all for unexpected errors during profile creation/retrieval
           console.error("Auth Provider: A fatal error occurred during profile setup.", e);
           toast({ variant: "destructive", title: "Profile Error", description: `There was a critical problem setting up your profile: ${e.message}` });
-          if (firebaseAuth) await firebaseAuth.signOut();
+          if (firebaseAuth) firebaseAuth.signOut();
           setIsLoading(false);
         }
       },
-      async (error) => {
-        // This error callback is for the onSnapshot listener itself.
-        // It's the primary place to catch permission errors or truly fatal connection issues.
+      (error) => {
         console.error("Auth Provider: Firestore listener failed with a fatal error.", error);
         toast({
             variant: "destructive",
@@ -142,7 +146,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             description: `Could not load your profile: ${error.message}. Please contact support.`
         });
         if (firebaseAuth) {
-            await firebaseAuth.signOut();
+            firebaseAuth.signOut();
         }
         setIsLoading(false);
       }

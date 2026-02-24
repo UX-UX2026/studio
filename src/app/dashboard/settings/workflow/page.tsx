@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -64,6 +65,7 @@ export default function WorkflowPage() {
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [workflow, setWorkflow] = useState<WorkflowStage[]>([]);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         if (userLoading) return;
@@ -146,7 +148,7 @@ export default function WorkflowPage() {
         setWorkflow(newWorkflow);
     };
 
-    const handleSaveWorkflow = async () => {
+    const handleSaveWorkflow = () => {
         if (!selectedDepartmentId || !firestore || !user) {
              toast({
                 variant: "destructive",
@@ -156,12 +158,11 @@ export default function WorkflowPage() {
             return;
         }
         
+        setIsSaving(true);
         const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
         const payload = { workflow };
 
-        try {
-            await setDoc(departmentRef, payload, { merge: true });
-            
+        setDoc(departmentRef, payload, { merge: true }).then(() => {
             toast({
                 title: "Workflow Saved",
                 description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
@@ -175,27 +176,24 @@ export default function WorkflowPage() {
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
-            
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Save Workflow Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the workflow.',
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'workflow.update',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        }
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'workflow.update',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        }).finally(() => {
+            setIsSaving(false);
+        });
     };
 
     return (
@@ -229,8 +227,8 @@ export default function WorkflowPage() {
                             <Plus className="h-4 w-4 mr-2" />
                             Add Stage
                         </Button>
-                        <Button onClick={handleSaveWorkflow} disabled={!selectedDepartmentId}>
-                            <Save className="h-4 w-4 mr-2" />
+                        <Button onClick={handleSaveWorkflow} disabled={!selectedDepartmentId || isSaving}>
+                            {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Save className="h-4 w-4 mr-2" />}
                             Save Workflow
                         </Button>
                      </div>
@@ -323,5 +321,3 @@ export default function WorkflowPage() {
         </Card>
     );
 }
-
-    

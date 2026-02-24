@@ -267,7 +267,7 @@ export default function VendorsPage() {
         if (!file || !firestore) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -299,9 +299,10 @@ export default function VendorsPage() {
                     };
                 });
                 
-                for (const vendor of newVendors) {
-                    await addDoc(collection(firestore, 'vendors'), vendor);
-                }
+                newVendors.forEach(vendor => {
+                    addDoc(collection(firestore, 'vendors'), vendor)
+                     .catch(err => console.error("Error importing vendor row:", err));
+                });
 
                 toast({
                     title: "Import Successful",

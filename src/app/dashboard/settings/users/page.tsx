@@ -306,7 +306,7 @@ export default function UsersPage() {
         if (!file || !firestore) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -335,9 +335,10 @@ export default function UsersPage() {
                     };
                 });
                 
-                for (const user of newUsers) {
-                    await addDoc(collection(firestore, 'users'), user);
-                }
+                newUsers.forEach(user => {
+                    addDoc(collection(firestore, 'users'), user)
+                        .catch(err => console.error("Error importing user row:", err));
+                });
 
                 toast({ title: "Import Successful", description: `${newUsers.length} users were added.` });
             } catch (error: any) {

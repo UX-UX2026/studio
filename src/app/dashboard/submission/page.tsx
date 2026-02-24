@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -54,7 +55,6 @@ export default function SubmissionPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
 
-    // State for the submission client
     const [items, setItems] = useState<Item[]>([]);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date(new Date().getFullYear() + 2, 1, 1));
     const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
@@ -66,7 +66,6 @@ export default function SubmissionPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    // This effect will load an existing request for editing, or clear the items for a new one.
     useEffect(() => {
         if (requestsLoading || deptsLoading || !userDepartment || !departments) return;
 
@@ -79,14 +78,12 @@ export default function SubmissionPage() {
             setItems(existingRequest.items);
             setEditingRequestId(existingRequest.id);
         } else {
-            // Here you might want to pre-load recurring items if this page should support it
-            // For now, we start fresh.
             setItems([]);
             setEditingRequestId(null);
         }
     }, [selectedPeriod, allRequests, requestsLoading, deptsLoading, userDepartment, departments]);
 
-    const handleSaveRequest = async (isDraft: boolean) => {
+    const handleSaveRequest = (isDraft: boolean) => {
         const department = departments?.find(d => d.name === userDepartment);
         if (!user || !userDepartment || !department || !firestore) {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
@@ -154,18 +151,14 @@ export default function SubmissionPage() {
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
 
-        try {
-            let docId = editingRequestId;
-            if (docId) {
-                const requestRef = doc(firestore, 'procurementRequests', docId);
-                await setDoc(requestRef, requestData, { merge: true });
-            } else {
-                const requestsCollectionRef = collection(firestore, 'procurementRequests');
-                const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
-                docId = docRef.id;
+        const promise = editingRequestId
+            ? setDoc(doc(firestore, 'procurementRequests', editingRequestId), { ...requestData }, { merge: true }).then(() => editingRequestId)
+            : addDoc(collection(firestore, 'procurementRequests'), { ...requestData, createdAt: serverTimestamp() }).then(docRef => docRef.id);
+
+        promise.then(docId => {
+            if (!editingRequestId && docId) {
                 setEditingRequestId(docId);
             }
-
             toast({ 
                 title: isDraft ? "Draft Saved" : "Request Submitted", 
                 description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
@@ -179,8 +172,7 @@ export default function SubmissionPage() {
                 entity: { type: 'procurementRequest', id: docId },
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
-
-        } catch (error: any) {
+        }).catch(error => {
             console.error("Submit Request Error:", error);
             toast({
                 variant: "destructive",
@@ -197,7 +189,7 @@ export default function SubmissionPage() {
             }).catch(logError => {
                 console.error("Failed to write to error log:", logError);
             });
-        }
+        });
     };
 
     useEffect(() => {

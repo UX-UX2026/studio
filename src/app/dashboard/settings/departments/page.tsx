@@ -253,7 +253,7 @@ export default function DepartmentsPage() {
         if (!file || !firestore) return;
 
         const reader = new FileReader();
-        reader.onload = async (e) => {
+        reader.onload = (e) => {
             const text = e.target?.result as string;
             try {
                 const rows = text.split('\n').filter(row => row.trim());
@@ -279,9 +279,10 @@ export default function DepartmentsPage() {
                     };
                 });
                 
-                for (const dept of newDepts) {
-                    await addDoc(collection(firestore, 'departments'), dept);
-                }
+                newDepts.forEach(dept => {
+                    addDoc(collection(firestore, 'departments'), dept)
+                        .catch(err => console.error("Error importing department row:", err));
+                });
 
                 toast({ title: "Import Successful", description: `${newDepts.length} departments were added.` });
             } catch (error: any) {
