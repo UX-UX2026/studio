@@ -7,7 +7,7 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 // This is the public Firebase configuration for your web app.
 export const firebaseConfig = {
   "projectId": "uxprocurementportal",
-  "appId": "1:699115796238:web:1234567890abcdef123456",
+  "appId": "1:699115796238:web:1a8435d8a8b134d1c1a2f9",
   "storageBucket": "uxprocurementportal.appspot.com",
   "apiKey": "AIzaSyA_REDACTED_API_KEY",
   "authDomain": "uxprocurementportal.firebaseapp.com",
