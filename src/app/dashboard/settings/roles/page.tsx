@@ -126,16 +126,28 @@ export default function RolesPage() {
 
         try {
             let roleId: string;
+            
+            const writeOperation = async (): Promise<string> => {
+                if (editingRole) {
+                    const roleRef = doc(firestore, 'roles', editingRole.id);
+                    await setDoc(roleRef, roleData, { merge: true });
+                    return editingRole.id;
+                } else {
+                    const rolesCollectionRef = collection(firestore, 'roles');
+                    const docRef = await addDoc(rolesCollectionRef, roleData);
+                    return docRef.id;
+                }
+            };
+
+            const timeoutPromise = new Promise<string>((_, reject) => 
+                setTimeout(() => reject(new Error('The database operation timed out. This might be due to a network issue or a misconfiguration in the Firestore security rules.')), 10000)
+            );
+
+            roleId = await Promise.race([writeOperation(), timeoutPromise]);
 
             if (editingRole) {
-                const roleRef = doc(firestore, 'roles', editingRole.id);
-                await setDoc(roleRef, roleData, { merge: true });
-                roleId = editingRole.id;
                 toast({ title: 'Role Updated' });
             } else {
-                const rolesCollectionRef = collection(firestore, 'roles');
-                const docRef = await addDoc(rolesCollectionRef, roleData);
-                roleId = docRef.id;
                 toast({ title: 'Role Added' });
             }
 
@@ -157,6 +169,7 @@ export default function RolesPage() {
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the role.',
+                duration: 9000,
             });
             try {
                 await addDoc(collection(firestore, 'errorLogs'), {
