@@ -102,7 +102,7 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
         setIsSaving(true);
         if (!name.trim()) {
             toast({
@@ -126,24 +126,13 @@ export default function DepartmentsPage() {
 
         const departmentData = { name, managerId, budget };
         const action = editingDepartment ? 'department.update' : 'department.create';
+        
+        const promise = editingDepartment
+            ? setDoc(doc(firestore, 'departments', editingDepartment.id), departmentData, { merge: true }).then(() => editingDepartment!.id)
+            : addDoc(collection(firestore, 'departments'), departmentData).then(docRef => docRef.id);
 
-        try {
-            let departmentId: string;
-
-            if (editingDepartment) {
-                const deptRef = doc(firestore, 'departments', editingDepartment.id);
-                await setDoc(deptRef, departmentData, { merge: true });
-                departmentId = editingDepartment.id;
-                toast({ title: "Department Updated" });
-            } else {
-                const departmentsCollectionRef = collection(firestore, 'departments');
-                const docRef = await addDoc(departmentsCollectionRef, departmentData);
-                departmentId = docRef.id;
-                toast({ title: "Department Created" });
-            }
-
-            setEditingDepartment(null);
-            setIsDialogOpen(false);
+        promise.then(departmentId => {
+            toast({ title: editingDepartment ? "Department Updated" : "Department Created" });
             
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
@@ -155,29 +144,27 @@ export default function DepartmentsPage() {
             }).catch(auditError => {
                 console.error("Failed to write to audit log:", auditError);
             });
-
-        } catch(error: any) {
+            
+            setEditingDepartment(null);
+            setIsDialogOpen(false);
+        }).catch((error: any) => {
             console.error("Save Department Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the department. You may not have permissions.',
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        } finally {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
     
     const handleEdit = (department: Department) => {
@@ -185,13 +172,12 @@ export default function DepartmentsPage() {
         setIsDialogOpen(true);
     };
     
-    const handleDelete = async (id: string) => {
+    const handleDelete = (id: string) => {
         if (!user || !firestore) return;
         const deptToDelete = departments?.find(d => d.id === id);
         const deptRef = doc(firestore, 'departments', id);
 
-        try {
-            await deleteDoc(deptRef);
+        deleteDoc(deptRef).then(() => {
             toast({ title: "Department Deleted" });
             if (deptToDelete) {
                 addDoc(collection(firestore, 'auditLogs'), {
@@ -203,26 +189,22 @@ export default function DepartmentsPage() {
                     timestamp: serverTimestamp()
                 }).catch(auditError => console.error("Failed to write to audit log:", auditError));
             }
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Delete Department Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Deletion Failed',
                 description: error.message || 'Could not delete the department.',
             });
-             try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'department.delete',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        }
+             addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'department.delete',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        });
     };
 
     const openAddDialog = () => {

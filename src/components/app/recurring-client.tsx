@@ -38,14 +38,13 @@ export function RecurringClient() {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
+    const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
         if (!user || !firestore) return;
         const itemRef = doc(firestore, 'recurringItems', id);
         const updatePayload = { [field]: value };
         const action = 'recurringItem.update';
         
-        try {
-            await setDoc(itemRef, updatePayload, { merge: true });
+        setDoc(itemRef, updatePayload, { merge: true }).then(() => {
             toast({ title: "Recurring item updated" });
 
             addDoc(collection(firestore, 'auditLogs'), {
@@ -57,7 +56,7 @@ export function RecurringClient() {
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
 
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Recurring Item Update Error:", error);
             toast({
                 variant: 'destructive',
@@ -72,10 +71,10 @@ export function RecurringClient() {
                 errorStack: error.stack,
                 timestamp: serverTimestamp()
             }).catch(logError => console.error("Failed to write to error log:", logError));
-        }
+        });
     };
 
-    const handleAddItem = async () => {
+    const handleAddItem = () => {
         if (!user || !firestore) return;
         const newItem: Omit<RecurringItem, 'id'> = {
           name: "New Item",
@@ -88,8 +87,7 @@ export function RecurringClient() {
         const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
         const action = 'recurringItem.create';
         
-        try {
-            const docRef = await addDoc(recurringItemsCollectionRef, newItem);
+        addDoc(recurringItemsCollectionRef, newItem).then(docRef => {
             toast({ title: "New item added" });
             setView('list'); // Switch to list view for easier editing
 
@@ -102,7 +100,7 @@ export function RecurringClient() {
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
 
-        } catch (error: any) {
+        }).catch((error: any) => {
              console.error("Add Recurring Item Error:", error);
             toast({
                 variant: 'destructive',
@@ -117,17 +115,16 @@ export function RecurringClient() {
                 errorStack: error.stack,
                 timestamp: serverTimestamp()
             }).catch(logError => console.error("Failed to write to error log:", logError));
-        }
+        });
     };
     
-    const handleRemoveItem = async (id: string) => {
+    const handleRemoveItem = (id: string) => {
         if (!user || !firestore) return;
         const itemToRemove = items?.find(i => i.id === id);
         const itemRef = doc(firestore, 'recurringItems', id);
         const action = 'recurringItem.delete';
 
-        try {
-            await deleteDoc(itemRef);
+        deleteDoc(itemRef).then(() => {
             toast({ title: "Item removed" });
             
             if (itemToRemove) {
@@ -140,7 +137,7 @@ export function RecurringClient() {
                     timestamp: serverTimestamp()
                 }).catch(error => console.error("Failed to write to audit log:", error));
             }
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Delete Recurring Item Error:", error);
             toast({
                 variant: 'destructive',
@@ -155,7 +152,7 @@ export function RecurringClient() {
                 errorStack: error.stack,
                 timestamp: serverTimestamp()
             }).catch(logError => console.error("Failed to write to error log:", logError));
-        }
+        });
     };
 
     const handleImportClick = () => {

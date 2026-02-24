@@ -109,7 +109,7 @@ export default function UsersPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
         setIsSaving(true);
         if (!name.trim() || !email.trim() || !userRole) {
             toast({
@@ -143,24 +143,17 @@ export default function UsersPage() {
             status: isEditing ? editingUser.status : 'Invited' as const,
         };
 
-        try {
-            let userId: string;
+        const promise = isEditing && editingUser
+            ? setDoc(doc(firestore, 'users', editingUser.id), userData, { merge: true }).then(() => editingUser.id)
+            : addDoc(collection(firestore, 'users'), userData).then(docRef => docRef.id);
 
-            if (isEditing && editingUser) {
-                const userRef = doc(firestore, 'users', editingUser.id);
-                await setDoc(userRef, userData, { merge: true });
-                userId = editingUser.id;
+        promise.then(userId => {
+            if (isEditing) {
                 toast({ title: "User Updated", description: "User details have been successfully updated." });
             } else {
-                const usersCollectionRef = collection(firestore, 'users');
-                const docRef = await addDoc(usersCollectionRef, userData);
-                userId = docRef.id;
                 toast({ title: "Invitation Sent", description: `An invitation email has been simulated for ${email}.` });
             }
-            
-            setEditingUser(null);
-            setIsDialogOpen(false);
-            
+
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
@@ -169,29 +162,27 @@ export default function UsersPage() {
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
-
-        } catch (error: any) {
+            
+            setEditingUser(null);
+            setIsDialogOpen(false);
+        }).catch((error: any) => {
             console.error("Save User Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the user profile.',
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        } finally {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
 
     const handleEdit = (userToEdit: UserProfile) => {
@@ -199,14 +190,13 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     };
 
-    const handleDelete = async (id: string) => {
+    const handleDelete = (id: string) => {
         if (!adminUser || !firestore) return;
 
         const userRef = doc(firestore, 'users', id);
         const deletedUser = users?.find(u => u.id === id);
 
-        try {
-            await deleteDoc(userRef);
+        deleteDoc(userRef).then(() => {
             toast({ title: "User Deleted", description: "The user has been successfully removed." });
 
             if (deletedUser && adminUser) {
@@ -219,26 +209,22 @@ export default function UsersPage() {
                     timestamp: serverTimestamp()
                 }).catch(error => console.error("Failed to write to audit log:", error));
             }
-        } catch (error: any) {
+        }).catch((error: any) => {
              console.error("Delete User Error:", error);
              toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the user.',
             });
-             try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action: 'user.delete',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        }
+             addDoc(collection(firestore, 'errorLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action: 'user.delete',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        });
     };
 
     const openAddDialog = () => {
@@ -246,16 +232,14 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     }
 
-    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
+    const handleUserUpdate = (userId: string, field: keyof UserProfile, value: any) => {
         if (!adminUser || !firestore) return;
         const userRef = doc(firestore, 'users', userId);
         const updateData = { [field]: value };
         const user = users?.find(u => u.id === userId);
         const action = `user.update.${field}`;
         
-        try {
-            await setDoc(userRef, updateData, { merge: true });
-            
+        setDoc(userRef, updateData, { merge: true }).then(() => {
             toast({
                 title: "User Updated",
                 description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
@@ -270,26 +254,22 @@ export default function UsersPage() {
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
 
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("User Update Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Update Failed',
                 description: error.message || `Could not update the user's ${String(field)}.`,
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: adminUser.uid,
-                    userName: adminUser.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        }
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        });
     };
 
     const handleImportClick = () => {

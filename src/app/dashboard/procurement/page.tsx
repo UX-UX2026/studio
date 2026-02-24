@@ -216,7 +216,7 @@ export default function ProcurementQuickSubmitPage() {
         return recurringItems.reduce((sum, item) => sum + item.amount, 0);
     }, [recurringItems]);
 
-    const handleSaveRequest = async (isDraft: boolean) => {
+    const handleSaveRequest = (isDraft: boolean) => {
         if (!user || !departmentName || !selectedDepartmentId || !firestore) {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
@@ -283,18 +283,19 @@ export default function ProcurementQuickSubmitPage() {
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
 
-        try {
-            let docId = editingRequestId;
-            if (docId) {
-                const requestRef = doc(firestore, 'procurementRequests', docId);
-                await setDoc(requestRef, requestData, { merge: true });
-            } else {
-                const requestsCollectionRef = collection(firestore, 'procurementRequests');
-                const docRef = await addDoc(requestsCollectionRef, { ...requestData, createdAt: serverTimestamp() });
-                docId = docRef.id;
+        const promise = editingRequestId
+            ? setDoc(doc(firestore, 'procurementRequests', editingRequestId), requestData, { merge: true }).then(() => editingRequestId)
+            : addDoc(collection(firestore, 'procurementRequests'), { ...requestData, createdAt: serverTimestamp() }).then(docRef => docRef.id);
+        
+        toast({ 
+            title: isDraft ? "Saving Draft..." : "Submitting Request...",
+            description: "Please wait.",
+        });
+
+        promise.then(docId => {
+            if (!editingRequestId && docId) {
                 setEditingRequestId(docId); // Start tracking the new draft's ID
             }
-
             toast({ 
                 title: isDraft ? "Draft Saved" : "Request Submitted", 
                 description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
@@ -308,8 +309,7 @@ export default function ProcurementQuickSubmitPage() {
                 entity: { type: 'procurementRequest', id: docId },
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
-
-        } catch (error: any) {
+        }).catch(error => {
             console.error("Save Request Error:", error);
             toast({
                 variant: "destructive",
@@ -323,10 +323,8 @@ export default function ProcurementQuickSubmitPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
                 timestamp: serverTimestamp()
-            }).catch(logError => {
-                console.error("Failed to write to error log:", logError);
-            });
-        }
+            }).catch(logError => console.error("Failed to write to error log:", logError));
+        });
     };
     
     useEffect(() => {

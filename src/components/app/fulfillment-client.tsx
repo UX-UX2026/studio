@@ -83,7 +83,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setRecommendation(result);
        if (result.estimatedLeadTimeDays) {
           // This will update firestore and the local state
-          await handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
+          handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
       }
     } catch (error) {
       console.error(error);
@@ -97,15 +97,14 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     }
   };
   
-  const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
+  const handleItemUpdate = (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
       if (!itemToUpdate || !firestore || !user) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
       const action = 'fulfillment.update';
 
-      try {
-          const requestSnap = await getDoc(requestRef);
+      getDoc(requestRef).then(requestSnap => {
           if (!requestSnap.exists()) throw new Error("Procurement request not found");
           
           const requestData = requestSnap.data() as ApprovalRequest;
@@ -118,7 +117,8 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           
           const updatePayload = { items: updatedItems };
 
-          await updateDoc(requestRef, updatePayload);
+          return updateDoc(requestRef, updatePayload);
+      }).then(() => {
           toast({ title: "Fulfillment item updated." });
 
           // Also update local state for immediate UI feedback
@@ -136,9 +136,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
             timestamp: serverTimestamp()
           }).catch(error => console.error("Failed to write to audit log:", error));
-
-
-      } catch (error: any) {
+      }).catch((error: any) => {
           console.error("Fulfillment Update Error:", error);
           toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
           addDoc(collection(firestore, 'errorLogs'), {
@@ -149,7 +147,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               errorStack: error.stack,
               timestamp: serverTimestamp()
           }).catch(logError => console.error("Failed to write to error log:", logError));
-      }
+      });
   };
   
   const handleOpenCommentDialog = (item: FulfillmentItem) => {
@@ -157,14 +155,13 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setIsCommentDialogOpen(true);
   };
 
-  const handleAddComment = async () => {
+  const handleAddComment = () => {
       if (!selectedItem || !newComment.trim() || !role) return;
 
       const newCommentText = `${role}: ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      // We call handleItemUpdate which now contains the success toast and audit log
-      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
+      handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
 
       setNewComment("");
       setIsCommentDialogOpen(false);

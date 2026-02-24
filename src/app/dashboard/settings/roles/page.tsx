@@ -22,10 +22,8 @@ import { useRoles, type Role } from "@/lib/roles-provider";
 import { useFirestore } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
 import { addDoc, collection, deleteDoc, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
 
