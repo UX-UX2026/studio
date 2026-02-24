@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -165,6 +164,11 @@ export default function RolesPage() {
         });
     };
     
+    const handleEdit = (role: Role) => {
+        setEditingRole(role);
+        setIsDialogOpen(true);
+    };
+
     const handleDelete = (id: string) => {
         if (!user || !firestore) return;
         const roleToDelete = roles.find(r => r.id === id);
