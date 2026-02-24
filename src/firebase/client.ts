@@ -30,8 +30,8 @@ if (!getApps().length) {
 }
 
 auth = getAuth(app);
-// Connect to the specific Firestore database instance.
-firestore = getFirestore(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID);
+// Connect to the default Firestore database instance.
+firestore = getFirestore(app);
 
 // Persistence is now handled in FirebaseClientProvider to ensure
 // it's enabled before any Firestore operations are attempted.
