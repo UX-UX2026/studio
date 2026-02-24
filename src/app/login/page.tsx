@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { useAuth as useFirebaseAuthInstance } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuthentication } from "@/context/authentication-provider";
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -23,8 +22,6 @@ const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
 
 export default function LoginPage() {
     const auth = useFirebaseAuthInstance();
-    // The isLoading state from the provider tells us if it's safe to attempt a login.
-    const { isLoading: isAuthLoading } = useAuthentication();
     const { toast } = useToast();
     
     const [email, setEmail] = useState('');
@@ -32,6 +29,7 @@ export default function LoginPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleGoogleSignIn = async () => {
+        if (!auth) return;
         setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
         try {
@@ -54,6 +52,7 @@ export default function LoginPage() {
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!auth) return;
         setIsSubmitting(true);
         try {
             await signInWithEmailAndPassword(auth, email, password);
@@ -73,9 +72,6 @@ export default function LoginPage() {
         }
     };
     
-    // Combine local submission state with the auth provider's loading state.
-    const isLoading = isAuthLoading || isSubmitting;
-
     // The AuthenticationProvider shows a loader, so we don't need a separate one here.
     // We just render the page. The provider will redirect if the user is already logged in.
     
@@ -92,7 +88,7 @@ export default function LoginPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isLoading}>
+                        <Button variant="outline" className="w-full h-12 text-base" onClick={handleGoogleSignIn} disabled={isSubmitting}>
                             {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <GoogleIcon className="mr-2"/>}
                             Sign in with Google
                         </Button>
@@ -117,7 +113,7 @@ export default function LoginPage() {
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
                                     required
-                                    disabled={isLoading}
+                                    disabled={isSubmitting}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -129,10 +125,10 @@ export default function LoginPage() {
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
                                     required
-                                    disabled={isLoading}
+                                    disabled={isSubmitting}
                                 />
                             </div>
-                            <Button type="submit" className="w-full h-12 text-base" disabled={isLoading}>
+                            <Button type="submit" className="w-full h-12 text-base" disabled={isSubmitting}>
                                 {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
                                 Sign In
                             </Button>
