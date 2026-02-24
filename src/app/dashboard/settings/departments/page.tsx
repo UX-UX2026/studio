@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { useDebugLog } from "@/context/debug-log-provider";
 
 type Department = {
     id: string;
@@ -49,6 +50,7 @@ export default function DepartmentsPage() {
     const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
+    const { log } = useDebugLog();
 
     const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: departmentsLoading } = useCollection<Department>(departmentsQuery);
@@ -103,43 +105,49 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
+        log('handleSave triggered for Departments page.');
         setIsSaving(true);
         const action = editingDepartment ? 'department.update' : 'department.create';
-        try {
-            if (!name.trim()) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Validation Error',
-                    description: 'Department name cannot be empty.',
-                });
-                return;
-            }
+        
+        if (!name.trim()) {
+            log('Validation Error: Department name cannot be empty.', { name });
+            toast({ variant: 'destructive', title: 'Validation Error', description: 'Department name cannot be empty.' });
+            setIsSaving(false);
+            return;
+        }
 
-            if (!user || !firestore) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Save Failed',
-                    description: 'User or database service not available.',
-                });
-                return;
-            }
+        if (!user || !firestore) {
+            log('Save Failed: User or database service not available.', { user, firestore });
+            toast({ variant: 'destructive', title: 'Save Failed', description: 'User or database service not available.' });
+            setIsSaving(false);
+            return;
+        }
 
-            const departmentData = { name, managerId, budget };
-            
-            let departmentId: string;
-            if (editingDepartment) {
-                const deptRef = doc(firestore, 'departments', editingDepartment.id);
-                await setDoc(deptRef, departmentData, { merge: true });
-                departmentId = editingDepartment.id;
-            } else {
-                const docRef = await addDoc(collection(firestore, 'departments'), departmentData);
-                departmentId = docRef.id;
-            }
+        const departmentData = { name, managerId, budget };
+        log('Prepared department data for saving.', { departmentData });
+        
+        let departmentId: string;
+        let writePromise;
 
+        if (editingDepartment) {
+            departmentId = editingDepartment.id;
+            log(`Updating existing department with ID: ${departmentId}`);
+            const deptRef = doc(firestore, 'departments', departmentId);
+            writePromise = setDoc(deptRef, departmentData, { merge: true });
+        } else {
+            const newDocRef = doc(collection(firestore, 'departments'));
+            departmentId = newDocRef.id;
+            log(`Creating new department with generated ID: ${departmentId}`);
+            writePromise = setDoc(newDocRef, departmentData);
+        }
+
+        log('Calling setDoc. Waiting for promise to settle...');
+        writePromise.then(() => {
+            log('setDoc promise resolved successfully.');
             toast({ title: editingDepartment ? "Department Updated" : "Department Created" });
             
-            await addDoc(collection(firestore, 'auditLogs'), {
+            addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -150,23 +158,25 @@ export default function DepartmentsPage() {
             
             setEditingDepartment(null);
             setIsDialogOpen(false);
-        } catch (error: any) {
+        }).catch((error: any) => {
+            log('setDoc promise REJECTED.', { name: error.name, code: error.code, message: error.message });
             console.error("Save Department Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the department. You may not have permissions.',
             });
-            await logErrorToFirestore({
+            logErrorToFirestore({
                 userId: user?.uid,
                 userName: user?.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        } finally {
+        }).finally(() => {
+            log('setDoc promise settled. Running finally block.');
             setIsSaving(false);
-        }
+        });
     };
     
     const handleEdit = (department: Department) => {

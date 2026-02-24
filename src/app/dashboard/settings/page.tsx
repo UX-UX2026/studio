@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -39,6 +39,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A log of all significant write operations performed on the database.', icon: History },
         { href: '/dashboard/settings/error-log', label: 'Error Log', description: 'Review client-side errors captured from user interactions.', icon: AlertTriangle },
+        { href: '/dashboard/settings/system-log', label: 'System Log', description: 'View a live feed of client-side events for diagnostics.', icon: BrainCircuit },
     ]
 
     return (

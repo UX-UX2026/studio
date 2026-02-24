@@ -27,6 +27,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { useDebugLog } from "@/context/debug-log-provider";
 
 
 const allPermissions = [
@@ -56,6 +57,7 @@ export default function RolesPage() {
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
+    const { log } = useDebugLog();
 
     const { roles, loading: rolesLoading } = useRoles();
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -98,34 +100,42 @@ export default function RolesPage() {
     }
     
     const handleSave = () => {
+        log('handleSave triggered for Roles page.');
+        setIsSaving(true);
+
         if (!name.trim()) {
-            toast({
-                variant: 'destructive',
-                title: 'Validation Error',
-                description: 'Role name cannot be empty.',
-            });
+            toast({ variant: 'destructive', title: 'Validation Error', description: 'Role name cannot be empty.' });
+            setIsSaving(false);
             return;
         }
         
         if (!user || !firestore) {
-            toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: 'User or database service not available.',
-            });
+            toast({ variant: 'destructive', title: 'Save Failed', description: 'User or database service not available.' });
+            setIsSaving(false);
             return;
         };
 
-        setIsSaving(true);
         const action = editingRole ? 'role.update' : 'role.create';
         const roleData = { name, permissions };
+        log('Prepared role data for saving.', { roleData });
         
-        const writePromise = editingRole
-            ? setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true })
-            : addDoc(collection(firestore, 'roles'), roleData);
+        let writePromise;
+        let roleId;
 
-        writePromise.then((docRef) => {
-            const roleId = editingRole ? editingRole.id : docRef.id;
+        if (editingRole) {
+            roleId = editingRole.id;
+            log(`Updating existing role with ID: ${roleId}`);
+            writePromise = setDoc(doc(firestore, 'roles', roleId), roleData, { merge: true });
+        } else {
+            const newRoleRef = doc(collection(firestore, 'roles'));
+            roleId = newRoleRef.id;
+            log(`Creating new role with generated ID: ${roleId}`);
+            writePromise = setDoc(newRoleRef, roleData);
+        }
+
+        log('Calling setDoc. Waiting for promise to settle...');
+        writePromise.then(() => {
+            log('setDoc promise resolved successfully.');
             const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
             toast({ title: editingRole ? 'Role Updated' : 'Role Added' });
             
@@ -136,17 +146,17 @@ export default function RolesPage() {
                 details,
                 entity: { type: 'role', id: roleId },
                 timestamp: serverTimestamp()
-            }).catch(e => console.error("Failed to write to audit log", e));
+            });
 
             setEditingRole(null);
             setIsDialogOpen(false);
         }).catch((error: any) => {
+            log('setDoc promise REJECTED.', { name: error.name, code: error.code, message: error.message });
             console.error("Save Role Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the role.',
-                duration: 9000,
             });
             logErrorToFirestore({
                 userId: user?.uid,
@@ -156,6 +166,7 @@ export default function RolesPage() {
                 errorStack: error.stack,
             });
         }).finally(() => {
+            log('setDoc promise settled. Running finally block.');
             setIsSaving(false);
         });
     };
