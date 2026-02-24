@@ -11,7 +11,7 @@ export const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
 };
 
 let app: FirebaseApp;
@@ -30,7 +30,8 @@ if (!getApps().length) {
 }
 
 auth = getAuth(app);
-firestore = getFirestore(app);
+// Connect to the specific Firestore database instance.
+firestore = getFirestore(app, process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID);
 
 // Persistence is now handled in FirebaseClientProvider to ensure
 // it's enabled before any Firestore operations are attempted.
