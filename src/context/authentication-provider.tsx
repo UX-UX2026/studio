@@ -6,6 +6,7 @@ import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
+import { Loader } from 'lucide-react';
 
 // Define the UserProfile shape
 export type UserRole = string | null;
