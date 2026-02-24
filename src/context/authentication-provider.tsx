@@ -43,120 +43,71 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    if (!firebaseAuth) {
+    if (!firebaseAuth || !firestore) {
+      // This should not happen if the provider is used correctly.
       setIsLoading(false);
       return;
     };
     
+    // This is the primary listener for authentication state.
     const unsubscribeAuth = onAuthStateChanged(firebaseAuth, (authUser) => {
-        setUser(authUser);
-        if (!authUser) {
+        setIsLoading(true);
+        if (authUser) {
+            // User is signed in. Now, we MUST listen to their profile document.
+            const userRef = doc(firestore, 'users', authUser.uid);
+            const unsubscribeProfile = onSnapshot(userRef, 
+              (docSnap) => {
+                if (docSnap.exists()) {
+                    // Profile exists, set user and profile state
+                    setUser(authUser);
+                    setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
+                    setIsLoading(false);
+                } else {
+                    // Profile does NOT exist. We must create it.
+                    // This logic prevents a race condition on first sign-in.
+                    const newProfile: Omit<UserProfile, 'id'> = {
+                        displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+                        email: authUser.email!,
+                        photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                        role: 'Administrator', // First user is always an admin
+                        department: 'Executive',
+                        status: 'Active' as const,
+                    };
+
+                    setDoc(userRef, newProfile).then(() => {
+                        // The onSnapshot listener will fire again with the new data,
+                        // which will then set the user and profile state correctly.
+                        // We don't need to setLoading(false) here.
+                    }).catch(e => {
+                        console.error("Fatal: Could not create user profile.", e);
+                        toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred while creating your user profile." });
+                        firebaseAuth.signOut(); // Sign out on critical failure
+                        setIsLoading(false);
+                    });
+                }
+              },
+              (error) => {
+                  console.error("Fatal: Firestore listener for profile failed.", error);
+                  toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile from the database." });
+                  firebaseAuth.signOut();
+                  setIsLoading(false);
+              }
+            );
+            return () => unsubscribeProfile(); // Cleanup profile listener
+        } else {
+            // User is signed out.
+            setUser(null);
             setProfile(null);
             setIsLoading(false);
         }
     });
 
-    return () => unsubscribeAuth();
-  }, [firebaseAuth]);
+    return () => unsubscribeAuth(); // Cleanup auth listener
+  }, [firebaseAuth, firestore, toast]);
 
 
   useEffect(() => {
-    if (!user || !firestore) {
-      if (!user) {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    setIsLoading(true);
-    const userRef = doc(firestore, 'users', user.uid);
-
-    const unsubscribeProfile = onSnapshot(userRef, 
-      (docSnap) => {
-        try {
-          if (docSnap.exists()) {
-            const profileData = { id: docSnap.id, ...docSnap.data() } as UserProfile;
-
-            if (profileData.email === 'heinrich@ubuntux.co.za' && profileData.role !== 'Administrator') {
-              // This is a non-blocking write. The onSnapshot listener will handle the update.
-              setDoc(userRef, { role: 'Administrator', department: 'Executive' }, { merge: true })
-                .catch(e => console.error("Failed to self-correct admin role:", e));
-              return; 
-            }
-
-            setProfile(profileData);
-            setIsLoading(false);
-          } else {
-            // --- Profile does NOT exist, create it ---
-            getDoc(doc(firestore, 'app', 'metadata')).then(metadataSnap => {
-                const isAdminEmail = user.email === 'heinrich@ubuntux.co.za';
-                let isFirstUserAdmin = false;
-                
-                if (!isAdminEmail && (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp)) {
-                    isFirstUserAdmin = true;
-                    setDoc(doc(firestore, 'app', 'metadata'), { adminIsSetUp: true }, { merge: true })
-                      .catch(e => console.error("Failed to set adminIsSetUp flag:", e));
-                }
-
-                const isNewUserAdmin = isAdminEmail || isFirstUserAdmin;
-
-                const newProfile: Omit<UserProfile, 'id'> = {
-                  displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-                  email: user.email!,
-                  photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                  role: isNewUserAdmin ? 'Administrator' : 'Requester',
-                  department: isNewUserAdmin ? 'Executive' : 'Unassigned',
-                  status: 'Active' as const,
-                };
-                
-                // This is a non-blocking write. The onSnapshot listener will pick up the new profile.
-                setDoc(userRef, newProfile).catch(e => {
-                  console.error("Auth Provider: A fatal error occurred during profile creation.", e);
-                  toast({ variant: "destructive", title: "Profile Creation Failed", description: `Could not create your profile: ${e.message}` });
-                  if (firebaseAuth) firebaseAuth.signOut();
-                });
-            }).catch(e => {
-                 console.warn("Could not check app metadata, possibly due to offline state. Proceeding without first-user admin check.", e);
-                 // Failsafe for offline mode on first login
-                 const newProfile: Omit<UserProfile, 'id'> = {
-                    displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-                    email: user.email!,
-                    photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                    role: 'Requester',
-                    department: 'Unassigned',
-                    status: 'Active' as const,
-                 };
-                 setDoc(userRef, newProfile).catch(err => {
-                    console.error("Auth Provider: A fatal error occurred during offline profile creation.", err);
-                 });
-            });
-          }
-        } catch (e: any) {
-          console.error("Auth Provider: A fatal error occurred during profile setup.", e);
-          toast({ variant: "destructive", title: "Profile Error", description: `There was a critical problem setting up your profile: ${e.message}` });
-          if (firebaseAuth) firebaseAuth.signOut();
-          setIsLoading(false);
-        }
-      },
-      (error) => {
-        console.error("Auth Provider: Firestore listener failed with a fatal error.", error);
-        toast({
-            variant: "destructive",
-            title: "Profile Access Error",
-            description: `Could not load your profile: ${error.message}. Please contact support.`
-        });
-        if (firebaseAuth) {
-            firebaseAuth.signOut();
-        }
-        setIsLoading(false);
-      }
-    );
-
-    return () => unsubscribeProfile();
-  }, [user, firestore, firebaseAuth, toast]);
-
-
-  useEffect(() => {
+    // This effect handles routing based on the loading and auth state.
     if (isLoading) {
       return; 
     }
@@ -164,10 +115,12 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     const isAuthPage = pathname === '/login';
 
     if (user && profile) { 
+      // User is fully authenticated with a profile.
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
     } else {
+      // User is not authenticated.
       if (!isAuthPage) {
         router.replace('/login');
       }
