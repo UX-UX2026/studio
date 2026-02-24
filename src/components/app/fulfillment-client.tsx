@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -31,6 +32,7 @@ import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -83,7 +85,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setRecommendation(result);
        if (result.estimatedLeadTimeDays) {
           // This will update firestore and the local state
-          handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
+          await handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
       }
     } catch (error) {
       console.error(error);
@@ -97,14 +99,15 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     }
   };
   
-  const handleItemUpdate = (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
+  const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
       if (!itemToUpdate || !firestore || !user) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
       const action = 'fulfillment.update';
 
-      getDoc(requestRef).then(requestSnap => {
+      try {
+          const requestSnap = await getDoc(requestRef);
           if (!requestSnap.exists()) throw new Error("Procurement request not found");
           
           const requestData = requestSnap.data() as ApprovalRequest;
@@ -117,8 +120,8 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           
           const updatePayload = { items: updatedItems };
 
-          return updateDoc(requestRef, updatePayload);
-      }).then(() => {
+          await updateDoc(requestRef, updatePayload);
+
           toast({ title: "Fulfillment item updated." });
 
           // Also update local state for immediate UI feedback
@@ -128,26 +131,25 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               )
           );
 
-          addDoc(collection(firestore, 'auditLogs'), {
+          await addDoc(collection(firestore, 'auditLogs'), {
             userId: user.uid,
             userName: user.displayName,
             action: action,
             details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
             timestamp: serverTimestamp()
-          }).catch(error => console.error("Failed to write to audit log:", error));
-      }).catch((error: any) => {
+          });
+      } catch (error: any) {
           console.error("Fulfillment Update Error:", error);
           toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
-          addDoc(collection(firestore, 'errorLogs'), {
+          await logErrorToFirestore({
               userId: user.uid,
               userName: user.displayName,
               action: action,
               errorMessage: error.message,
               errorStack: error.stack,
-              timestamp: serverTimestamp()
-          }).catch(logError => console.error("Failed to write to error log:", logError));
-      });
+          });
+      }
   };
   
   const handleOpenCommentDialog = (item: FulfillmentItem) => {
@@ -155,13 +157,13 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setIsCommentDialogOpen(true);
   };
 
-  const handleAddComment = () => {
+  const handleAddComment = async () => {
       if (!selectedItem || !newComment.trim() || !role) return;
 
       const newCommentText = `${role}: ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
+      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
 
       setNewComment("");
       setIsCommentDialogOpen(false);

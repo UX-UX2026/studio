@@ -99,22 +99,22 @@ export default function RolesPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         if (!user || !firestore) return;
         setIsSaving(true);
         const action = editingRole ? 'role.update' : 'role.create';
 
         const roleData = { name, permissions };
-        let promise;
-
-        if (editingRole) {
-            promise = setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true });
-        } else {
-            promise = addDoc(collection(firestore, 'roles'), roleData);
-        }
-
-        promise.then(async (docRef) => {
-            const finalRoleId = editingRole ? editingRole.id : docRef.id;
+        
+        try {
+            let finalRoleId: string;
+            if (editingRole) {
+                finalRoleId = editingRole.id;
+                await setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true });
+            } else {
+                const docRef = await addDoc(collection(firestore, 'roles'), roleData);
+                finalRoleId = docRef.id;
+            }
 
             toast({ title: editingRole ? 'Role Updated' : 'Role Created' });
 
@@ -129,23 +129,23 @@ export default function RolesPage() {
 
             setEditingRole(null);
             setIsDialogOpen(false);
-        }).catch((error) => {
+        } catch (error: any) {
             console.error("Save Role Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the role. You may not have permissions.',
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                 userId: user?.uid,
                 userName: user?.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        }).finally(() => {
+        } finally {
             setIsSaving(false);
-        });
+        }
     };
     
     const handleEdit = (role: Role) => {
@@ -153,17 +153,18 @@ export default function RolesPage() {
         setIsDialogOpen(true);
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (!user || !firestore) return;
         const roleToDelete = roles.find(r => r.id === id);
         if (!roleToDelete) return;
         const action = 'role.delete';
         
         setIsSaving(true);
-        deleteDoc(doc(firestore, 'roles', id)).then(() => {
+        try {
+            await deleteDoc(doc(firestore, 'roles', id));
             toast({ title: 'Role Deleted' });
             
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -172,23 +173,23 @@ export default function RolesPage() {
                 timestamp: serverTimestamp()
             });
 
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Delete Role Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the role.',
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                  userId: user.uid,
                  userName: user.displayName,
                  action,
                  errorMessage: error.message,
                  errorStack: error.stack,
             });
-        }).finally(() => {
+        } finally {
             setIsSaving(false);
-        });
+        }
     };
 
     const handlePermissionChange = (permissionId: string, isChecked: boolean | 'indeterminate') => {

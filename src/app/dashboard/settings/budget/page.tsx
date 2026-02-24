@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 type Department = {
     id: string;
@@ -344,30 +345,25 @@ export default function BudgetPage() {
             toast({ title: "Import Successful", description: `${newItems.length} budget items were imported for ${selectedDepartmentName}.` });
             setIsMappingDialogOpen(false);
 
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
-            }).catch(error => console.error("Failed to write to audit log:", error));
+            });
 
         } catch (error: any) {
              console.error("Budget Import Error:", error);
              toast({ variant: "destructive", title: "Import Failed", description: error.message || "An unknown error occurred during the import process. Check console for details." });
-             try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
+            await logErrorToFirestore({
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
         } finally {
             setIsImporting(false);
         }

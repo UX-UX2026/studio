@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -216,7 +217,7 @@ export default function ProcurementQuickSubmitPage() {
         return recurringItems.reduce((sum, item) => sum + item.amount, 0);
     }, [recurringItems]);
 
-    const handleSaveRequest = (isDraft: boolean) => {
+    const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !departmentName || !selectedDepartmentId || !firestore) {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
@@ -282,17 +283,22 @@ export default function ProcurementQuickSubmitPage() {
         };
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
-
-        const promise = editingRequestId
-            ? setDoc(doc(firestore, 'procurementRequests', editingRequestId), requestData, { merge: true }).then(() => editingRequestId)
-            : addDoc(collection(firestore, 'procurementRequests'), { ...requestData, createdAt: serverTimestamp() }).then(docRef => docRef.id);
         
         toast({ 
             title: isDraft ? "Saving Draft..." : "Submitting Request...",
             description: "Please wait.",
         });
 
-        promise.then(docId => {
+        try {
+            let docId: string;
+            if (editingRequestId) {
+                await setDoc(doc(firestore, 'procurementRequests', editingRequestId), requestData, { merge: true });
+                docId = editingRequestId;
+            } else {
+                const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...requestData, createdAt: serverTimestamp() });
+                docId = docRef.id;
+            }
+
             if (!editingRequestId && docId) {
                 setEditingRequestId(docId); // Start tracking the new draft's ID
             }
@@ -301,30 +307,29 @@ export default function ProcurementQuickSubmitPage() {
                 description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
             });
 
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 details: `${isDraft ? (editingRequestId ? 'Updated draft' : 'Created draft') : 'Submitted request'} for ${selectedPeriod}.`,
                 entity: { type: 'procurementRequest', id: docId },
                 timestamp: serverTimestamp()
-            }).catch(error => console.error("Failed to write to audit log:", error));
-        }).catch(error => {
+            });
+        } catch (error: any) {
             console.error("Save Request Error:", error);
             toast({
                 variant: "destructive",
                 title: "Save Failed",
                 description: error.message || "Could not save the request. You may not have permissions.",
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        });
+            });
+        }
     };
     
     useEffect(() => {

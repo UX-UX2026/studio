@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/lib/roles-provider";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
@@ -148,7 +149,7 @@ export default function WorkflowPage() {
         setWorkflow(newWorkflow);
     };
 
-    const handleSaveWorkflow = () => {
+    const handleSaveWorkflow = async () => {
         if (!selectedDepartmentId || !firestore || !user) {
              toast({
                 variant: "destructive",
@@ -161,39 +162,40 @@ export default function WorkflowPage() {
         setIsSaving(true);
         const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
         const payload = { workflow };
+        const action = 'workflow.update';
 
-        setDoc(departmentRef, payload, { merge: true }).then(() => {
+        try {
+            await setDoc(departmentRef, payload, { merge: true });
             toast({
                 title: "Workflow Saved",
                 description: `The approval workflow for ${departments?.find(d=>d.id === selectedDepartmentId)?.name} has been updated.`,
             });
             
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'workflow.update',
+                action,
                 details: `Updated workflow for department ${departments?.find(d=>d.id === selectedDepartmentId)?.name}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
-            }).catch(error => console.error("Failed to write to audit log:", error));
-        }).catch((error: any) => {
+            });
+        } catch (error: any) {
             console.error("Save Workflow Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the workflow.',
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
-                action: 'workflow.update',
+                action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        }).finally(() => {
+            });
+        } finally {
             setIsSaving(false);
-        });
+        }
     };
 
     return (

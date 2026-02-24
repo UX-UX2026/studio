@@ -105,7 +105,7 @@ export default function DepartmentsPage() {
         );
     }
     
-    const handleSave = () => {
+    const handleSave = async () => {
         log('handleSave triggered for Departments page.');
         setIsSaving(true);
         const action = editingDepartment ? 'department.update' : 'department.create';
@@ -127,27 +127,24 @@ export default function DepartmentsPage() {
         const departmentData = { name, managerId, budget };
         log('Prepared department data for saving.', { departmentData });
         
-        let departmentId: string;
-        let writePromise;
+        try {
+            let departmentId: string;
+            if (editingDepartment) {
+                departmentId = editingDepartment.id;
+                log(`Updating existing department with ID: ${departmentId}`);
+                const deptRef = doc(firestore, 'departments', departmentId);
+                await setDoc(deptRef, departmentData, { merge: true });
+            } else {
+                const newDocRef = doc(collection(firestore, 'departments'));
+                departmentId = newDocRef.id;
+                log(`Creating new department with generated ID: ${departmentId}`);
+                await setDoc(newDocRef, departmentData);
+            }
 
-        if (editingDepartment) {
-            departmentId = editingDepartment.id;
-            log(`Updating existing department with ID: ${departmentId}`);
-            const deptRef = doc(firestore, 'departments', departmentId);
-            writePromise = setDoc(deptRef, departmentData, { merge: true });
-        } else {
-            const newDocRef = doc(collection(firestore, 'departments'));
-            departmentId = newDocRef.id;
-            log(`Creating new department with generated ID: ${departmentId}`);
-            writePromise = setDoc(newDocRef, departmentData);
-        }
-
-        log('Calling setDoc. Waiting for promise to settle...');
-        writePromise.then(() => {
             log('setDoc promise resolved successfully.');
             toast({ title: editingDepartment ? "Department Updated" : "Department Created" });
             
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -158,7 +155,7 @@ export default function DepartmentsPage() {
             
             setEditingDepartment(null);
             setIsDialogOpen(false);
-        }).catch((error: any) => {
+        } catch (error: any) {
             log('setDoc promise REJECTED.', { name: error.name, code: error.code, message: error.message });
             console.error("Save Department Error:", error);
             toast({
@@ -166,17 +163,17 @@ export default function DepartmentsPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the department. You may not have permissions.',
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                 userId: user?.uid,
                 userName: user?.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        }).finally(() => {
+        } finally {
             log('setDoc promise settled. Running finally block.');
             setIsSaving(false);
-        });
+        }
     };
     
     const handleEdit = (department: Department) => {

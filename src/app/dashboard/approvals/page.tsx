@@ -161,7 +161,7 @@ export default function ApprovalsPage() {
         );
     }
     
-    const handleApprove = () => {
+    const handleApprove = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
@@ -221,40 +221,39 @@ export default function ApprovalsPage() {
 
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
         const updateData = { status: newStatus, timeline: newTimeline };
-        const finalToastMessage = toastMessage;
-        const finalNewStatus = newStatus;
-        
-        updateDoc(requestRef, updateData).then(() => {
-            toast(finalToastMessage);
+        const action = 'request.approve';
 
-            const auditLogData = {
+        try {
+            await updateDoc(requestRef, updateData);
+            toast(toastMessage);
+
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.approve',
-                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${finalNewStatus}"`,
+                action,
+                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
-            };
-            addDoc(collection(firestore, 'auditLogs'), auditLogData).catch(error => console.error("Failed to write to audit log:", error));
+            });
 
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Approval Error:", error);
             toast({
                 variant: "destructive",
                 title: "Approval Failed",
                 description: error.message || "Could not update the request status. You may not have permissions.",
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
-                action: 'request.approve',
+                action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        });
+        }
     };
     
-    const handleReject = () => {
+    const handleReject = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         const newStatus: ApprovalRequest['status'] = 'Rejected';
@@ -263,40 +262,40 @@ export default function ApprovalsPage() {
         const updateData = { status: newStatus };
         const action = 'request.reject';
 
-        updateDoc(requestRef, updateData).then(() => {
+        try {
+            await updateDoc(requestRef, updateData);
             toast({
                 title: "Request Rejected",
                 description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
             });
 
-            const auditLogData = {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
-            };
-            addDoc(collection(firestore, 'auditLogs'), auditLogData).catch(error => console.error("Failed to write to audit log:", error));
+            });
             
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Rejection Error:", error);
             toast({
                 variant: "destructive",
                 title: "Rejection Failed",
                 description: error.message || "Could not update the request status.",
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        });
+        }
     };
     
-    const handleRaiseQuery = () => {
+    const handleRaiseQuery = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         if (!newComment.trim()) {
@@ -326,43 +325,43 @@ export default function ApprovalsPage() {
             comments: arrayUnion(commentData)
         };
         const action = 'request.query';
-
-        updateDoc(requestRef, updateData).then(() => {
+        
+        try {
+            await updateDoc(requestRef, updateData);
             toast({
                 title: "Query Raised",
                 description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
             });
             setNewComment("");
             
-            const auditLogData = {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
-            };
-            addDoc(collection(firestore, 'auditLogs'), auditLogData).catch(error => console.error("Failed to write to audit log:", error));
+            });
             
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Raise Query Error:", error);
             toast({
                 variant: "destructive",
                 title: "Failed to Raise Query",
                 description: error.message || "Could not update the request.",
             });
-            logErrorToFirestore({
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        });
+        }
     };
 
 
-    const handleAddComment = () => {
+    const handleAddComment = async () => {
         if (!activeRequest || !user || !newComment.trim() || !firestore) return;
 
         const commentData = {
@@ -378,35 +377,35 @@ export default function ApprovalsPage() {
         const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
         const action = 'request.comment';
 
-        updateDoc(requestRef, updateData).then(() => {
+        try {
+            await updateDoc(requestRef, updateData);
             toast({ title: "Comment added" });
             setNewComment("");
 
-            const auditLogData = {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
                 timestamp: serverTimestamp()
-            };
-            addDoc(collection(firestore, 'auditLogs'), auditLogData).catch(error => console.error("Failed to write to audit log:", error));
+            });
 
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Add Comment Error:", error);
              toast({
                 variant: "destructive",
                 title: "Failed to Add Comment",
                 description: error.message || "Could not add the comment. Please try again.",
             });
-             logErrorToFirestore({
+             await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        });
+        }
     };
     
   return (

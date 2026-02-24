@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useRef, useMemo } from "react";
@@ -10,6 +11,7 @@ import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useUser } from "@/firebase";
 import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 type RecurringItem = {
     id: string;
@@ -38,43 +40,43 @@ export function RecurringClient() {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleItemChange = (id: string, field: keyof RecurringItem, value: any) => {
+    const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
         if (!user || !firestore) return;
         const itemRef = doc(firestore, 'recurringItems', id);
         const updatePayload = { [field]: value };
         const action = 'recurringItem.update';
         
-        setDoc(itemRef, updatePayload, { merge: true }).then(() => {
+        try {
+            await setDoc(itemRef, updatePayload, { merge: true });
             toast({ title: "Recurring item updated" });
 
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 details: `Updated recurring item (id: ${id.substring(0,6)}...), field '${field}' to '${value}'`,
                 entity: { type: 'recurringItem', id },
                 timestamp: serverTimestamp()
-            }).catch(error => console.error("Failed to write to audit log:", error));
+            });
 
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Recurring Item Update Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Update Failed',
                 description: error.message || 'Could not update recurring item.',
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        });
+            });
+        }
     };
 
-    const handleAddItem = () => {
+    const handleAddItem = async () => {
         if (!user || !firestore) return;
         const newItem: Omit<RecurringItem, 'id'> = {
           name: "New Item",
@@ -87,72 +89,72 @@ export function RecurringClient() {
         const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
         const action = 'recurringItem.create';
         
-        addDoc(recurringItemsCollectionRef, newItem).then(docRef => {
+        try {
+            const docRef = await addDoc(recurringItemsCollectionRef, newItem);
             toast({ title: "New item added" });
             setView('list'); // Switch to list view for easier editing
 
-            addDoc(collection(firestore, 'auditLogs'), {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 details: `Created new recurring item: "New Item"`,
                 entity: { type: 'recurringItem', id: docRef.id },
                 timestamp: serverTimestamp()
-            }).catch(error => console.error("Failed to write to audit log:", error));
+            });
 
-        }).catch((error: any) => {
-             console.error("Add Recurring Item Error:", error);
+        } catch (error: any) {
+            console.error("Add Recurring Item Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Add Failed',
                 description: error.message || 'Could not add new recurring item.',
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        });
+            });
+        }
     };
     
-    const handleRemoveItem = (id: string) => {
+    const handleRemoveItem = async (id: string) => {
         if (!user || !firestore) return;
         const itemToRemove = items?.find(i => i.id === id);
         const itemRef = doc(firestore, 'recurringItems', id);
         const action = 'recurringItem.delete';
 
-        deleteDoc(itemRef).then(() => {
+        try {
+            await deleteDoc(itemRef);
             toast({ title: "Item removed" });
             
             if (itemToRemove) {
-                addDoc(collection(firestore, 'auditLogs'), {
+                await addDoc(collection(firestore, 'auditLogs'), {
                     userId: user.uid,
                     userName: user.displayName,
                     action: action,
                     details: `Deleted recurring item: "${itemToRemove.name}"`,
                     entity: { type: 'recurringItem', id },
                     timestamp: serverTimestamp()
-                }).catch(error => console.error("Failed to write to audit log:", error));
+                });
             }
-        }).catch((error: any) => {
+        } catch (error: any) {
             console.error("Delete Recurring Item Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete recurring item.',
             });
-            addDoc(collection(firestore, 'errorLogs'), {
+            await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
                 errorMessage: error.message,
                 errorStack: error.stack,
-                timestamp: serverTimestamp()
-            }).catch(logError => console.error("Failed to write to error log:", logError));
-        });
+            });
+        }
     };
 
     const handleImportClick = () => {
