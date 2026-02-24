@@ -22,6 +22,7 @@ export function useUser() {
         department,
         status: profile?.status || null,
         loading: isLoading,
-        error: null, // Error handling is now internal to the provider
+        // Error handling is now internal to the provider, so we can remove it from here.
+        // The provider will show toasts for any critical errors.
     };
 }

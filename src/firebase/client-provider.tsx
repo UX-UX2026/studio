@@ -3,19 +3,17 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { app, auth, firestore } from './client';
-import { enableIndexedDbPersistence } from 'firebase/firestore';
+import { enableIndexedDbPersistence, getDoc, doc } from 'firebase/firestore';
 import { Loader } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
-  const [isPersistenceEnabled, setIsPersistenceEnabled] = useState(false);
+  const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    const enablePersistence = async () => {
+    const initializeFirebase = async () => {
       try {
-        // The persistence must be enabled before any other Firestore operations.
-        // This is why it's here, at the top level of the client-side app.
         await enableIndexedDbPersistence(firestore);
       } catch (err: any) {
         if (err.code === 'failed-precondition') {
@@ -31,16 +29,28 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
           console.error("An unexpected error occurred while enabling persistence:", err);
         }
       }
-      setIsPersistenceEnabled(true);
+
+      // This "warm-up" read is critical. It forces the SDK to establish its
+      // connection and determine if it's online or offline. By waiting for
+      // this to complete (either succeed or fail), we prevent race conditions
+      // where the app tries to write data before the SDK is ready.
+      try {
+        const warmUpDocRef = doc(firestore, 'app', 'metadata');
+        await getDoc(warmUpDocRef);
+      } catch (error) {
+        console.warn("Firestore warm-up read failed, likely because you are offline. The app will proceed using cached data.", error);
+      }
+      
+      // Now that persistence is enabled and the connection state is known,
+      // the rest of the application can safely interact with Firestore.
+      setIsFirebaseReady(true);
     };
 
-    enablePersistence();
+    initializeFirebase();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // We don't render the rest of the app until persistence has been configured.
-  // The AuthenticationProvider will handle the next stage of loading.
-  if (!isPersistenceEnabled) {
+  if (!isFirebaseReady) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
         <Loader className="h-8 w-8 animate-spin" />

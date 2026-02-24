@@ -16,7 +16,6 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
 import { useUser } from "@/firebase/auth/use-user";
-import { useRouter } from "next/navigation";
 import { Loader, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,14 +31,18 @@ import { DebugLogProvider } from "@/context/debug-log-provider";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
+  // The useUser hook now gets its data from the robust AuthenticationProvider
   const { user, profile, loading, role } = useUser();
-  const router = useRouter();
   const auth = useAuth();
 
   const handleSignOut = async () => {
+    // The AuthenticationProvider will handle redirecting the user on sign out.
     await signOut(auth);
   };
 
+  // The main loading state is now handled by the AuthenticationProvider itself,
+  // which shows a full-screen loader. We only need to handle the case where
+  // data might still be loading inside the dashboard layout itself.
   if (loading || !user || !profile) {
     return (
       <div className="flex h-screen items-center justify-center">
