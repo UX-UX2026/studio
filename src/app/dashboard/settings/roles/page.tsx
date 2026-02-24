@@ -98,7 +98,7 @@ export default function RolesPage() {
         );
     }
     
-    const handleSave = async () => {
+    const handleSave = () => {
         setIsSaving(true);
         if (!name.trim()) {
             toast({
@@ -122,37 +122,14 @@ export default function RolesPage() {
 
         const roleData = { name, permissions };
         const action = editingRole ? 'role.update' : 'role.create';
-        const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
 
-        try {
-            let roleId: string;
-            
-            const writeOperation = async (): Promise<string> => {
-                if (editingRole) {
-                    const roleRef = doc(firestore, 'roles', editingRole.id);
-                    await setDoc(roleRef, roleData, { merge: true });
-                    return editingRole.id;
-                } else {
-                    const rolesCollectionRef = collection(firestore, 'roles');
-                    const docRef = await addDoc(rolesCollectionRef, roleData);
-                    return docRef.id;
-                }
-            };
+        const promise = editingRole
+            ? setDoc(doc(firestore, 'roles', editingRole.id), roleData, { merge: true }).then(() => editingRole!.id)
+            : addDoc(collection(firestore, 'roles'), roleData).then(docRef => docRef.id);
 
-            const timeoutPromise = new Promise<string>((_, reject) => 
-                setTimeout(() => reject(new Error('The database operation timed out. This might be due to a network issue or a misconfiguration in the Firestore security rules.')), 10000)
-            );
-
-            roleId = await Promise.race([writeOperation(), timeoutPromise]);
-
-            if (editingRole) {
-                toast({ title: 'Role Updated' });
-            } else {
-                toast({ title: 'Role Added' });
-            }
-
-            setEditingRole(null);
-            setIsDialogOpen(false);
+        promise.then(roleId => {
+            const details = editingRole ? `Updated role from "${editingRole.name}" to "${name}"` : `Created new role: "${name}"`;
+            toast({ title: editingRole ? 'Role Updated' : 'Role Added' });
             
             addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
@@ -163,7 +140,9 @@ export default function RolesPage() {
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
 
-        } catch (error: any) {
+            setEditingRole(null);
+            setIsDialogOpen(false);
+        }).catch((error: any) => {
             console.error("Save Role Error:", error);
             toast({
                 variant: 'destructive',
@@ -171,36 +150,28 @@ export default function RolesPage() {
                 description: error.message || 'Could not save the role.',
                 duration: 9000,
             });
-            try {
-                await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action,
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
+            addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
                 console.error("Failed to write to error log:", logError);
-            }
-        } finally {
+            });
+        }).finally(() => {
             setIsSaving(false);
-        }
+        });
     };
     
-    const handleEdit = (role: Role) => {
-        setEditingRole(role);
-        setIsDialogOpen(true);
-    };
-    
-    const handleDelete = async (id: string) => {
+    const handleDelete = (id: string) => {
         if (!user || !firestore) return;
         const roleToDelete = roles.find(r => r.id === id);
         if (!roleToDelete) return;
         
         const roleRef = doc(firestore, 'roles', id);
-        try {
-            await deleteDoc(roleRef);
+        deleteDoc(roleRef).then(() => {
             toast({ title: 'Role Deleted' });
             
             addDoc(collection(firestore, 'auditLogs'), {
@@ -212,26 +183,24 @@ export default function RolesPage() {
                 timestamp: serverTimestamp()
             }).catch(error => console.error("Failed to write to audit log:", error));
 
-        } catch (error: any) {
+        }).catch((error: any) => {
             console.error("Delete Role Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the role.',
             });
-            try {
-                 await addDoc(collection(firestore, 'errorLogs'), {
-                    userId: user.uid,
-                    userName: user.displayName,
-                    action: 'role.delete',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
-                    timestamp: serverTimestamp()
-                });
-            } catch (logError) {
-                console.error("Failed to write to error log:", logError);
-            }
-        }
+             addDoc(collection(firestore, 'errorLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'role.delete',
+                errorMessage: error.message,
+                errorStack: error.stack,
+                timestamp: serverTimestamp()
+            }).catch(logError => {
+                 console.error("Failed to write to error log:", logError);
+            });
+        });
     };
 
     const handlePermissionChange = (permissionId: string, isChecked: boolean | 'indeterminate') => {
