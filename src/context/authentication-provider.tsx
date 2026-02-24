@@ -80,7 +80,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                     }).catch(e => {
                         console.error("Fatal: Could not create user profile.", e);
                         toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred." });
-                        firebaseAuth.signOut();
+                        if(firebaseAuth) firebaseAuth.signOut();
                         setIsLoading(false);
                     });
                 }
@@ -88,7 +88,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
               (error) => {
                   console.error("Fatal: Firestore listener for profile failed.", error);
                   toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile." });
-                  firebaseAuth.signOut();
+                  if(firebaseAuth) firebaseAuth.signOut();
                   setIsLoading(false);
               }
             );

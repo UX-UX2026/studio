@@ -33,8 +33,5 @@ auth = getAuth(app);
 // Connect to the default Firestore database instance.
 firestore = getFirestore(app);
 
-// Persistence is now handled in FirebaseClientProvider to ensure
-// it's enabled before any Firestore operations are attempted.
-
 // Export the initialized services as singletons.
 export { app, auth, firestore };

@@ -15,7 +15,7 @@ export class FirestorePermissionError extends Error {
     this.name = 'FirestorePermissionError';
     this.context = context;
     
-    // This is for Next.js error overlay to show the object
+    // This is for the Next.js error overlay to show the object
     (this as any).digest = `Firestore Operation: ${context.operation.toUpperCase()}\nPath: ${context.path}`;
   }
 }
