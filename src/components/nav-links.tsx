@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -48,8 +47,8 @@ const allLinks = [
     // A user must have at least one of these permissions to see the parent menu.
     permissions: ['procurement:submit', 'procurement:summary', 'procurement:recurring'],
     subLinks: [
-      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit' },
-      { href: '/dashboard/procurement-summary', label: 'Summary', permission: 'procurement:summary' },
+      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit', iconClass: "text-blue-500" },
+      { href: '/dashboard/procurement-summary', label: 'Summary', icon: FilePieChart, permission: 'procurement:summary', iconClass: "text-orange-500" },
     ]
   },
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },
@@ -62,15 +61,15 @@ const allLinks = [
     icon: Settings, 
     permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog', 'settings:errorlog'],
     subLinks: [
-        { href: '/dashboard/settings', label: 'General', permission: 'settings:general' },
-        { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow' },
-        { href: '/dashboard/settings/departments', label: 'Departments', icon: Building, permission: 'settings:departments' },
-        { href: '/dashboard/settings/roles', label: 'Roles', icon: Shield, permission: 'settings:roles' },
-        { href: '/dashboard/settings/budget', label: 'Budget', icon: Banknote, permission: 'settings:budget' },
-        { href: '/dashboard/settings/audit-log', label: 'Audit Log', icon: History, permission: 'settings:auditlog' },
-        { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog' },
-        { href: '/dashboard/settings/database-log', label: 'Database Test', icon: DatabaseZap, permission: 'settings:errorlog' },
-        { href: '/dashboard/settings/system-log', label: 'System Log', icon: BrainCircuit, permission: 'settings:errorlog' },
+        { href: '/dashboard/settings', label: 'General', icon: Settings, permission: 'settings:general', iconClass: "text-gray-500" },
+        { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow', iconClass: "text-blue-500" },
+        { href: '/dashboard/settings/departments', label: 'Departments', icon: Building, permission: 'settings:departments', iconClass: "text-orange-500" },
+        { href: '/dashboard/settings/roles', label: 'Roles', icon: Shield, permission: 'settings:roles', iconClass: "text-purple-500" },
+        { href: '/dashboard/settings/budget', label: 'Budget', icon: Banknote, permission: 'settings:budget', iconClass: "text-green-500" },
+        { href: '/dashboard/settings/audit-log', label: 'Audit Log', icon: History, permission: 'settings:auditlog', iconClass: "text-indigo-500" },
+        { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog', iconClass: "text-yellow-600" },
+        { href: '/dashboard/settings/database-log', label: 'Database Test', icon: DatabaseZap, permission: 'settings:errorlog', iconClass: "text-red-500" },
+        { href: '/dashboard/settings/system-log', label: 'System Log', icon: BrainCircuit, permission: 'settings:errorlog', iconClass: "text-gray-500" },
     ]
   },
 ];
@@ -141,7 +140,7 @@ export function NavLinks({ role }: { role: UserRole }) {
                         <SidebarMenuSubItem key={subLink.href}>
                             <SidebarMenuSubButton asChild isActive={isActive}>
                                 <Link href={subLink.href}>
-                                  {subLink.icon && <subLink.icon />}
+                                  {subLink.icon && <subLink.icon className={subLink.iconClass} />}
                                   {subLink.label}
                                 </Link>
                             </SidebarMenuSubButton>
