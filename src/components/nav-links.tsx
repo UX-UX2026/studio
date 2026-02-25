@@ -18,6 +18,9 @@ import {
   BrainCircuit,
   DatabaseZap,
   Banknote,
+  Workflow,
+  Building,
+  Shield,
 } from 'lucide-react';
 import {
   SidebarMenu,
