@@ -478,7 +478,56 @@ export default function ProcurementQuickSubmitPage() {
             </CardContent>
         </Card>
 
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['summary', 'open-submissions', 'submission', 'recurring']}>
+        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['open-submissions', 'summary', 'submission', 'recurring']}>
+            <AccordionItem value="open-submissions" className="border-0 rounded-lg bg-card shadow-sm">
+                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
+                    <div className="flex items-center gap-3">
+                        <Briefcase className="h-6 w-6 text-primary"/>
+                        <div className="text-left">
+                            <h3 className="font-semibold">Open Submissions</h3>
+                            <p className="text-sm text-muted-foreground">Track requests currently in the approval pipeline.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-6 ml-auto">
+                        <Badge variant="secondary">{openRequests.length} open</Badge>
+                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-4 pt-0">
+                    <div className="overflow-auto rounded-lg border mt-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Period</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {openRequests.length > 0 ? openRequests.map(req => (
+                                    <TableRow key={req.id}>
+                                        <TableCell className="font-semibold">{req.period}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
+                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={`/dashboard/approvals?id=${req.id}`}>View</Link>
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )) : (
+                                     <TableRow>
+                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                            No open submissions for this department.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
             <AccordionItem value="summary" className="border-0 rounded-lg bg-card shadow-sm">
                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                     <div className="flex items-center gap-3">
@@ -540,55 +589,6 @@ export default function ProcurementQuickSubmitPage() {
                                     <TableCell></TableCell>
                                 </TableRow>
                             </TableFooter>
-                        </Table>
-                    </div>
-                </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="open-submissions" className="border-0 rounded-lg bg-card shadow-sm">
-                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                    <div className="flex items-center gap-3">
-                        <Briefcase className="h-6 w-6 text-primary"/>
-                        <div className="text-left">
-                            <h3 className="font-semibold">Open Submissions</h3>
-                            <p className="text-sm text-muted-foreground">Track requests currently in the approval pipeline.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6 ml-auto">
-                        <Badge variant="secondary">{openRequests.length} open</Badge>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-4 pt-0">
-                    <div className="overflow-auto rounded-lg border mt-4">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Period</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {openRequests.length > 0 ? openRequests.map(req => (
-                                    <TableRow key={req.id}>
-                                        <TableCell className="font-semibold">{req.period}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
-                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button asChild variant="outline" size="sm">
-                                                <Link href={`/dashboard/approvals?id=${req.id}`}>View</Link>
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
-                                            No open submissions for this department.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
                         </Table>
                     </div>
                 </AccordionContent>
@@ -684,3 +684,5 @@ export default function ProcurementQuickSubmitPage() {
     </div>
   );
 }
+
+    

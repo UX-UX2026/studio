@@ -25,6 +25,7 @@ import {
   Loader,
   Rocket,
   DatabaseZap,
+  Briefcase,
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -49,16 +50,17 @@ export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
 
-  const requestsQuery = useMemo(() => {
-      if (!firestore) return null;
-      return query(
-          collection(firestore, 'procurementRequests'),
-          orderBy('createdAt', 'desc'),
-          limit(5)
-      );
+  const openRequestsQuery = useMemo(() => {
+    if (!firestore) return null;
+    return query(
+      collection(firestore, 'procurementRequests'),
+      where('status', 'not-in', ['Draft', 'Completed', 'Rejected']),
+      orderBy('status', 'asc'),
+      orderBy('createdAt', 'desc')
+    );
   }, [firestore]);
 
-  const { data: recentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+  const { data: openRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
@@ -194,9 +196,12 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
               <div>
-                <CardTitle>Recent Procurement Requests</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Briefcase className="h-5 w-5 text-primary"/>
+                  Open Submissions
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  A summary of recent requests and their current status.
+                  A summary of submissions currently in the approval pipeline.
                 </p>
               </div>
               <Button asChild variant="outline">
@@ -222,8 +227,8 @@ export default function DashboardPage() {
                               <Loader className="h-6 w-6 animate-spin mx-auto" />
                           </TableCell>
                       </TableRow>
-                  ) : recentRequests && recentRequests.length > 0 ? (
-                    recentRequests.map((req) => (
+                  ) : openRequests && openRequests.length > 0 ? (
+                    openRequests.map((req) => (
                       <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
                         <TableCell className="font-medium">
                           <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
@@ -239,7 +244,7 @@ export default function DashboardPage() {
                   ) : (
                       <TableRow>
                           <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
-                              No procurement requests found.
+                              No open submissions found.
                           </TableCell>
                       </TableRow>
                   )}
@@ -291,3 +296,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
