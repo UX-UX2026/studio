@@ -64,9 +64,7 @@ const allLinks = [
         { href: '/dashboard/settings/roles', label: 'Roles', permission: 'settings:roles' },
         { href: '/dashboard/settings/budget', label: 'Budget', permission: 'settings:budget' },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', permission: 'settings:auditlog' },
-        { href: '/dashboard/settings/database-log', label: 'Database', icon: DatabaseZap, permission: 'settings:auditlog' },
         { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog' },
-        { href: '/dashboard/settings/system-log', label: 'System Log', icon: BrainCircuit, permission: 'settings:errorlog' },
     ]
   },
 ];
