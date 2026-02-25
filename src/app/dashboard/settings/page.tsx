@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -34,11 +34,14 @@ export default function SettingsPage() {
     }
 
     const settingLinks = [
-        { href: '/dashboard/settings/workflow', label: 'Approval Workflow', description: "Define the stages, roles, and permissions for the procurement approval process.", icon: Workflow },
-        { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building },
-        { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield },
-        { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A log of all significant write operations performed on the database.', icon: History },
-        { href: '/dashboard/settings/error-log', label: 'Error Log', description: 'Review client-side errors captured from user interactions.', icon: AlertTriangle },
+        { href: '/dashboard/settings/workflow', label: 'Approval Workflow', description: "Define the stages, roles, and permissions for the procurement approval process.", icon: Workflow, iconClass: "text-blue-500" },
+        { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building, iconClass: "text-orange-500" },
+        { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield, iconClass: "text-purple-500" },
+        { href: '/dashboard/settings/budget', label: 'Budget Integration', description: 'Import, view, and manage budget data from an external sheet.', icon: Banknote, iconClass: "text-green-500" },
+        { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A log of all significant write operations performed on the database.', icon: History, iconClass: "text-indigo-500" },
+        { href: '/dashboard/settings/error-log', label: 'Error Log', description: 'Review client-side errors captured from user interactions.', icon: AlertTriangle, iconClass: "text-yellow-600" },
+        { href: '/dashboard/settings/database-log', label: 'Database Test', description: 'Run a direct write test to verify the connection to Firestore.', icon: DatabaseZap, iconClass: "text-red-500" },
+        { href: '/dashboard/settings/system-log', label: 'System Log', description: 'View a live feed of client-side application events for diagnostics.', icon: BrainCircuit, iconClass: "text-gray-500" },
     ]
 
     return (
@@ -56,12 +59,12 @@ export default function SettingsPage() {
                 <CardContent className="space-y-8">
                      <ThemeSwitcher />
 
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {settingLinks.map(link => (
                             <Card key={link.href} className="flex flex-col">
                                 <CardHeader>
                                     <CardTitle className="flex items-center gap-3 text-base">
-                                        <link.icon className="h-5 w-5 text-muted-foreground" />
+                                        <link.icon className={cn("h-5 w-5", link.iconClass)} />
                                         {link.label}
                                     </CardTitle>
                                     <CardDescription className="!mt-3">{link.description}</CardDescription>
@@ -75,26 +78,6 @@ export default function SettingsPage() {
                             </Card>
                         ))}
                      </div>
-                     
-                     <div className="space-y-2">
-                        <h3 className="text-lg font-semibold">Budget Integration</h3>
-                        <p className="text-sm text-muted-foreground">
-                           Import, view, and manage budget data from an external sheet.
-                        </p>
-                        <Button asChild>
-                           <Link href="/dashboard/settings/budget">Manage Budget</Link>
-                        </Button>
-                    </div>
-                    <div className="space-y-2">
-                        <h3 className="text-lg font-semibold">Backup & Restore</h3>
-                        <p className="text-sm text-muted-foreground">
-                           Project backups are managed outside of this application. You can use a version control system like Git to save your work, or ask me to revert to a previous state from our conversation history.
-                        </p>
-                        <div className="flex gap-2 pt-2">
-                            <Button disabled>Create Manual Backup</Button>
-                            <Button variant="outline" disabled>Configure Automatic Backups</Button>
-                        </div>
-                    </div>
                 </CardContent>
             </Card>
         </div>

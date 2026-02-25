@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -23,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { procurementCategories } from "@/lib/procurement-categories";
 
 type Vendor = {
     id: string;
@@ -34,15 +36,6 @@ type Vendor = {
     category: string;
     status: 'Active' | 'Inactive';
 };
-
-const vendorCategories = [
-    'IT Services',
-    'IT Hardware',
-    'Office Supplies',
-    'Connectivity',
-    'Consulting Services',
-    'Software Licenses',
-];
 
 export default function VendorsPage() {
     const { user, role, loading: userLoading } = useUser();
@@ -331,7 +324,7 @@ export default function VendorsPage() {
                                 <TableRow>
                                     <TableHead>Vendor Name</TableHead>
                                     <TableHead>Contact</TableHead>
-                                    <TableHead>Line Item</TableHead>
+                                    <TableHead>Category</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -396,13 +389,13 @@ export default function VendorsPage() {
                             <Input id="address" value={address} onChange={e => setAddress(e.target.value)} className="col-span-3" />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="category" className="text-right">Line Item</Label>
+                            <Label htmlFor="category" className="text-right">Category</Label>
                             <Select value={category} onValueChange={setCategory}>
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="Select a category" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {vendorCategories.map(cat => (
+                                    {procurementCategories.map(cat => (
                                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                                     ))}
                                 </SelectContent>

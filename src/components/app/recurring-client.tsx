@@ -38,7 +38,7 @@ export function RecurringClient() {
     const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), orderBy('name')), [firestore]);
     const { data: items, loading } = useCollection<RecurringItem>(recurringItemsQuery);
     
-    const [view, setView] = useState<'grid' | 'list'>('grid');
+    const [view, setView] = useState<'grid' | 'list'>('list');
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
