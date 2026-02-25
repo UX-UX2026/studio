@@ -23,6 +23,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -32,6 +34,19 @@ const formatCurrency = (amount: number) => {
         maximumFractionDigits: 2
     }).format(amount);
 };
+
+const getStatusBadge = (status: string) => {
+    switch (status) {
+        case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
+        case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
+        case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
+        case 'In Fulfillment': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">In Fulfillment</Badge>;
+        case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
+        case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+        case 'Rejected': return <Badge variant="destructive">{status}</Badge>;
+        default: return <Badge variant="secondary">{status}</Badge>
+    }
+}
 
 type Department = {
     id: string;
@@ -160,15 +175,15 @@ export default function ProcurementQuickSubmitPage() {
         return draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
     }, [draftItems]);
     
-    const periodStatuses = useMemo(() => {
-        const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
-        if (allRequests) {
-            allRequests.forEach(req => {
-                statuses[req.period] = { status: req.status, id: req.id };
-            });
-        }
-        return statuses;
-    }, [allRequests]);
+    const openRequests = useMemo(() => {
+        if (!allRequests || !selectedDepartmentId) return [];
+        const dept = departments?.find(d => d.id === selectedDepartmentId);
+        if (!dept) return [];
+        return allRequests.filter(req => 
+            req.departmentId === selectedDepartmentId && 
+            !['Draft', 'Completed', 'Rejected'].includes(req.status)
+        ).sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+    }, [allRequests, selectedDepartmentId, departments]);
 
     const isLocked = useMemo(() => {
         if (!selectedDepartmentId) return false;
@@ -463,7 +478,7 @@ export default function ProcurementQuickSubmitPage() {
             </CardContent>
         </Card>
 
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['summary', 'submission', 'recurring']}>
+        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['summary', 'open-submissions', 'submission', 'recurring']}>
             <AccordionItem value="summary" className="border-0 rounded-lg bg-card shadow-sm">
                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                     <div className="flex items-center gap-3">
@@ -489,7 +504,7 @@ export default function ProcurementQuickSubmitPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow className="bg-muted hover:bg-muted">
-                                    <TableHead className="font-bold">Procurement Line Items</TableHead>
+                                    <TableHead className="font-bold">Category</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
                                     <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
@@ -525,6 +540,55 @@ export default function ProcurementQuickSubmitPage() {
                                     <TableCell></TableCell>
                                 </TableRow>
                             </TableFooter>
+                        </Table>
+                    </div>
+                </AccordionContent>
+            </AccordionItem>
+            <AccordionItem value="open-submissions" className="border-0 rounded-lg bg-card shadow-sm">
+                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
+                    <div className="flex items-center gap-3">
+                        <Briefcase className="h-6 w-6 text-primary"/>
+                        <div className="text-left">
+                            <h3 className="font-semibold">Open Submissions</h3>
+                            <p className="text-sm text-muted-foreground">Track requests currently in the approval pipeline.</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-6 ml-auto">
+                        <Badge variant="secondary">{openRequests.length} open</Badge>
+                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </div>
+                </AccordionTrigger>
+                <AccordionContent className="p-4 pt-0">
+                    <div className="overflow-auto rounded-lg border mt-4">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Period</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {openRequests.length > 0 ? openRequests.map(req => (
+                                    <TableRow key={req.id}>
+                                        <TableCell className="font-semibold">{req.period}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
+                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button asChild variant="outline" size="sm">
+                                                <Link href={`/dashboard/approvals?id=${req.id}`}>View</Link>
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                )) : (
+                                     <TableRow>
+                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                            No open submissions for this department.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
                         </Table>
                     </div>
                 </AccordionContent>

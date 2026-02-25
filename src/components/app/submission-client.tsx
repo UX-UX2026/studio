@@ -30,6 +30,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
+import { procurementCategories } from "@/lib/procurement-categories";
 
 type Item = {
   id: number | string;
@@ -44,16 +45,6 @@ type Item = {
   fulfillmentComments: string[];
   comments?: string;
 };
-
-const categories = [
-  "Operational Lease/Rental - SA",
-  "Tech Support - SA",
-  "ICT Maintenance - SA",
-  "Software Licenses",
-  "Hardware Purchase",
-  "Office Supplies",
-  "Consulting Services",
-];
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-ZA", {
@@ -244,7 +235,7 @@ export function SubmissionClient({
               <TableHead>Item / Service Description</TableHead>
               <TableHead className="w-[150px]">Brand</TableHead>
               <TableHead className="w-[80px]">Qty</TableHead>
-              <TableHead className="w-[250px]">Line Item</TableHead>
+              <TableHead className="w-[250px]">Category</TableHead>
               <TableHead className="w-[200px]">Comments</TableHead>
               <TableHead className="w-[120px] text-right">Unit Price</TableHead>
               <TableHead className="w-[120px] text-right">Total</TableHead>
@@ -296,7 +287,7 @@ export function SubmissionClient({
                             <SelectValue placeholder="Select a category" />
                         </SelectTrigger>
                         <SelectContent>
-                            {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                            {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
                   {item.type === 'One-Off' && (
