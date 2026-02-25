@@ -27,6 +27,7 @@ import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { RolesProvider } from "@/lib/roles-provider";
 import { DebugLogProvider } from "@/context/debug-log-provider";
+import { useToast } from "@/hooks/use-toast";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -34,10 +35,25 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   // The useUser hook now gets its data from the robust AuthenticationProvider
   const { user, profile, loading, role } = useUser();
   const auth = useAuth();
+  const { toast } = useToast();
 
   const handleSignOut = async () => {
-    // The AuthenticationProvider will handle redirecting the user on sign out.
-    await signOut(auth);
+    if (!auth) {
+      toast({ variant: 'destructive', title: 'Sign Out Failed', description: 'Authentication service not available.' });
+      return;
+    }
+    try {
+      await signOut(auth);
+      toast({ title: 'Signed Out', description: 'You have been successfully signed out.' });
+      // The AuthenticationProvider will handle redirecting the user on sign out.
+    } catch (error: any) {
+      console.error("Sign Out Error:", error);
+      toast({
+        variant: 'destructive',
+        title: 'Sign Out Failed',
+        description: error.message || 'An unexpected error occurred during sign out.',
+      });
+    }
   };
 
   // The main loading state is now handled by the AuthenticationProvider itself,
