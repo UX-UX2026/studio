@@ -3,7 +3,7 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { app, auth, firestore } from './client';
-import { enableIndexedDbPersistence, getDoc, doc } from 'firebase/firestore';
+import { enableIndexedDbPersistence } from 'firebase/firestore';
 import { Loader } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
@@ -14,6 +14,7 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initializeFirebase = async () => {
       try {
+        // This enables Firestore's offline capabilities.
         await enableIndexedDbPersistence(firestore);
       } catch (err: any) {
         if (err.code === 'failed-precondition') {
@@ -30,19 +31,8 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // This "warm-up" read is critical. It forces the SDK to establish its
-      // connection and determine if it's online or offline. By waiting for
-      // this to complete (either succeed or fail), we prevent race conditions
-      // where the app tries to write data before the SDK is ready.
-      try {
-        const warmUpDocRef = doc(firestore, 'app', 'metadata');
-        await getDoc(warmUpDocRef);
-      } catch (error) {
-        console.warn("Firestore warm-up read failed, likely because you are offline. The app will proceed using cached data.", error);
-      }
-      
-      // Now that persistence is enabled and the connection state is known,
-      // the rest of the application can safely interact with Firestore.
+      // Once persistence is enabled, the app is ready for Firestore operations.
+      // The SDK will handle being online or offline automatically.
       setIsFirebaseReady(true);
     };
 
