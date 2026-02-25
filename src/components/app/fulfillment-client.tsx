@@ -32,8 +32,7 @@ import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -141,14 +140,21 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
             timestamp: serverTimestamp()
           };
 
-          addDoc(collection(firestore, 'auditLogs'), auditLogData)
-            .catch((error) => {
-                const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
-                errorEmitter.emit('permission-error', permissionError);
-            });
+          await addDoc(collection(firestore, 'auditLogs'), auditLogData);
       } catch (error: any) {
-           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'update', requestResourceData: { items: '...omitted...' } });
-           errorEmitter.emit('permission-error', permissionError);
+            console.error("Fulfillment Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || 'Could not update the fulfillment item. Check your connection.',
+            });
+            await logErrorToFirestore({
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
       }
   };
   
