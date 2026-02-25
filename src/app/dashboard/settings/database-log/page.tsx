@@ -29,6 +29,18 @@ export default function DatabaseDiagnosticPage() {
 
         setStatus('testing');
         setError(null);
+        
+        // Set a manual timeout. If the database operation doesn't respond in 11 seconds,
+        // we'll manually force an error state. This prevents the UI from hanging indefinitely.
+        const timeoutId = setTimeout(() => {
+            setStatus('error');
+            setError("The operation timed out. This confirms a network connectivity issue between the application environment and Google's servers.");
+            toast({
+                variant: 'destructive',
+                title: 'Connection Timed Out',
+                description: "The database did not respond within the expected time.",
+            });
+        }, 11000); // Firestore's internal timeout is 10s.
 
         const testDocRef = doc(firestore, '_diagnostics', `test_${Date.now()}`);
         const testData = {
@@ -39,6 +51,7 @@ export default function DatabaseDiagnosticPage() {
 
         setDoc(testDocRef, testData)
             .then(() => {
+                clearTimeout(timeoutId); // Success! Prevent the manual timeout from firing.
                 setStatus('success');
                 toast({
                     title: 'Connection Successful',
@@ -46,6 +59,7 @@ export default function DatabaseDiagnosticPage() {
                 });
             })
             .catch((e: any) => {
+                clearTimeout(timeoutId); // The promise failed. Prevent the manual timeout from firing.
                 console.error('Database Diagnostic Error:', e);
                 setStatus('error');
                 setError(e.message || 'An unknown error occurred.');
@@ -63,7 +77,7 @@ export default function DatabaseDiagnosticPage() {
                 return (
                     <div className="flex items-center gap-2 text-muted-foreground">
                         <Loader className="h-4 w-4 animate-spin" />
-                        Attempting to write a test document...
+                        Attempting to write a test document... (waiting up to 11 seconds)
                     </div>
                 );
             case 'success':
@@ -98,7 +112,7 @@ export default function DatabaseDiagnosticPage() {
                 </CardTitle>
                 <CardDescription>
                     This tool attempts a direct write to your Firestore database to verify the connection.
-                    You can't "ping" Firestore from a terminal, but this test serves the same purpose.
+                    It includes a manual timeout to ensure the application provides feedback even if the network is unresponsive.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
