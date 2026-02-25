@@ -17,7 +17,7 @@ export default function DatabaseDiagnosticPage() {
     const [error, setError] = useState<string | null>(null);
     const { toast } = useToast();
 
-    const handleTestConnection = async () => {
+    const handleTestConnection = () => {
         if (!firestore || !user) {
             toast({
                 variant: 'destructive',
@@ -37,23 +37,24 @@ export default function DatabaseDiagnosticPage() {
             timestamp: serverTimestamp(),
         };
 
-        try {
-            await setDoc(testDocRef, testData);
-            setStatus('success');
-            toast({
-                title: 'Connection Successful',
-                description: 'A test document was successfully written to Firestore.',
+        setDoc(testDocRef, testData)
+            .then(() => {
+                setStatus('success');
+                toast({
+                    title: 'Connection Successful',
+                    description: 'A test document was successfully written to Firestore.',
+                });
+            })
+            .catch((e: any) => {
+                console.error('Database Diagnostic Error:', e);
+                setStatus('error');
+                setError(e.message || 'An unknown error occurred.');
+                toast({
+                    variant: 'destructive',
+                    title: 'Connection Failed',
+                    description: e.message || 'Could not write to the database.',
+                });
             });
-        } catch (e: any) {
-            console.error('Database Diagnostic Error:', e);
-            setStatus('error');
-            setError(e.message || 'An unknown error occurred.');
-            toast({
-                variant: 'destructive',
-                title: 'Connection Failed',
-                description: e.message || 'Could not write to the database.',
-            });
-        }
     };
 
     const renderStatus = () => {
