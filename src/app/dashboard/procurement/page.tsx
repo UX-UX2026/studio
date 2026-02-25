@@ -4,12 +4,12 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon } from "lucide-react";
+import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon, Lock } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -159,6 +159,37 @@ export default function ProcurementQuickSubmitPage() {
     const periodSubmissionTotal = useMemo(() => {
         return draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
     }, [draftItems]);
+    
+    const periodStatuses = useMemo(() => {
+        const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
+        if (allRequests) {
+            allRequests.forEach(req => {
+                statuses[req.period] = { status: req.status, id: req.id };
+            });
+        }
+        return statuses;
+    }, [allRequests]);
+
+    const isLocked = useMemo(() => {
+        if (!selectedDepartmentId) return false;
+        const periodStatusInfo = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
+
+        if (!periodStatusInfo) return false;
+
+        const { status } = periodStatusInfo;
+        
+        if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
+            return true;
+        }
+        if (role === 'Requester' && (status === 'Pending Manager Approval' || status === 'Pending Executive')) {
+            return true;
+        }
+        if (role === 'Manager' && status === 'Pending Executive') {
+            return true;
+        }
+
+        return false;
+    }, [selectedDepartmentId, selectedPeriod, allRequests, role]);
 
     // This summary now uses the live draftItems state
     const summaryData = useMemo(() => {
@@ -217,6 +248,13 @@ export default function ProcurementQuickSubmitPage() {
         if (!recurringItems) return 0;
         return recurringItems.reduce((sum, item) => sum + item.amount, 0);
     }, [recurringItems]);
+    
+    const handleRequestEdit = () => {
+        toast({
+          title: "Edit Request Sent",
+          description: "Your manager has been notified of your request to edit this submission. This is a placeholder action.",
+        });
+    };
 
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !departmentName || !selectedDepartmentId || !firestore) {
@@ -513,10 +551,7 @@ export default function ProcurementQuickSubmitPage() {
                         userRole={role} 
                         items={draftItems}
                         setItems={setDraftItems}
-                        selectedPeriod={selectedPeriod}
-                        onSaveDraft={() => handleSaveRequest(true)}
-                        onSubmitRequest={() => handleSaveRequest(false)}
-                        allRequests={allRequests || []}
+                        isLocked={isLocked}
                     />
                 </AccordionContent>
             </AccordionItem>
@@ -542,6 +577,46 @@ export default function ProcurementQuickSubmitPage() {
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
+        
+        <Card>
+            <CardHeader>
+                <CardTitle>Submission Actions</CardTitle>
+                <CardDescription>
+                    {isLocked
+                        ? "This submission is locked for editing."
+                        : "Once you are finished, save your request as a draft or submit it for approval."}
+                </CardDescription>
+            </CardHeader>
+            <CardFooter className="flex justify-between items-center">
+                 {isLocked ? (
+                    <div className="flex items-center gap-3 text-yellow-800">
+                        <Lock className="h-5 w-5"/>
+                        <div className="text-sm font-medium">
+                            <p>This submission is locked because it is already in the approval process.</p>
+                        </div>
+                    </div>
+                ) : (
+                    <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
+                 )}
+                <div className="flex gap-3">
+                    {isLocked ? (
+                        <Button onClick={handleRequestEdit}>Request Edit</Button>
+                    ) : (
+                        <>
+                            <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving}>
+                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                Save as Draft
+                            </Button>
+                            <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving}>
+                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                Submit For Approval
+                            </Button>
+                        </>
+                    )}
+                </div>
+            </CardFooter>
+        </Card>
+
     </div>
   );
 }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -44,18 +45,6 @@ type Item = {
   comments?: string;
 };
 
-type ApprovalRequest = {
-    id: string;
-    department: string;
-    period: string;
-    total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
-    submittedBy: string;
-    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
-    comments: { actor: string; actorId: string; text: string; timestamp: string }[];
-    items: Item[];
-};
-
 const categories = [
   "Operational Lease/Rental - SA",
   "Tech Support - SA",
@@ -77,54 +66,17 @@ export function SubmissionClient({
     userRole, 
     items,
     setItems,
-    selectedPeriod,
-    onSaveDraft,
-    onSubmitRequest,
-    allRequests,
+    isLocked
 }: { 
     userRole: UserRole, 
     items: Item[],
     setItems: React.Dispatch<React.SetStateAction<Item[]>>,
-    selectedPeriod: string,
-    onSaveDraft: () => void,
-    onSubmitRequest: () => void,
-    allRequests: ApprovalRequest[],
+    isLocked: boolean,
 }) {
   const { toast } = useToast();
   const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  const periodStatuses = useMemo(() => {
-      const statuses: Record<string, { status: ApprovalRequest['status'], id: string }> = {};
-      if (allRequests) {
-          allRequests.forEach(req => {
-              statuses[req.period] = { status: req.status, id: req.id };
-          });
-      }
-      return statuses;
-  }, [allRequests]);
-
-
-  const isLocked = useMemo(() => {
-      const periodStatusInfo = periodStatuses[selectedPeriod];
-      if (!periodStatusInfo) return false;
-
-      const { status } = periodStatusInfo;
-      
-      if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
-          return true;
-      }
-      if (userRole === 'Requester' && (status === 'Pending Manager Approval' || status === 'Pending Executive')) {
-          return true;
-      }
-      if (userRole === 'Manager' && status === 'Pending Executive') {
-          return true;
-      }
-
-      return false;
-  }, [selectedPeriod, periodStatuses, userRole]);
-
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
@@ -262,13 +214,6 @@ export function SubmissionClient({
         }
     };
     reader.readAsText(file);
-  };
-  
-  const handleRequestEdit = () => {
-    toast({
-      title: "Edit Request Sent",
-      description: "Your manager has been notified of your request to edit this submission. This is a placeholder action.",
-    });
   };
 
   return (
@@ -427,7 +372,7 @@ export function SubmissionClient({
         </Table>
       </div>
 
-      <div className="flex items-center justify-between pt-4">
+      <div className="flex items-center justify-start pt-4">
         <div className="flex gap-2">
             <Button variant="outline" onClick={handleAddItem} disabled={isLocked}>
             <Plus className="w-4 h-4 mr-2" />
@@ -439,16 +384,6 @@ export function SubmissionClient({
             <Button variant="outline" onClick={handleExport} disabled={isLocked}>
                 <Download className="h-4 w-4 mr-2" /> Export
             </Button>
-        </div>
-        <div className="flex gap-3">
-          {isLocked ? (
-            <Button onClick={handleRequestEdit}>Request Edit</Button>
-          ): (
-            <>
-              <Button variant="ghost" onClick={onSaveDraft}>Save as Draft</Button>
-              <Button className="shadow-lg shadow-primary/20" onClick={onSubmitRequest}>Submit For Approval</Button>
-            </>
-          )}
         </div>
       </div>
     </div>
