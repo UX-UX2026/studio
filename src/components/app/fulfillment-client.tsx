@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Wand2, Loader, CheckCircle, Truck, ShoppingCart, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -22,8 +22,6 @@ import {
 } from "@/components/ui/dialog";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import type { RecommendFulfillmentStrategyInput, RecommendFulfillmentStrategyOutput } from "@/ai/flows/recommend-fulfillment-strategy";
-import { recommendFulfillmentStrategy } from "@/ai/flows/recommend-fulfillment-strategy";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,41 +61,14 @@ const getStatusBadge = (status: string) => {
 export function FulfillmentClient({ items: initialItems, role }: { items: FulfillmentItem[], role: UserRole }) {
   const { user } = useUser();
   const [items, setItems] = useState(initialItems);
-  const [isRecommendDialogOpen, setIsRecommendDialogOpen] = useState(false);
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FulfillmentItem | null>(null);
-  const [recommendation, setRecommendation] = useState<RecommendFulfillmentStrategyOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [newComment, setNewComment] = useState("");
   const { toast } = useToast();
   const firestore = useFirestore();
 
   const canEdit = role === 'Procurement Assistant' || role === 'Procurement Officer' || role === 'Administrator';
 
-  const handleRecommendClick = async (item: FulfillmentItem) => {
-    setSelectedItem(item);
-    setIsRecommendDialogOpen(true);
-    setIsLoading(true);
-    setRecommendation(null);
-
-    try {
-      const result = await recommendFulfillmentStrategy(item.request as RecommendFulfillmentStrategyInput);
-      setRecommendation(result);
-       if (result.estimatedLeadTimeDays) {
-          // This will update firestore and the local state
-          handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
-      }
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "AI Recommendation Failed",
-        description: "Could not fetch fulfillment strategy.",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
   
   const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
@@ -244,14 +215,6 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Comments ({item.fulfillmentComments?.length || 0})
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRecommendClick(item)}
-                    >
-                      <Wand2 className="h-4 w-4 mr-2" />
-                      Recommend
-                    </Button>
                   </TableCell>
                 </TableRow>
               )
@@ -260,42 +223,6 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
         </Table>
       </div>
 
-      <Dialog open={isRecommendDialogOpen} onOpenChange={setIsRecommendDialogOpen}>
-        <DialogContent className="sm:max-w-[625px]">
-          <DialogHeader>
-            <DialogTitle>AI Fulfillment Strategy</DialogTitle>
-            <DialogDescription>
-              For item:{" "}
-              <span className="font-semibold text-primary">{selectedItem?.item}</span>
-            </DialogDescription>
-          </DialogHeader>
-          {isLoading && (
-            <div className="flex items-center justify-center h-40">
-              <Loader className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          )}
-          {recommendation && (
-            <div className="space-y-4 text-sm">
-              <div>
-                <h4 className="font-semibold flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-500"/> Strategy Summary</h4>
-                <p className="text-muted-foreground">{recommendation.strategySummary}</p>
-              </div>
-              <div>
-                <h4 className="font-semibold flex items-center gap-2"><ShoppingCart className="h-4 w-4 text-blue-500"/> Suggested Vendors</h4>
-                <ul className="list-disc list-inside text-muted-foreground space-y-1 mt-1">
-                    {recommendation.suggestedVendors.map(vendor => (
-                        <li key={vendor.name}><span className="font-semibold text-foreground">{vendor.name}:</span> {vendor.reasoning}</li>
-                    ))}
-                </ul>
-              </div>
-               <div>
-                <h4 className="font-semibold flex items-center gap-2"><Truck className="h-4 w-4 text-orange-500"/> Estimated Lead Time</h4>
-                <p className="text-muted-foreground">{recommendation.estimatedLeadTimeDays} days</p>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
       
       <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
           <DialogContent className="flex flex-col max-h-[90dvh]">

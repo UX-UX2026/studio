@@ -20,14 +20,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Wand2, Upload, Download } from "lucide-react";
-import {
-  suggestProcurementCategory,
-  SuggestProcurementCategoryOutput,
-} from "@/ai/flows/suggest-procurement-category-flow";
+import { Lock, Plus, Trash2, Upload, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { procurementCategories } from "@/lib/procurement-categories";
@@ -65,8 +59,6 @@ export function SubmissionClient({
     isLocked: boolean,
 }) {
   const { toast } = useToast();
-  const [suggestions, setSuggestions] = useState<SuggestProcurementCategoryOutput | null>(null);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
@@ -96,32 +88,6 @@ export function SubmissionClient({
 
   const handleRemoveItem = (id: number | string) => {
     setItems(prev => prev.filter((item) => item.id !== id));
-  };
-  
-  const handleGetSuggestion = async (description: string, itemId: number | string) => {
-    if (!description) {
-      toast({
-        variant: "destructive",
-        title: "No Description",
-        description: "Please enter an item description to get suggestions.",
-      });
-      return;
-    }
-    setIsLoadingAi(true);
-    setSuggestions(null);
-    try {
-      const result = await suggestProcurementCategory({ itemDescription: description });
-      setSuggestions(result);
-    } catch (error) {
-      console.error(error);
-      toast({
-        variant: "destructive",
-        title: "AI Suggestion Failed",
-        description: "Could not fetch procurement category suggestions.",
-      });
-    } finally {
-      setIsLoadingAi(false);
-    }
   };
   
   const handleImportClick = () => {
@@ -277,7 +243,7 @@ export function SubmissionClient({
                     className="w-16 bg-transparent border-0"
                   />
                 </TableCell>
-                <TableCell className="flex items-center gap-1">
+                <TableCell>
                    <Select
                         value={item.category}
                         onValueChange={(value) => handleItemChange(item.id, "category", value)}
@@ -290,36 +256,6 @@ export function SubmissionClient({
                             {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
-                  {item.type === 'One-Off' && (
-                    <Popover onOpenChange={() => setSuggestions(null)}>
-                      <PopoverTrigger asChild>
-                         <Button variant="ghost" size="icon" onClick={() => handleGetSuggestion(item.description, item.id)} disabled={isLocked || isLoadingAi}>
-                           <Wand2 className={`h-4 w-4 ${isLoadingAi ? 'animate-pulse' : ''}`}/>
-                         </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[200px] p-0">
-                        <Command>
-                          <CommandInput placeholder="Suggested..." />
-                          <CommandList>
-                            <CommandEmpty>{isLoadingAi ? 'Getting suggestions...' : 'No suggestions found.'}</CommandEmpty>
-                            <CommandGroup>
-                              {suggestions?.suggestedCategories.map((suggestion) => (
-                                <CommandItem
-                                  key={suggestion}
-                                  value={suggestion}
-                                  onSelect={(currentValue) => {
-                                      handleItemChange(item.id, "category", currentValue === item.category ? "" : currentValue)
-                                  }}
-                                >
-                                  {suggestion}
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
-                  )}
                 </TableCell>
                 <TableCell>
                   <Input
