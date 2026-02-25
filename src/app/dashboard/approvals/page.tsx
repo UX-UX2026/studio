@@ -25,7 +25,8 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
-import { logErrorToFirestore } from "@/lib/error-logger";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 const getStatusBadge = (status: string) => {
@@ -161,7 +162,7 @@ export default function ApprovalsPage() {
         );
     }
     
-    const handleApprove = async () => {
+    const handleApprove = () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
@@ -223,37 +224,36 @@ export default function ApprovalsPage() {
         const updateData = { status: newStatus, timeline: newTimeline };
         const action = 'request.approve';
 
-        try {
-            await updateDoc(requestRef, updateData);
-            toast(toastMessage);
+        const finalToastMessage = toastMessage;
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                toast(finalToastMessage);
 
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
-                timestamp: serverTimestamp()
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action,
+                    details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
+                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                    timestamp: serverTimestamp()
+                };
+                addDoc(collection(firestore, 'auditLogs'), auditLogData)
+                    .catch((error) => {
+                        const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
+                        errorEmitter.emit('permission-error', permissionError);
+                    });
+            })
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-
-        } catch (error: any) {
-            console.error("Approval Error:", error);
-            toast({
-                variant: "destructive",
-                title: "Approval Failed",
-                description: error.message || "Could not update the request status. You may not have permissions.",
-            });
-            await logErrorToFirestore({
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
     };
     
-    const handleReject = async () => {
+    const handleReject = () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         const newStatus: ApprovalRequest['status'] = 'Rejected';
@@ -262,40 +262,38 @@ export default function ApprovalsPage() {
         const updateData = { status: newStatus };
         const action = 'request.reject';
 
-        try {
-            await updateDoc(requestRef, updateData);
-            toast({
-                title: "Request Rejected",
-                description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
-            });
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                toast({
+                    title: "Request Rejected",
+                    description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
+                });
 
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
-                timestamp: serverTimestamp()
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action,
+                    details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
+                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                    timestamp: serverTimestamp()
+                };
+                addDoc(collection(firestore, 'auditLogs'), auditLogData)
+                    .catch((error) => {
+                        const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
+                        errorEmitter.emit('permission-error', permissionError);
+                    });
+            })
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            
-        } catch (error: any) {
-            console.error("Rejection Error:", error);
-            toast({
-                variant: "destructive",
-                title: "Rejection Failed",
-                description: error.message || "Could not update the request status.",
-            });
-            await logErrorToFirestore({
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
     };
     
-    const handleRaiseQuery = async () => {
+    const handleRaiseQuery = () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
         if (!newComment.trim()) {
@@ -326,42 +324,40 @@ export default function ApprovalsPage() {
         };
         const action = 'request.query';
         
-        try {
-            await updateDoc(requestRef, updateData);
-            toast({
-                title: "Query Raised",
-                description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                toast({
+                    title: "Query Raised",
+                    description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
+                });
+                setNewComment("");
+                
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action,
+                    details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
+                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                    timestamp: serverTimestamp()
+                };
+                addDoc(collection(firestore, 'auditLogs'), auditLogData)
+                    .catch((error) => {
+                        const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
+                        errorEmitter.emit('permission-error', permissionError);
+                    });
+            })
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-            setNewComment("");
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
-                timestamp: serverTimestamp()
-            });
-            
-        } catch (error: any) {
-            console.error("Raise Query Error:", error);
-            toast({
-                variant: "destructive",
-                title: "Failed to Raise Query",
-                description: error.message || "Could not update the request.",
-            });
-            await logErrorToFirestore({
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
     };
 
 
-    const handleAddComment = async () => {
+    const handleAddComment = () => {
         if (!activeRequest || !user || !newComment.trim() || !firestore) return;
 
         const commentData = {
@@ -377,35 +373,33 @@ export default function ApprovalsPage() {
         const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
         const action = 'request.comment';
 
-        try {
-            await updateDoc(requestRef, updateData);
-            toast({ title: "Comment added" });
-            setNewComment("");
+        updateDoc(requestRef, updateData)
+            .then(() => {
+                toast({ title: "Comment added" });
+                setNewComment("");
 
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
-                entity: { type: 'procurementRequest', id: activeRequest.id },
-                timestamp: serverTimestamp()
+                const auditLogData = {
+                    userId: user.uid,
+                    userName: user.displayName || 'System',
+                    action,
+                    details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
+                    entity: { type: 'procurementRequest', id: activeRequest.id },
+                    timestamp: serverTimestamp()
+                };
+                addDoc(collection(firestore, 'auditLogs'), auditLogData)
+                    .catch((error) => {
+                        const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
+                        errorEmitter.emit('permission-error', permissionError);
+                    });
+            })
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({
+                    path: requestRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData
+                });
+                errorEmitter.emit('permission-error', permissionError);
             });
-
-        } catch (error: any) {
-            console.error("Add Comment Error:", error);
-             toast({
-                variant: "destructive",
-                title: "Failed to Add Comment",
-                description: error.message || "Could not add the comment. Please try again.",
-            });
-             await logErrorToFirestore({
-                userId: user.uid,
-                userName: user.displayName || 'System',
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
     };
     
   return (

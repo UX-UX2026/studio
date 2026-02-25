@@ -32,7 +32,8 @@ import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
-import { logErrorToFirestore } from "@/lib/error-logger";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -85,7 +86,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setRecommendation(result);
        if (result.estimatedLeadTimeDays) {
           // This will update firestore and the local state
-          await handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
+          handleItemUpdate(item.id, 'estimatedLeadTimeDays', result.estimatedLeadTimeDays);
       }
     } catch (error) {
       console.error(error);
@@ -131,24 +132,23 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               )
           );
 
-          await addDoc(collection(firestore, 'auditLogs'), {
+          const auditLogData = {
             userId: user.uid,
             userName: user.displayName,
             action: action,
             details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
             timestamp: serverTimestamp()
-          });
+          };
+
+          addDoc(collection(firestore, 'auditLogs'), auditLogData)
+            .catch((error) => {
+                const permissionError = new FirestorePermissionError({ path: 'auditLogs', operation: 'create', requestResourceData: auditLogData });
+                errorEmitter.emit('permission-error', permissionError);
+            });
       } catch (error: any) {
-          console.error("Fulfillment Update Error:", error);
-          toast({ variant: 'destructive', title: 'Update failed', description: error.message || 'Could not update the item.' });
-          await logErrorToFirestore({
-              userId: user.uid,
-              userName: user.displayName,
-              action: action,
-              errorMessage: error.message,
-              errorStack: error.stack,
-          });
+           const permissionError = new FirestorePermissionError({ path: requestRef.path, operation: 'update', requestResourceData: { items: '...omitted...' } });
+           errorEmitter.emit('permission-error', permissionError);
       }
   };
   
@@ -157,13 +157,13 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setIsCommentDialogOpen(true);
   };
 
-  const handleAddComment = async () => {
+  const handleAddComment = () => {
       if (!selectedItem || !newComment.trim() || !role) return;
 
       const newCommentText = `${role}: ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
-      await handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
+      handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
 
       setNewComment("");
       setIsCommentDialogOpen(false);
