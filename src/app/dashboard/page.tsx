@@ -50,16 +50,23 @@ export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
 
-  const openRequestsQuery = useMemo(() => {
+  const recentRequestsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'procurementRequests'),
-      where('status', 'in', ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised']),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(25) // Fetch the last 25 requests to filter from
     );
   }, [firestore]);
 
-  const { data: openRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
+  const { data: recentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(recentRequestsQuery);
+
+  const openRequests = useMemo(() => {
+    if (!recentRequests) return [];
+    const openStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'];
+    return recentRequests.filter(req => openStatuses.includes(req.status));
+  }, [recentRequests]);
+
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
@@ -295,5 +302,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
