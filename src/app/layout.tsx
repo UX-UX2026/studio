@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/toaster"
 import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthenticationProvider } from '@/context/authentication-provider';
+import { RolesProvider } from '@/lib/roles-provider';
+import { DebugLogProvider } from '@/context/debug-log-provider';
 
 export const metadata: Metadata = {
   title: 'ProcureEase',
@@ -30,7 +32,11 @@ export default function RootLayout({
         >
           <FirebaseClientProvider>
             <AuthenticationProvider>
-              {children}
+              <DebugLogProvider>
+                <RolesProvider>
+                  {children}
+                </RolesProvider>
+              </DebugLogProvider>
             </AuthenticationProvider>
           </FirebaseClientProvider>
           <Toaster />
