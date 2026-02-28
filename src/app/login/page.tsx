@@ -32,6 +32,9 @@ export default function LoginPage() {
         if (!auth) return;
         setIsSubmitting(true);
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({
+            prompt: 'select_account'
+        });
         try {
             await signInWithRedirect(auth, provider);
             // On success, the user is redirected. The AuthenticationProvider
