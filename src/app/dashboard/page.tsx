@@ -54,8 +54,7 @@ export default function DashboardPage() {
     if (!firestore) return null;
     return query(
       collection(firestore, 'procurementRequests'),
-      where('status', 'not-in', ['Draft', 'Completed', 'Rejected']),
-      orderBy('status', 'asc'),
+      where('status', 'in', ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised']),
       orderBy('createdAt', 'desc')
     );
   }, [firestore]);
