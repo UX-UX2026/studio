@@ -38,7 +38,11 @@ export default function LoginPage() {
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             let description = "An unexpected error occurred. Please try again.";
-            // ... (error handling code remains the same)
+            if (error.code === 'auth/popup-closed-by-user') {
+                description = "The sign-in pop-up was closed before completing. Please try again.";
+            } else if (error.code === 'auth/account-exists-with-different-credential') {
+                description = "An account already exists with the same email address but different sign-in credentials. Try signing in with the original method.";
+            }
             toast({
                 variant: "destructive",
                 title: "Google Sign-In Failed",
@@ -60,7 +64,11 @@ export default function LoginPage() {
         } catch (error: any) {
             console.error("Email/Password authentication error:", error);
             let description = "An unexpected error occurred. Please try again.";
-            // ... (error handling code remains the same)
+            if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                description = "Invalid email or password. Please check your credentials and try again.";
+            } else if (error.code === 'auth/too-many-requests') {
+                description = "Access to this account has been temporarily disabled due to many failed login attempts. You can try again later.";
+            }
              toast({
                 variant: "destructive",
                 title: "Login Failed",
