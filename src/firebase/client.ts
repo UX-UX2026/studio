@@ -4,24 +4,19 @@ import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
-// This check runs in the browser. If the environment variables are not set, it throws a clear error.
-if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
-    throw new Error(
-        'Firebase configuration is missing. Make sure you have set up your environment variables correctly. ' +
-        'For production builds (like on GitHub), you must configure these as secrets in your hosting provider. ' +
-        'Refer to the README.md for instructions on setting up Firebase App Hosting secrets.'
-    );
-}
-
-// This is the public Firebase configuration for your web app.
+// WARNING: It is strongly recommended to use environment variables for your Firebase
+// configuration and to load them via process.env. The configuration below is
+// hard-coded for demonstration purposes only because access to the secret manager
+// was not available. This is not secure for a production application.
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyBkP1hVPRjxoeuY9mRa7XU-0lZH5jdWzQo",
+  authDomain: "studio-845965156-c3a3b.firebaseapp.com",
+  projectId: "studio-845965156-c3a3b",
+  storageBucket: "studio-845965156-c3a3b.appspot.com",
+  messagingSenderId: "1014429404657",
+  appId: "1:1014429404657:web:f4177556da3ea6ea9bc850",
 };
+
 
 let app: FirebaseApp;
 let auth: Auth;

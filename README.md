@@ -93,18 +93,7 @@ To get the application running locally, follow these steps.
     npm install
     ```
 
-2.  **Set Up Environment Variables:**
-    Create a `.env.local` file in the root of the project and add your Firebase project configuration. You can get these values from the Firebase console.
-    ```
-    NEXT_PUBLIC_FIREBASE_API_KEY=AIza...
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project
-    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
-    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
-    NEXT_PUBLIC_FIREBASE_APP_ID=1:...:web:...
-    ```
-
-3.  **Run the Development Server:**
+2.  **Run the Development Server:**
     ```bash
     npm run dev
     ```
@@ -116,26 +105,6 @@ This application is configured for deployment using **Firebase App Hosting**. Ap
 
 #### Environment Variables for Deployment
 
-Your Firebase configuration (API keys, etc.) is managed using environment variables. These are stored in your `.env.local` file for local development but **are not checked into GitHub for security reasons.**
+**WARNING: Your Firebase configuration is currently hard-coded directly into the application source code (`src/firebase/client.ts`). This is NOT a secure practice for a production application and is only done here for demonstration purposes.**
 
-To make these variables available to your deployed application, you must configure them as secrets in Google Cloud and link them to your App Hosting backend.
-
-1.  **Go to Google Cloud Secret Manager:**
-    *   Navigate to the [Secret Manager](https://console.cloud.google.com/security/secret-manager) page in the Google Cloud console for your Firebase project.
-
-2.  **Create a Secret for Each Variable:**
-    *   For each variable in your `.env` file (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`), click **"Create Secret"**.
-    *   Give the secret a name (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`).
-    *   In the "Secret value" field, paste the corresponding value from your `.env` file.
-    *   Click **"Create secret"**. Repeat this for all `NEXT_PUBLIC_` variables.
-
-3.  **Grant Access to the Service Account:**
-    *   Find your App Hosting service account. It will be named `PROJECT_NUMBER@gcp-sa-apphosting.iam.gserviceaccount.com`. You can find your `PROJECT_NUMBER` on the [Google Cloud Dashboard](https://console.cloud.google.com/home/dashboard).
-    *   For each secret you created, you need to grant this service account the **"Secret Manager Secret Accessor"** role.
-    *   Select the secret, go to the **Permissions** tab, click **"Grant Access"**, add the service account as a new principal, and assign the role.
-
-4.  **Connect Secrets in Firebase Console:**
-    *   Go to the [Firebase Console](https://console.firebase.google.com/) and navigate to the App Hosting page for your backend.
-    *   You should see a section for environment variables where you can link the secrets you just created.
-
-Once this is done, push a new commit to your repository to trigger a new build and deployment. The new deployment will have access to the correct API keys and the error will be resolved.
+For a real production deployment, you should store these keys as secrets in your hosting provider and load them as environment variables. Hard-coding keys makes them publicly visible in your code repository and difficult to change.
