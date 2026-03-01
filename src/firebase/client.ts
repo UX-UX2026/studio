@@ -4,30 +4,41 @@ import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
-// This configuration now safely reads from environment variables.
-// WARNING: For this to work in a deployed environment (like Vercel, Netlify, or Firebase App Hosting),
-// you MUST set these environment variables in your hosting provider's settings. The `README.md` has been updated with instructions.
+
+// =================================================================================
+// IMPORTANT - DEPLOYMENT CONFIGURATION
+// =================================================================================
+// For your deployed site to work, you MUST replace the placeholder values below
+// with your actual Firebase project configuration. This is not the recommended
+// secure practice for a production app, but it is necessary if you cannot use
+// your hosting provider's secret management features (which may require billing).
+//
+// 1. Go to your Firebase project settings.
+// 2. Under "Your apps", find your web app.
+// 3. Copy the `firebaseConfig` object.
+// 4. Paste it here, replacing the placeholder values.
+// =================================================================================
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "YOUR_API_KEY_HERE",
+  authDomain: "YOUR_AUTH_DOMAIN_HERE",
+  projectId: "YOUR_PROJECT_ID_HERE",
+  storageBucket: "YOUR_STORAGE_BUCKET_HERE",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID_HERE",
+  appId: "YOUR_APP_ID_HERE"
 };
+
 
 let app: FirebaseApp;
 let auth: Auth;
 let firestore: Firestore;
 
 // This pattern ensures that we only initialize Firebase once.
-// It also handles the case where environment variables might be missing.
 try {
   if (getApps().length) {
     app = getApp();
   } else {
-    if (!firebaseConfig.apiKey) {
-      throw new Error("Firebase API Key is missing. Please set NEXT_PUBLIC_FIREBASE_API_KEY in your environment. For deployed sites, this must be set in your hosting provider's secret/environment variable settings.");
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
+      console.error("Firebase configuration is missing or incomplete. Please update src/firebase/client.ts with your project's configuration.");
     }
     app = initializeApp(firebaseConfig);
   }

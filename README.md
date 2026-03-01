@@ -85,25 +85,16 @@ To get the application running locally, follow these steps.
 
 *   Node.js (v18 or later)
 *   An active Firebase project.
-*   A `.env` file with your Firebase configuration.
 
 ### Local Development
 
-1.  **Create Environment File:**
-    Create a file named `.env` in the root of the project and add your Firebase project's configuration:
-    ```
-    NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
-    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
-    NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
-    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-    NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
-    ```
-
-2.  **Install Dependencies:**
+1.  **Install Dependencies:**
     ```bash
     npm install
     ```
+
+2.  **Add Firebase Configuration:**
+    Open the file `src/firebase/client.ts` and replace the placeholder values in the `firebaseConfig` object with your actual Firebase project configuration. You can find this in your Firebase project settings.
 
 3.  **Run the Development Server:**
     ```bash
@@ -116,27 +107,17 @@ To get the application running locally, follow these steps.
 
 This application is configured for deployment using **Firebase App Hosting**. App Hosting integrates with GitHub to automatically build and deploy your Next.js application when you push to your repository.
 
-#### Environment Variables for Deployment
+#### IMPORTANT: Deployment Configuration
 
-Your Firebase configuration is loaded from environment variables for security. Your local development uses a `.env` file (which should **not** be committed to version control).
+For your live, deployed application to connect to Firebase, you **MUST** hard-code your Firebase project configuration into the application.
 
-For your production deployment on Firebase App Hosting, you **MUST** set the following as secrets in the Google Cloud Secret Manager. App Hosting will automatically make these available to your application at build time.
+**WARNING:** This method is **not recommended for production environments** as it exposes your project configuration in your source code. The secure, industry-standard method is to use your hosting provider's secret management tools, which may require a billing account. This method is provided as a way to deploy a functional demonstration without enabling billing.
 
-- `NEXT_PUBLIC_FIREBASE_API_KEY`
-- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
-- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
-- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
-- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
-- `NEXT_PUBLIC_FIREBASE_APP_ID`
+**How to Configure for Deployment:**
 
-**How to Set Secrets for Firebase App Hosting:**
+1.  Open the file `src/firebase/client.ts` in your code editor.
+2.  Locate the `firebaseConfig` object.
+3.  Replace the placeholder values (`"YOUR_API_KEY_HERE"`, etc.) with the actual values from your Firebase project settings.
+4.  Save the file, commit it, and push it to your GitHub repository.
 
-1.  Go to the [Google Cloud Secret Manager](https://console.cloud.google.com/security/secret-manager) for your Firebase project.
-2.  Click **"Create Secret"** for each of the variables listed above.
-3.  For the **Name**, use the exact variable name (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`).
-4.  In the **Secret value** field, paste the corresponding value from your local `.env` file.
-5.  Leave the "Replication" policy as "Automatic".
-6.  Click **"Create Secret"**.
-7.  Repeat for all six `NEXT_PUBLIC_` variables.
-
-Once these secrets are created, App Hosting will automatically inject them into your environment during the build process, allowing your live application to connect to Firebase securely.
+Firebase App Hosting will now build your application with the correct configuration, and your deployed site will be able to connect to Firebase.
