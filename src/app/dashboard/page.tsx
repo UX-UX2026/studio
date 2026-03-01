@@ -17,15 +17,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
-  TrendingUp,
-  TrendingDown,
   ClipboardCheck,
   Loader,
   Rocket,
   DatabaseZap,
   Briefcase,
+  TrendingUp,
+  AlertCircle,
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -55,7 +54,7 @@ export default function DashboardPage() {
     return query(
       collection(firestore, 'procurementRequests'),
       orderBy('createdAt', 'desc'),
-      limit(25) // Fetch the last 25 requests to filter from
+      limit(50) // Fetch a larger batch for calculations
     );
   }, [firestore]);
 
@@ -70,7 +69,7 @@ export default function DashboardPage() {
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'procurementRequests'), where('status', '==', 'In Fulfillment'));
+    return query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
   }, [firestore]);
 
   const { data: fulfillmentRequests, loading: fulfillmentLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
@@ -95,6 +94,34 @@ export default function DashboardPage() {
     acc[item.fulfillmentStatus] = (acc[item.fulfillmentStatus] || 0) + 1;
     return acc;
   }, {} as Record<string, number>), [allFulfillmentItems]);
+
+    const dashboardStats = useMemo(() => {
+        if (!recentRequests) return {
+            totalSpendCurrentMonth: 0,
+            pendingManager: 0,
+            pendingExecutive: 0,
+            queriesRaised: 0,
+        };
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const totalSpendCurrentMonth = recentRequests.reduce((sum, req) => {
+            if (!req.createdAt) return sum;
+            const reqDate = new Date(req.createdAt.seconds * 1000);
+            if (reqDate.getMonth() === currentMonth && reqDate.getFullYear() === currentYear) {
+                return sum + req.total;
+            }
+            return sum;
+        }, 0);
+        
+        const pendingManager = openRequests.filter(req => req.status === 'Pending Manager Approval').length;
+        const pendingExecutive = openRequests.filter(req => req.status === 'Pending Executive').length;
+        const queriesRaised = openRequests.filter(req => req.status === 'Queries Raised').length;
+
+        return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
+    }, [recentRequests, openRequests]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -121,16 +148,14 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Current Period Status
+              New Request
             </CardTitle>
-            <Badge variant="outline" className="bg-orange-100 text-orange-600">
-              Pending
-            </Badge>
+             <Rocket className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">Pending Submission</div>
+            <div className="text-2xl font-bold">Start a New Cycle</div>
             <p className="text-xs text-muted-foreground mb-4">
-              February 2026 period is awaiting your submission.
+              Begin a new procurement submission for any department.
             </p>
             <Button asChild className="w-full">
               <Link href="/dashboard/procurement">
@@ -143,28 +168,48 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Monthly Budget Used
+              Spend (Current Month)
             </CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R 349,663.26</div>
-            <p className="text-xs text-muted-foreground">+15.2% from last month</p>
-            <Progress value={65} className="mt-2 h-2" />
+            {requestsLoading ? (
+                 <div className="flex items-center justify-center h-24">
+                  <Loader className="h-6 w-6 animate-spin" />
+                </div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">{formatCurrency(dashboardStats.totalSpendCurrentMonth)}</div>
+                <p className="text-xs text-muted-foreground">Total value of all requests created this month.</p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
-              Avg. Fulfillment Time
+              Requests Awaiting Action
             </CardTitle>
-            <TrendingDown className="h-4 w-4 text-green-500" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">3.2 Days</div>
-            <p className="text-xs text-muted-foreground">
-              -0.5 days faster than last month's average.
-            </p>
+            {requestsLoading ? (
+                 <div className="flex items-center justify-center h-24">
+                  <Loader className="h-6 w-6 animate-spin" />
+                </div>
+            ) : (
+                <>
+                <div className="text-2xl font-bold">{openRequests.length} Open Requests</div>
+                 <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <div>Manager Review</div>
+                    <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
+                    <div>Executive Review</div>
+                    <div className="font-semibold text-right text-foreground">{dashboardStats.pendingExecutive || 0}</div>
+                    <div>Queries Raised</div>
+                    <div className="font-semibold text-right text-foreground">{dashboardStats.queriesRaised || 0}</div>
+                </div>
+                </>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -234,7 +279,7 @@ export default function DashboardPage() {
                           </TableCell>
                       </TableRow>
                   ) : openRequests && openRequests.length > 0 ? (
-                    openRequests.map((req) => (
+                    openRequests.slice(0, 5).map((req) => (
                       <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
                         <TableCell className="font-medium">
                           <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>

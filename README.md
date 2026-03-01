@@ -85,19 +85,32 @@ To get the application running locally, follow these steps.
 
 *   Node.js (v18 or later)
 *   An active Firebase project.
+*   A `.env` file with your Firebase configuration.
 
 ### Local Development
 
-1.  **Install Dependencies:**
+1.  **Create Environment File:**
+    Create a file named `.env` in the root of the project and add your Firebase project's configuration:
+    ```
+    NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_auth_domain
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+    NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_storage_bucket
+    NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+    NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+    ```
+
+2.  **Install Dependencies:**
     ```bash
     npm install
     ```
 
-2.  **Run the Development Server:**
+3.  **Run the Development Server:**
     ```bash
     npm run dev
     ```
     The application will be available at `http://localhost:3000`.
+
 
 ### Publishing the Application
 
@@ -105,9 +118,9 @@ This application is configured for deployment using **Firebase App Hosting**. Ap
 
 #### Environment Variables for Deployment
 
-Your Firebase configuration is loaded from environment variables for security. For your local development, a `.env` file is used (and should **not** be committed to version control).
+Your Firebase configuration is loaded from environment variables for security. Your local development uses a `.env` file (which should **not** be committed to version control).
 
-For your production deployment on Firebase App Hosting (or any other provider), you **MUST** set the following environment variables in your hosting provider's secret manager or settings panel:
+For your production deployment on Firebase App Hosting, you **MUST** set the following as secrets in the Google Cloud Secret Manager. App Hosting will automatically make these available to your application at build time.
 
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
@@ -116,4 +129,14 @@ For your production deployment on Firebase App Hosting (or any other provider), 
 - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 
-Without these variables, your live application will not be able to connect to Firebase.
+**How to Set Secrets for Firebase App Hosting:**
+
+1.  Go to the [Google Cloud Secret Manager](https://console.cloud.google.com/security/secret-manager) for your Firebase project.
+2.  Click **"Create Secret"** for each of the variables listed above.
+3.  For the **Name**, use the exact variable name (e.g., `NEXT_PUBLIC_FIREBASE_API_KEY`).
+4.  In the **Secret value** field, paste the corresponding value from your local `.env` file.
+5.  Leave the "Replication" policy as "Automatic".
+6.  Click **"Create Secret"**.
+7.  Repeat for all six `NEXT_PUBLIC_` variables.
+
+Once these secrets are created, App Hosting will automatically inject them into your environment during the build process, allowing your live application to connect to Firebase securely.
