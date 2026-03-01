@@ -4,6 +4,15 @@ import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
 
+// This check runs in the browser. If the environment variables are not set, it throws a clear error.
+if (!process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+    throw new Error(
+        'Firebase configuration is missing. Make sure you have set up your environment variables correctly. ' +
+        'For production builds (like on GitHub), you must configure these as secrets in your hosting provider. ' +
+        'Refer to the README.md for instructions on setting up Firebase App Hosting secrets.'
+    );
+}
+
 // This is the public Firebase configuration for your web app.
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -21,9 +30,6 @@ let firestore: Firestore;
 // This pattern ensures that we only initialize Firebase once, which is important
 // in a Next.js environment with Hot Module Replacement (HMR).
 if (!getApps().length) {
-  if (!firebaseConfig.apiKey) {
-    throw new Error('Missing Firebase API Key. Please check your .env.local file.');
-  }
   app = initializeApp(firebaseConfig);
 } else {
   app = getApp();
