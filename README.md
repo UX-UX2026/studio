@@ -105,6 +105,15 @@ This application is configured for deployment using **Firebase App Hosting**. Ap
 
 #### Environment Variables for Deployment
 
-**WARNING: Your Firebase configuration is currently hard-coded directly into the application source code (`src/firebase/client.ts`). This is NOT a secure practice for a production application and is only done here for demonstration purposes.**
+Your Firebase configuration is loaded from environment variables for security. For your local development, a `.env` file is used (and should **not** be committed to version control).
 
-For a real production deployment, you should store these keys as secrets in your hosting provider and load them as environment variables. Hard-coding keys makes them publicly visible in your code repository and difficult to change.
+For your production deployment on Firebase App Hosting (or any other provider), you **MUST** set the following environment variables in your hosting provider's secret manager or settings panel:
+
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+
+Without these variables, your live application will not be able to connect to Firebase.
