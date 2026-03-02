@@ -205,6 +205,20 @@
             "Invited"
           ],
           "description": "The current status of the user account."
+        },
+        "alternateEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "An alternative email address for notifications."
+        },
+        "notificationPreference": {
+          "type": "string",
+          "enum": [
+            "Primary",
+            "Alternate",
+            "Both"
+          ],
+          "description": "Determines where to send email notifications."
         }
       },
       "required": [

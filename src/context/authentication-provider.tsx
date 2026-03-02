@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -20,6 +21,8 @@ export interface UserProfile {
     displayName?: string;
     email: string;
     photoURL?: string;
+    alternateEmail?: string;
+    notificationPreference?: 'Primary' | 'Alternate' | 'Both';
 }
 
 // Define the context shape

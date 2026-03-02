@@ -36,6 +36,8 @@ type UserProfile = {
     department: string;
     photoURL: string;
     status: 'Active' | 'Invited';
+    alternateEmail?: string;
+    notificationPreference?: 'Primary' | 'Alternate' | 'Both';
 };
 
 type Department = {
@@ -66,6 +68,8 @@ export default function UsersPage() {
     const [email, setEmail] = useState('');
     const [userRole, setUserRole] = useState('');
     const [department, setDepartment] = useState('');
+    const [alternateEmail, setAlternateEmail] = useState('');
+    const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
     
     const { toast } = useToast();
     
@@ -75,6 +79,8 @@ export default function UsersPage() {
             setEmail(editingUser.email);
             setUserRole(editingUser.role);
             setDepartment(editingUser.department);
+            setAlternateEmail(editingUser.alternateEmail || '');
+            setNotificationPreference(editingUser.notificationPreference || 'Primary');
         }
     }, [editingUser, isDialogOpen]);
 
@@ -142,6 +148,8 @@ export default function UsersPage() {
                 department,
                 photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
                 status: editingUser.status,
+                alternateEmail: alternateEmail,
+                notificationPreference: notificationPreference,
             };
 
             const userRef = doc(firestore, 'users', editingUser.id);
@@ -381,6 +389,23 @@ export default function UsersPage() {
                                 <SelectContent>
                                      <SelectItem value="Unassigned">Unassigned</SelectItem>
                                     {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="alt-email" className="text-right">Alt. Email</Label>
+                            <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} className="col-span-3" placeholder="optional.email@example.com" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="notification-pref" className="text-right">Notify</Label>
+                            <Select value={notificationPreference} onValueChange={(value: 'Primary' | 'Alternate' | 'Both') => setNotificationPreference(value)}>
+                                <SelectTrigger id="notification-pref" className="col-span-3">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Primary">Primary Email Only</SelectItem>
+                                    <SelectItem value="Alternate">Alternate Email Only</SelectItem>
+                                    <SelectItem value="Both">Both Emails</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
