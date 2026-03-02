@@ -469,7 +469,7 @@ export default function BudgetPage() {
             </Card>
             
             <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
-                <DialogContent className="max-w-4xl flex flex-col max-h-[90dvh]">
+                <DialogContent className="max-w-6xl flex flex-col max-h-[90dvh]">
                     <DialogHeader>
                         <DialogTitle>Map Your File Columns</DialogTitle>
                         <DialogDescription>
