@@ -49,23 +49,39 @@ export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
 
-  const recentRequestsQuery = useMemo(() => {
+  // Define statuses for open requests
+  const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
+
+  // Query for ALL open requests. Sorting will be done on the client to avoid composite index.
+  const openRequestsQuery = useMemo(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'procurementRequests'),
-      orderBy('createdAt', 'desc'),
-      limit(50) // Fetch a larger batch for calculations
+      where('status', 'in', openStatuses)
+    );
+  }, [firestore, openStatuses]);
+  
+  const { data: allOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
+
+  // Memoize sorted open requests for the "Open Submissions" table
+  const sortedOpenRequests = useMemo(() => {
+    if (!allOpenRequests) return [];
+    // Create a new array before sorting to avoid mutating the original
+    return [...allOpenRequests].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+  }, [allOpenRequests]);
+
+  // Query for all requests created in the current month for accurate spend calculation
+  const monthlyRequestsQuery = useMemo(() => {
+    if (!firestore) return null;
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return query(
+      collection(firestore, 'procurementRequests'),
+      where('createdAt', '>=', startOfMonth)
     );
   }, [firestore]);
 
-  const { data: recentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(recentRequestsQuery);
-
-  const openRequests = useMemo(() => {
-    if (!recentRequests) return [];
-    const openStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'];
-    return recentRequests.filter(req => openStatuses.includes(req.status));
-  }, [recentRequests]);
-
+  const { data: monthlyRequests, loading: monthlyRequestsLoading } = useCollection<ApprovalRequest>(monthlyRequestsQuery);
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
@@ -96,32 +112,18 @@ export default function DashboardPage() {
   }, {} as Record<string, number>), [allFulfillmentItems]);
 
     const dashboardStats = useMemo(() => {
-        if (!recentRequests) return {
-            totalSpendCurrentMonth: 0,
-            pendingManager: 0,
-            pendingExecutive: 0,
-            queriesRaised: 0,
-        };
-
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentYear = now.getFullYear();
-
-        const totalSpendCurrentMonth = recentRequests.reduce((sum, req) => {
-            if (!req.createdAt) return sum;
-            const reqDate = new Date(req.createdAt.seconds * 1000);
-            if (reqDate.getMonth() === currentMonth && reqDate.getFullYear() === currentYear) {
-                return sum + req.total;
-            }
-            return sum;
-        }, 0);
+        // Spend is now correctly calculated from all requests this month.
+        const totalSpendCurrentMonth = monthlyRequests?.reduce((sum, req) => sum + req.total, 0) || 0;
         
-        const pendingManager = openRequests.filter(req => req.status === 'Pending Manager Approval').length;
-        const pendingExecutive = openRequests.filter(req => req.status === 'Pending Executive').length;
-        const queriesRaised = openRequests.filter(req => req.status === 'Queries Raised').length;
+        // Open request counts are now correct for ALL open requests.
+        const pendingManager = allOpenRequests?.filter(req => req.status === 'Pending Manager Approval').length || 0;
+        const pendingExecutive = allOpenRequests?.filter(req => req.status === 'Pending Executive').length || 0;
+        const queriesRaised = allOpenRequests?.filter(req => req.status === 'Queries Raised').length || 0;
 
         return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
-    }, [recentRequests, openRequests]);
+    }, [monthlyRequests, allOpenRequests]);
+
+    const requestsLoading = openRequestsLoading || monthlyRequestsLoading;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -199,7 +201,7 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <>
-                <div className="text-2xl font-bold">{openRequests.length} Open Requests</div>
+                <div className="text-2xl font-bold">{allOpenRequests?.length || 0} Open Requests</div>
                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <div>Manager Review</div>
                     <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
@@ -278,8 +280,8 @@ export default function DashboardPage() {
                               <Loader className="h-6 w-6 animate-spin mx-auto" />
                           </TableCell>
                       </TableRow>
-                  ) : openRequests && openRequests.length > 0 ? (
-                    openRequests.slice(0, 5).map((req) => (
+                  ) : sortedOpenRequests && sortedOpenRequests.length > 0 ? (
+                    sortedOpenRequests.slice(0, 5).map((req) => (
                       <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
                         <TableCell className="font-medium">
                           <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
