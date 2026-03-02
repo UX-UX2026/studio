@@ -469,7 +469,7 @@ export default function BudgetPage() {
             </Card>
             
             <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
-                <DialogContent className="max-w-6xl flex flex-col max-h-[90dvh]">
+                <DialogContent className="max-w-7xl flex flex-col max-h-[90dvh]">
                     <DialogHeader>
                         <DialogTitle>Map Your File Columns</DialogTitle>
                         <DialogDescription>
@@ -544,6 +544,7 @@ export default function BudgetPage() {
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
+                                            <TableHead className="w-16 font-bold sticky left-0 bg-muted/95 z-10 text-center">Row</TableHead>
                                             {derivedHeaders.map((header, i) => {
                                                 if (!header && derivedHeaders.every(h => !h)) return null;
                                                 const stringifiedHeaders = derivedHeaders.map(h => String(h));
@@ -552,6 +553,7 @@ export default function BudgetPage() {
                                                 
                                                 return (
                                                     <TableHead key={`${header}-${i}`} className={cn(
+                                                        "whitespace-nowrap",
                                                         columnMappings.category === String(header) && "bg-blue-100 dark:bg-blue-900/50",
                                                         columnMappings.yearTotal === String(header) && "bg-green-100 dark:bg-green-900/50",
                                                         forecastStartIndex !== -1 && forecastEndIndex !== -1 && i >= forecastStartIndex && i <= forecastEndIndex && "bg-yellow-100 dark:bg-yellow-900/50",
@@ -563,7 +565,8 @@ export default function BudgetPage() {
                                     <TableBody>
                                         {derivedPreview.slice(0, 500).map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
-                                                {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`}>{String(cell)}</TableCell>)}
+                                                <TableCell className="font-mono text-muted-foreground text-center sticky left-0 bg-muted/95 z-10">{startRow + 1 + rowIndex}</TableCell>
+                                                {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`} className="whitespace-nowrap">{String(cell)}</TableCell>)}
                                             </TableRow>
                                         ))}
                                     </TableBody>
