@@ -4,7 +4,7 @@
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Workflow as WorkflowIcon, Plus, Trash2, ArrowUp, ArrowDown, GripVertical, Save } from "lucide-react";
+import { Loader, Workflow as WorkflowIcon, Plus, Trash2, ArrowUp, ArrowDown, GripVertical, Save, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -39,6 +39,9 @@ type WorkflowStage = {
     name: string;
     role: UserRole;
     permissions: string[];
+    useAlternateEmail?: boolean;
+    alternateEmail?: string;
+    sendToBoth?: boolean;
 };
 
 type Department = {
@@ -48,10 +51,10 @@ type Department = {
 };
 
 const initialWorkflow: WorkflowStage[] = [
-    { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit', 'comment'] },
-    { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'] },
-    { id: 'stage-2', name: 'Executive Approval', role: 'Executive', permissions: ['review', 'comment', 'approve', 'lock'] },
-    { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor', 'comment'] },
+    { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit', 'comment'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
+    { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
+    { id: 'stage-2', name: 'Executive Approval', role: 'Executive', permissions: ['review', 'comment', 'approve', 'lock'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
+    { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor', 'comment'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
 ];
 
 export default function WorkflowPage() {
@@ -129,7 +132,10 @@ export default function WorkflowPage() {
             id: `stage-${Date.now()}`,
             name: 'New Stage',
             role: null,
-            permissions: []
+            permissions: [],
+            useAlternateEmail: false,
+            alternateEmail: '',
+            sendToBoth: false
         };
         setWorkflow([...workflow, newStage]);
     };
@@ -245,6 +251,7 @@ export default function WorkflowPage() {
                                     <TableHead>Stage Name</TableHead>
                                     <TableHead className="w-[200px]">Assigned Role</TableHead>
                                     <TableHead>Permissions</TableHead>
+                                    <TableHead>Notifications</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -294,6 +301,64 @@ export default function WorkflowPage() {
                                                                {p.label}
                                                             </Label>
                                                         ))}
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <Button variant="outline" size="sm" className="gap-2">
+                                                        <Mail className="h-4 w-4" />
+                                                        <span>Configure</span>
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-80" align="start">
+                                                    <div className="grid gap-4">
+                                                        <div className="space-y-2">
+                                                            <h4 className="font-medium leading-none">Notification Settings</h4>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                Set an alternative email for notifications at this stage.
+                                                            </p>
+                                                        </div>
+                                                        <div className="grid gap-2">
+                                                            <div className="flex items-center space-x-2">
+                                                                <Checkbox
+                                                                    id={`alt-email-check-${stage.id}`}
+                                                                    checked={stage.useAlternateEmail}
+                                                                    onCheckedChange={(checked) => handleUpdateStage(stage.id, 'useAlternateEmail', !!checked)}
+                                                                />
+                                                                <Label htmlFor={`alt-email-check-${stage.id}`}>
+                                                                    Use alternative email
+                                                                </Label>
+                                                            </div>
+                                                            {stage.useAlternateEmail && (
+                                                                <div className="grid gap-4 pl-6 pt-2">
+                                                                    <div className="grid gap-2">
+                                                                        <Label htmlFor={`alt-email-input-${stage.id}`}>
+                                                                            Alternative Email
+                                                                        </Label>
+                                                                        <Input
+                                                                            id={`alt-email-input-${stage.id}`}
+                                                                            type="email"
+                                                                            placeholder="alt.email@example.com"
+                                                                            value={stage.alternateEmail || ''}
+                                                                            onChange={(e) => handleUpdateStage(stage.id, 'alternateEmail', e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex items-center space-x-2">
+                                                                        <Checkbox
+                                                                            id={`send-both-check-${stage.id}`}
+                                                                            checked={stage.sendToBoth}
+                                                                            onCheckedChange={(checked) => handleUpdateStage(stage.id, 'sendToBoth', !!checked)}
+                                                                        />
+                                                                        <Label htmlFor={`send-both-check-${stage.id}`}>
+                                                                            Send to both primary and alternative email
+                                                                        </Label>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </PopoverContent>
                                             </Popover>

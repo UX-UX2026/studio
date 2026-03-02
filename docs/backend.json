@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "procurementRequest": {
@@ -260,6 +261,19 @@
                     "monitor"
                   ]
                 }
+              },
+              "useAlternateEmail": {
+                "type": "boolean",
+                "description": "Whether to use an alternative email for notifications at this stage."
+              },
+              "alternateEmail": {
+                "type": "string",
+                "format": "email",
+                "description": "The alternative email address for notifications."
+              },
+              "sendToBoth": {
+                "type": "boolean",
+                "description": "Whether to send notifications to both the primary and alternative email."
               }
             },
             "required": [
