@@ -20,6 +20,14 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
@@ -84,6 +92,8 @@ export default function ApprovalsPage() {
     
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
+    const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
+    const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
     const loading = userLoading || approvalsLoading || rolesLoading;
 
@@ -164,60 +174,69 @@ export default function ApprovalsPage() {
     const handleApprove = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
 
+        setIsSubmittingAction(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
 
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
-        if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
+        if (role === 'Administrator') {
+            if (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+                newStatus = 'Pending Executive';
+                toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
+                newTimeline = newTimeline.map(step => {
+                    if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
+                    if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
+                    return step;
+                });
+            } else if (activeRequest.status === 'Pending Executive') {
+                newStatus = 'Approved';
+                toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
+                newTimeline = newTimeline.map(step => {
+                    if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
+                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
+                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
+                    return step;
+                });
+            } else if (activeRequest.status === 'Approved') {
+                newStatus = 'In Fulfillment';
+                toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
+                newTimeline = newTimeline.map(step => {
+                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
+                    return step;
+                });
+            }
+        } else if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
-            toastMessage = {
-                title: "Request Approved",
-                description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.`,
-            };
+            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Manager Review') {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Manager' };
-                }
-                if (step.stage === 'Executive Review') {
-                    return { ...step, status: 'pending' as const };
-                }
+                if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Manager' };
+                if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
                 return step;
             });
         } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Approved';
-            toastMessage = {
-                title: "Request Approved",
-                description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.`,
-            };
+            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Executive Review') {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
-                }
-                if (step.stage === 'Manager Review' && step.status !== 'completed') {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
-                }
-                if (step.stage === 'Procurement Ack.') {
-                    return { ...step, status: 'pending' as const };
-                }
+                if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
+                if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
+                if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
                 return step;
             });
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
-            toastMessage = {
-                title: "Request Acknowledged",
-                description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.`,
-            };
+            toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Procurement Ack.') {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Procurement Officer' };
-                }
+                if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Procurement Officer' };
                 return step;
             });
         }
 
-        if (!toastMessage) return;
+        if (!toastMessage) {
+            setIsSubmittingAction(false);
+            return;
+        }
 
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
         const updateData = { status: newStatus, timeline: newTimeline };
@@ -252,11 +271,14 @@ export default function ApprovalsPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
+        } finally {
+            setIsSubmittingAction(false);
         }
     };
     
     const handleReject = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        setIsSubmittingAction(true);
 
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         
@@ -294,6 +316,8 @@ export default function ApprovalsPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
+        } finally {
+            setIsSubmittingAction(false);
         }
     };
     
@@ -304,11 +328,12 @@ export default function ApprovalsPage() {
             toast({
                 variant: "destructive",
                 title: "Comment Required",
-                description: "Please enter a comment in the log before raising a query.",
+                description: "Please enter a comment before submitting a query.",
             });
             return;
         }
 
+        setIsSubmittingAction(true);
         const newStatus: ApprovalRequest['status'] = 'Queries Raised';
 
         const commentData = {
@@ -335,6 +360,7 @@ export default function ApprovalsPage() {
                 description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
             });
             setNewComment("");
+            setIsQueryDialogOpen(false);
             
             const auditLogData = {
                 userId: user.uid,
@@ -359,6 +385,8 @@ export default function ApprovalsPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
+        } finally {
+            setIsSubmittingAction(false);
         }
     };
 
@@ -366,6 +394,7 @@ export default function ApprovalsPage() {
     const handleAddComment = async () => {
         if (!activeRequest || !user || !newComment.trim() || !firestore) return;
 
+        setIsSubmittingAction(true);
         const commentData = {
             actor: user.displayName || "User",
             actorId: user.uid,
@@ -407,208 +436,242 @@ export default function ApprovalsPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
+        } finally {
+            setIsSubmittingAction(false);
         }
     };
     
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1 space-y-6">
-             <Card>
-                <CardHeader className="pb-2">
-                    <CardTitle>Approvals Overview</CardTitle>
-                    <CardDescription>Summary of requests awaiting your action.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Pending Requests</span>
-                            <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
-                        </div>
-                        <div className="flex justify-between items-center">
-                            <span className="text-muted-foreground">Total Value</span>
-                            <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
-                        </div>
-                        <div className="space-y-2 pt-2">
-                            <h4 className="text-sm font-medium">By Department</h4>
-                            {approvalSummary.byDept.length > 0 ? (
-                                <div className="space-y-1 text-sm text-muted-foreground">
-                                    {approvalSummary.byDept.map(([dept, data]) => (
-                                        <div key={dept} className="flex justify-between">
-                                            <span>{dept}</span>
-                                            <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
-                            )}
-                        </div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <div className="space-y-4">
-                <h3 className="text-lg font-semibold">All Requests</h3>
-                <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
-                    {departmentOrder.map(dept => (
-                        <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                             <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
-                                <div className="flex justify-between items-center w-full">
-                                    <span className="font-semibold">{dept}</span>
-                                    <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="p-2 pt-0">
-                                <div className="space-y-2">
-                                    {requestsByDept[dept].map(req => (
-                                        <Card 
-                                            key={req.id} 
-                                            className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
-                                            onClick={() => setSelectedRequestId(req.id)}
-                                        >
-                                            <CardContent className="p-3">
-                                                <div className="flex justify-between items-start">
-                                                    <p className="font-semibold">{req.id.substring(0,8)}...</p>
-                                                    {getStatusBadge(req.status)}
-                                                </div>
-                                                <div className="flex justify-between items-end mt-2">
-                                                     <div>
-                                                        <p className="text-xs text-muted-foreground">{req.period}</p>
-                                                        <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
-                                                    </div>
-                                                    <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    ))}
-                                </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
-                </Accordion>
-            </div>
-        </div>
-        <div className="lg:col-span-2 space-y-6">
-            {activeRequest ? (
-                <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
-                    <AccordionItem value="item-1" className="border-0">
-                        <Card>
-                            <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                                <div className="flex-1">
-                                    <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
-                                    <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</p>
-                                </div>
-                            </AccordionTrigger>
-                            <AccordionContent>
-                                <CardContent className="pt-0">
-                                <Tabs defaultValue="items">
-                                        <TabsList className="grid w-full grid-cols-3">
-                                            <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
-                                            <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
-                                            <TabsTrigger value="communication">Communication Log</TabsTrigger>
-                                        </TabsList>
-                                        <TabsContent value="workflow" className="pt-6">
-                                            <ul className="space-y-4">
-                                                {activeRequest.timeline.map(step => (
-                                                    <li key={step.stage} className="flex items-center gap-4">
-                                                        <div className={`flex items-center justify-center h-10 w-10 rounded-full ${step.status === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                                            {step.status === 'completed' ? <Check className="h-5 w-5" /> : <User className="h-5 w-5"/>}
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <p className="font-semibold">{step.stage}</p>
-                                                            <p className="text-sm text-muted-foreground">{step.actor}</p>
-                                                        </div>
-                                                        <div className="text-right">
-                                                            <p className="text-sm font-medium">{step.date}</p>
-                                                            <p className={`text-xs font-semibold capitalize ${step.status === 'completed' ? 'text-green-500' : 'text-orange-500'}`}>{step.status}</p>
-                                                        </div>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </TabsContent>
-                                        <TabsContent value="items" className="pt-4">
-                                            <div>
-                                                <h3 className="text-lg font-semibold mb-2">Request Items</h3>
-                                                <p className="text-sm text-muted-foreground mb-4">
-                                                    Below are the individual items included in this procurement request.
-                                                </p>
-                                                <div className="overflow-auto rounded-lg border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow className="bg-muted hover:bg-muted">
-                                                                <TableHead>Description</TableHead>
-                                                                <TableHead>Category</TableHead>
-                                                                <TableHead className="text-center">Qty</TableHead>
-                                                                <TableHead className="text-right">Unit Price</TableHead>
-                                                                <TableHead className="text-right">Total</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {activeRequest.items.map((item) => (
-                                                                <TableRow key={item.id}>
-                                                                    <TableCell className="font-medium">{item.description}</TableCell>
-                                                                    <TableCell>{item.category}</TableCell>
-                                                                    <TableCell className="text-center">{item.qty}</TableCell>
-                                                                    <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
-                                                                    <TableCell className="text-right font-mono">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
+    <>
+        <div className="grid lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1 space-y-6">
+                <Card>
+                    <CardHeader className="pb-2">
+                        <CardTitle>Approvals Overview</CardTitle>
+                        <CardDescription>Summary of requests awaiting your action.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Pending Requests</span>
+                                <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-muted-foreground">Total Value</span>
+                                <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
+                            </div>
+                            <div className="space-y-2 pt-2">
+                                <h4 className="text-sm font-medium">By Department</h4>
+                                {approvalSummary.byDept.length > 0 ? (
+                                    <div className="space-y-1 text-sm text-muted-foreground">
+                                        {approvalSummary.byDept.map(([dept, data]) => (
+                                            <div key={dept} className="flex justify-between">
+                                                <span>{dept}</span>
+                                                <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
                                             </div>
-                                        </TabsContent>
-                                        <TabsContent value="communication" className="pt-6">
-                                            <div className="space-y-6">
-                                                <div className="space-y-4">
-                                                    {activeRequest.comments?.map((comment, i) => (
-                                                        <div key={i} className="flex items-start gap-3">
-                                                            <Avatar>
-                                                                <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
-                                                            </Avatar>
-                                                            <div className="flex-1 p-3 rounded-lg bg-muted">
-                                                                <div className="flex justify-between items-center">
-                                                                    <p className="font-semibold">{comment.actor}</p>
-                                                                    <p className="text-xs text-muted-foreground">{comment.timestamp}</p>
-                                                                </div>
-                                                                <p className="text-sm mt-1">{comment.text}</p>
-                                                            </div>
-                                                        </div>
-                                                    ))}
-                                                    {activeRequest.comments?.length === 0 && (
-                                                        <p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>
-                                                    )}
-                                                </div>
-                                                <div className="relative">
-                                                    <Textarea placeholder="Respond to queries or add a comment..." className="pr-24" value={newComment} onChange={(e) => setNewComment(e.target.value)}/>
-                                                    <div className="absolute top-2 right-2 flex items-center gap-1">
-                                                        <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
-                                                        <Button size="icon" onClick={handleAddComment}><Send className="h-4 w-4"/></Button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </TabsContent>
-                                </Tabs>
-                                </CardContent>
-                                {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
-                                    <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                        <Button variant="outline" onClick={handleRaiseQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                        <Button variant="destructive" onClick={handleReject}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                        <Button onClick={handleApprove}><Check className="mr-2 h-4 w-4" />{role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}</Button>
-                                    </CardFooter>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
                                 )}
-                            </AccordionContent>
-                        </Card>
-                    </AccordionItem>
-                </Accordion>
-            ) : (
-                 <Card>
-                    <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">
-                        <p className="text-muted-foreground">Select a request to view its details.</p>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
-            )}
+
+                <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">All Requests</h3>
+                    <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
+                        {departmentOrder.map(dept => (
+                            <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                                <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                                    <div className="flex justify-between items-center w-full">
+                                        <span className="font-semibold">{dept}</span>
+                                        <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="p-2 pt-0">
+                                    <div className="space-y-2">
+                                        {requestsByDept[dept].map(req => (
+                                            <Card 
+                                                key={req.id} 
+                                                className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
+                                                onClick={() => setSelectedRequestId(req.id)}
+                                            >
+                                                <CardContent className="p-3">
+                                                    <div className="flex justify-between items-start">
+                                                        <p className="font-semibold">{req.id.substring(0,8)}...</p>
+                                                        {getStatusBadge(req.status)}
+                                                    </div>
+                                                    <div className="flex justify-between items-end mt-2">
+                                                        <div>
+                                                            <p className="text-xs text-muted-foreground">{req.period}</p>
+                                                            <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
+                                                        </div>
+                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        ))}
+                                    </div>
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                </div>
+            </div>
+            <div className="lg:col-span-2 space-y-6">
+                {activeRequest ? (
+                    <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
+                        <AccordionItem value="item-1" className="border-0">
+                            <Card>
+                                <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
+                                    <div className="flex-1">
+                                        <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
+                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</p>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent>
+                                    <CardContent className="pt-0">
+                                    <Tabs defaultValue="items">
+                                            <TabsList className="grid w-full grid-cols-3">
+                                                <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
+                                                <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
+                                                <TabsTrigger value="communication">Communication Log</TabsTrigger>
+                                            </TabsList>
+                                            <TabsContent value="workflow" className="pt-6">
+                                                <ul className="space-y-4">
+                                                    {activeRequest.timeline.map(step => (
+                                                        <li key={step.stage} className="flex items-center gap-4">
+                                                            <div className={`flex items-center justify-center h-10 w-10 rounded-full ${step.status === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                                                                {step.status === 'completed' ? <Check className="h-5 w-5" /> : <User className="h-5 w-5"/>}
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <p className="font-semibold">{step.stage}</p>
+                                                                <p className="text-sm text-muted-foreground">{step.actor}</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-sm font-medium">{step.date}</p>
+                                                                <p className={`text-xs font-semibold capitalize ${step.status === 'completed' ? 'text-green-500' : 'text-orange-500'}`}>{step.status}</p>
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </TabsContent>
+                                            <TabsContent value="items" className="pt-4">
+                                                <div>
+                                                    <h3 className="text-lg font-semibold mb-2">Request Items</h3>
+                                                    <p className="text-sm text-muted-foreground mb-4">
+                                                        Below are the individual items included in this procurement request.
+                                                    </p>
+                                                    <div className="overflow-auto rounded-lg border">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted hover:bg-muted">
+                                                                    <TableHead>Description</TableHead>
+                                                                    <TableHead>Category</TableHead>
+                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {activeRequest.items.map((item) => (
+                                                                    <TableRow key={item.id}>
+                                                                        <TableCell className="font-medium">{item.description}</TableCell>
+                                                                        <TableCell>{item.category}</TableCell>
+                                                                        <TableCell className="text-center">{item.qty}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                            <TabsContent value="communication" className="pt-6">
+                                                <div className="space-y-6">
+                                                    <div className="space-y-4">
+                                                        {activeRequest.comments?.map((comment, i) => (
+                                                            <div key={i} className="flex items-start gap-3">
+                                                                <Avatar>
+                                                                    <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
+                                                                </Avatar>
+                                                                <div className="flex-1 p-3 rounded-lg bg-muted">
+                                                                    <div className="flex justify-between items-center">
+                                                                        <p className="font-semibold">{comment.actor}</p>
+                                                                        <p className="text-xs text-muted-foreground">{comment.timestamp}</p>
+                                                                    </div>
+                                                                    <p className="text-sm mt-1">{comment.text}</p>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                        {(!activeRequest.comments || activeRequest.comments?.length === 0) && (
+                                                            <p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>
+                                                        )}
+                                                    </div>
+                                                    <div className="relative">
+                                                        <Textarea placeholder="Respond to queries or add a comment..." className="pr-24" value={newComment} onChange={(e) => setNewComment(e.target.value)}/>
+                                                        <div className="absolute top-2 right-2 flex items-center gap-1">
+                                                            <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
+                                                            <Button size="icon" onClick={handleAddComment} disabled={isSubmittingAction}><Send className="h-4 w-4"/></Button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                    </Tabs>
+                                    </CardContent>
+                                    {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
+                                        <CardFooter className="flex justify-end gap-2 border-t pt-6">
+                                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction}><X className="mr-2 h-4 w-4" />Reject</Button>
+                                            <Button onClick={handleApprove} disabled={isSubmittingAction}>
+                                                {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                                <Check className="mr-2 h-4 w-4" />
+                                                {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
+                                            </Button>
+                                        </CardFooter>
+                                    )}
+                                </AccordionContent>
+                            </Card>
+                        </AccordionItem>
+                    </Accordion>
+                ) : (
+                    <Card>
+                        <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">
+                            <p className="text-muted-foreground">Select a request to view its details.</p>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
         </div>
-    </div>
+        
+        <Dialog open={isQueryDialogOpen} onOpenChange={setIsQueryDialogOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Raise a Query</DialogTitle>
+                    <DialogDescription>
+                        Your query will be added to the communication log and the request status will be updated to 'Queries Raised'.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <Textarea 
+                        placeholder="Enter your query here. Be specific about what information is needed." 
+                        value={newComment} 
+                        onChange={(e) => setNewComment(e.target.value)}
+                        rows={5}
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => { setIsQueryDialogOpen(false); setNewComment(''); }}>Cancel</Button>
+                    <Button onClick={handleRaiseQuery} disabled={isSubmittingAction}>
+                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                        Submit Query
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    </>
   );
 }
