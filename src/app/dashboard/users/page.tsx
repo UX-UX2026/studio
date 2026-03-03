@@ -25,7 +25,8 @@ import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { logErrorToFirestore } from "@/lib/error-logger";
 
 type UserProfile = {
     id: string;
@@ -35,6 +36,8 @@ type UserProfile = {
     department: string;
     photoURL: string;
     status: 'Active' | 'Invited';
+    alternateEmail?: string;
+    notificationPreference?: 'Primary' | 'Alternate' | 'Both';
 };
 
 type Department = {
@@ -48,7 +51,7 @@ export default function UsersPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const usersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
     const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
     
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -65,6 +68,8 @@ export default function UsersPage() {
     const [email, setEmail] = useState('');
     const [userRole, setUserRole] = useState('');
     const [department, setDepartment] = useState('');
+    const [alternateEmail, setAlternateEmail] = useState('');
+    const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
     
     const { toast } = useToast();
     
@@ -74,6 +79,8 @@ export default function UsersPage() {
             setEmail(editingUser.email);
             setUserRole(editingUser.role);
             setDepartment(editingUser.department);
+            setAlternateEmail(editingUser.alternateEmail || '');
+            setNotificationPreference(editingUser.notificationPreference || 'Primary');
         }
     }, [editingUser, isDialogOpen]);
 
@@ -102,6 +109,7 @@ export default function UsersPage() {
     
     const handleSave = async () => {
         setIsSaving(true);
+
         if (!editingUser) {
             toast({
                 variant: 'destructive',
@@ -112,38 +120,52 @@ export default function UsersPage() {
             return;
         }
 
-        if (!adminUser || !firestore) {
-             toast({
-                variant: 'destructive',
-                title: 'Save Failed',
-                description: 'User or database service not available.',
-            });
-            setIsSaving(false);
-            return;
-        }
-
-        const userData = {
-            displayName: name,
-            email,
-            role: userRole,
-            department,
-            photoURL: editingUser.photoURL || `https://i.pravatar.cc/150?u=${email}`,
-            status: editingUser.status,
-        };
-
+        const action = 'user.update';
+        
         try {
+            if (!name.trim() || !email.trim() || !userRole) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Validation Error',
+                    description: 'Name, email, and role are required.',
+                });
+                return;
+            }
+
+            if (!adminUser || !firestore) {
+                toast({
+                    variant: 'destructive',
+                    title: 'Save Failed',
+                    description: 'User or database service not available.',
+                });
+                return;
+            }
+            
+            const userData = {
+                displayName: name,
+                email,
+                role: userRole,
+                department,
+                photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
+                status: editingUser.status,
+                alternateEmail: alternateEmail,
+                notificationPreference: notificationPreference,
+            };
+
             const userRef = doc(firestore, 'users', editingUser.id);
             await setDoc(userRef, userData, { merge: true });
+            
             toast({ title: "User Updated", description: "User details have been successfully updated." });
+
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
-                action: 'user.update',
+                action,
                 details: `Updated user: ${email}`,
                 entity: { type: 'user', id: editingUser.id },
                 timestamp: serverTimestamp()
             });
-
+            
             setEditingUser(null);
             setIsDialogOpen(false);
         } catch (error: any) {
@@ -152,6 +174,13 @@ export default function UsersPage() {
                 variant: 'destructive',
                 title: 'Save Failed',
                 description: error.message || 'Could not save the user profile.',
+            });
+            await logErrorToFirestore({
+                userId: adminUser?.uid,
+                userName: adminUser?.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
             });
         } finally {
             setIsSaving(false);
@@ -165,62 +194,78 @@ export default function UsersPage() {
 
     const handleDelete = async (id: string) => {
         if (!adminUser || !firestore) return;
-        const userRef = doc(firestore, 'users', id);
+        
         const deletedUser = users?.find(u => u.id === id);
+        const action = 'user.delete';
 
         try {
+            const userRef = doc(firestore, 'users', id);
             await deleteDoc(userRef);
             toast({ title: "User Deleted", description: "The user has been successfully removed." });
-            if (deletedUser) {
-                 await addDoc(collection(firestore, 'auditLogs'), {
+
+            if (deletedUser && adminUser) {
+                await addDoc(collection(firestore, 'auditLogs'), {
                     userId: adminUser.uid,
                     userName: adminUser.displayName,
-                    action: 'user.delete',
+                    action,
                     details: `Deleted user: ${deletedUser.email}`,
                     entity: { type: 'user', id: id },
                     timestamp: serverTimestamp()
                 });
             }
         } catch (error: any) {
-            console.error("Delete User Error:", error);
-            toast({
+             console.error("Delete User Error:", error);
+             toast({
                 variant: 'destructive',
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the user.',
+            });
+             await logErrorToFirestore({
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
             });
         }
     };
 
     const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
         if (!adminUser || !firestore) return;
-        const userRef = doc(firestore, 'users', userId);
-        const updateData = { [field]: value };
+        const action = `user.update.${field}`;
+        const user = users?.find(u => u.id === userId);
         
         try {
-            await setDoc(userRef, updateData, { merge: true });
+            const userRef = doc(firestore, 'users', userId);
+            await setDoc(userRef, { [field]: value }, { merge: true });
             
-            if (field === 'status' && value === 'Active') {
-                const user = users?.find(u => u.id === userId);
-                toast({
-                    title: "User Activated",
-                    description: `${user?.displayName || 'The user'} has been activated.`,
-                });
-            }
-            const user = users?.find(u => u.id === userId);
+            toast({
+                title: "User Updated",
+                description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
+            });
+            
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
-                action: `user.update.${field}`,
-                details: `Updated field '${field}' to '${value}' for user ${user?.displayName || userId}`,
+                action,
+                details: `Updated field '${String(field)}' to '${value}' for user ${user?.displayName || userId}`,
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
             });
+
         } catch (error: any) {
             console.error("User Update Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Update Failed',
-                description: error.message || `Could not update the user's ${field}.`,
+                description: error.message || `Could not update the user's ${String(field)}.`,
+            });
+            await logErrorToFirestore({
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
             });
         }
     };
@@ -277,7 +322,7 @@ export default function UsersPage() {
                                                     <SelectValue placeholder="Assign department" />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
                                                     {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
@@ -288,7 +333,7 @@ export default function UsersPage() {
                                                     Active
                                                 </Badge>
                                             ) : (
-                                                 <Badge variant="secondary">{u.status}</Badge>
+                                                <Badge variant="secondary">{u.status}</Badge>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right">
@@ -342,8 +387,25 @@ export default function UsersPage() {
                                     <SelectValue placeholder="Assign a department" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
                                     {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="alt-email" className="text-right">Alt. Email</Label>
+                            <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} className="col-span-3" placeholder="optional.email@example.com" />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="notification-pref" className="text-right">Notify</Label>
+                            <Select value={notificationPreference} onValueChange={(value: 'Primary' | 'Alternate' | 'Both') => setNotificationPreference(value)}>
+                                <SelectTrigger id="notification-pref" className="col-span-3">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Primary">Primary Email Only</SelectItem>
+                                    <SelectItem value="Alternate">Alternate Email Only</SelectItem>
+                                    <SelectItem value="Both">Both Emails</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
