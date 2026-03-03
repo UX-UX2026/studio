@@ -53,6 +53,7 @@ type Department = {
     name: string;
     budgetHeaders?: string[];
     workflow?: WorkflowStage[];
+    budgetYear?: number;
 };
 
 type BudgetItem = {
@@ -210,14 +211,18 @@ export default function ProcurementQuickSubmitPage() {
     const summaryData = useMemo(() => {
         const procurementItems = draftItems;
         
-        if (!selectedDepartmentId || !selectedPeriod || !budgetItems) {
+        if (!selectedDepartmentId || !selectedPeriod || !budgetItems || !departments) {
             return { lines: [], totals: { procurement: 0, forecast: 0, variance: 0 } };
         }
 
-        const selectedDept = departments?.find(d => d.id === selectedDepartmentId);
+        const selectedDept = departments.find(d => d.id === selectedDepartmentId);
+        const procurementYear = new Date(selectedDate).getFullYear();
         
         const monthName = selectedPeriod.split(' ')[0];
-        const monthIndex = selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1;
+        const monthIndex = (selectedDept?.budgetYear === procurementYear)
+            ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
+            : -1;
+
 
         const allCategories = new Set([
             ...procurementItems.map(item => item.category),
@@ -257,7 +262,7 @@ export default function ProcurementQuickSubmitPage() {
 
         return { lines, totals };
 
-    }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
+    }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments, selectedDate]);
 
     const recurringItemsTotal = useMemo(() => {
         if (!recurringItems) return 0;

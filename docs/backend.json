@@ -298,6 +298,10 @@
             ]
           }
         },
+        "budgetYear": {
+          "type": "number",
+          "description": "The financial year for which the budget headers and imported data are valid."
+        },
         "budgetHeaders": {
           "type": "array",
           "description": "The headers for the monthly budget forecasts.",

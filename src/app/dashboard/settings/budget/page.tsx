@@ -31,6 +31,7 @@ type Department = {
     id: string;
     name: string;
     budgetHeaders?: string[];
+    budgetYear?: number;
 };
 
 type BudgetItem = {
@@ -57,6 +58,7 @@ export default function BudgetPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+    const [financialYear, setFinancialYear] = useState<number>(new Date().getFullYear());
 
     // State for mapping dialog
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
@@ -98,6 +100,13 @@ export default function BudgetPage() {
     const selectedDepartment = useMemo(() => {
         return departments?.find(d => d.id === selectedDepartmentId);
     }, [selectedDepartmentId, departments]);
+
+    useEffect(() => {
+        if (selectedDepartment) {
+            setFinancialYear(selectedDepartment.budgetYear || new Date().getFullYear());
+        }
+    }, [selectedDepartment]);
+
 
     const monthHeaders = useMemo(() => {
         return selectedDepartment?.budgetHeaders || [];
@@ -212,7 +221,7 @@ export default function BudgetPage() {
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
         link.href = url;
-        link.setAttribute('download', `budget_${selectedDepartmentName.replace(/ /g, '_')}.csv`);
+        link.setAttribute('download', `budget_${selectedDepartmentName.replace(/ /g, '_')}_${financialYear}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -272,6 +281,19 @@ export default function BudgetPage() {
         setIsImporting(true);
         const action = 'budget.import';
 
+        const parseNumericValue = (value: any): number => {
+            if (typeof value === 'number') {
+                return value;
+            }
+            if (typeof value === 'string') {
+                const cleanedValue = value.replace(/[^0-9.-]+/g, "");
+                if (cleanedValue === "") return 0;
+                const parsedValue = parseFloat(cleanedValue);
+                return isNaN(parsedValue) ? 0 : parsedValue;
+            }
+            return 0;
+        };
+
         try {
             const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
 
@@ -301,15 +323,11 @@ export default function BudgetPage() {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
                 if (!categoryValue) return null;
 
-                const forecasts = forecastIndices.map(index => {
-                    const forecastValueRaw = row[index];
-                    return typeof forecastValueRaw === 'number' ? forecastValueRaw : 0;
-                });
+                const forecasts = forecastIndices.map(index => parseNumericValue(row[index]));
                 
                 let yearTotalValue: number;
                 if (yearTotalIndex !== -1) {
-                    const yearTotalValueRaw = row[yearTotalIndex];
-                    yearTotalValue = typeof yearTotalValueRaw === 'number' ? yearTotalValueRaw : 0;
+                    yearTotalValue = parseNumericValue(row[yearTotalIndex]);
                 } else {
                     yearTotalValue = forecasts.reduce((sum, current) => sum + current, 0);
                 }
@@ -332,7 +350,7 @@ export default function BudgetPage() {
             });
 
             const deptRef = doc(firestore, 'departments', selectedDepartmentId);
-            batch.set(deptRef, { budgetHeaders: newMonthHeaders }, { merge: true });
+            batch.set(deptRef, { budgetHeaders: newMonthHeaders, budgetYear: financialYear }, { merge: true });
 
             const budgetsCollectionRef = collection(firestore, 'budgets');
             newItems.forEach(item => {
@@ -349,7 +367,7 @@ export default function BudgetPage() {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
-                details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName}.`,
+                details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName} for FY${financialYear}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
             });
@@ -400,17 +418,31 @@ export default function BudgetPage() {
                 <CardContent>
                     <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
                         <div className="flex items-center gap-4">
-                            <Label htmlFor="department-select">Department:</Label>
-                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                                <SelectTrigger className="w-[250px]" id="department-select">
-                                    <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {departments?.map(d => (
-                                        <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                             <div className="grid gap-1.5">
+                                <Label htmlFor="department-select">Department</Label>
+                                <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                                    <SelectTrigger className="w-[250px]" id="department-select">
+                                        <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {departments?.map(d => (
+                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="financial-year">Financial Year</Label>
+                                <Input
+                                    id="financial-year"
+                                    type="number"
+                                    value={financialYear}
+                                    onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
+                                    className="w-[120px]"
+                                    placeholder="e.g., 2026"
+                                    disabled={!selectedDepartmentId}
+                                />
+                            </div>
                         </div>
                         <div className="flex justify-end gap-2">
                             <Button variant="outline" onClick={handleImportClick} disabled={!selectedDepartmentId}>
@@ -430,7 +462,9 @@ export default function BudgetPage() {
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead className="font-bold min-w-[250px]">EXPENSES</TableHead>
+                                        <TableHead className="font-bold min-w-[250px]">
+                                            {`EXPENSES ${selectedDepartmentName ? `- FY ${selectedDepartment.budgetYear || 'N/A'}` : ''}`}
+                                        </TableHead>
                                         {monthHeaders.map(month => (
                                             <TableHead key={month} className="text-right">{month}</TableHead>
                                         ))}
@@ -453,7 +487,7 @@ export default function BudgetPage() {
                                     ) : (
                                         <TableRow>
                                             <TableCell colSpan={monthHeaders.length + 2} className="h-24 text-center text-muted-foreground">
-                                                No budget data found for this department. Use the 'Import Budget' button to add data.
+                                                No budget data found for this department and year. Use the 'Import Budget' button to add data.
                                             </TableCell>
                                         </TableRow>
                                     )}

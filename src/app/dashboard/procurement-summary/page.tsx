@@ -31,6 +31,7 @@ type Department = {
     id: string;
     name: string;
     budgetHeaders?: string[];
+    budgetYear?: number;
 };
 
 type BudgetItem = {
@@ -84,16 +85,20 @@ export default function ProcurementSummaryPage() {
 
 
     const summaryData = useMemo(() => {
-        if (!selectedDepartmentId || !selectedPeriod || !allRequests || !budgetItems) {
+        if (!selectedDepartmentId || !selectedPeriod || !allRequests || !budgetItems || !departments) {
             return { lines: [], totals: { procurement: 0, forecast: 0, variance: 0 } };
         }
 
         const selectedRequest = allRequests.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
-        const selectedDept = departments?.find(d => d.id === selectedDepartmentId);
+        const selectedDept = departments.find(d => d.id === selectedDepartmentId);
+        const procurementYear = new Date(selectedDate).getFullYear();
 
         const procurementItems = selectedRequest ? selectedRequest.items : [];
+        
         const monthName = selectedPeriod.split(' ')[0];
-        const monthIndex = selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1;
+        const monthIndex = (selectedDept?.budgetYear === procurementYear)
+            ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
+            : -1;
 
         const allCategories = new Set([
             ...procurementItems.map(item => item.category),
@@ -133,7 +138,7 @@ export default function ProcurementSummaryPage() {
 
         return { lines, totals };
 
-    }, [selectedDepartmentId, selectedPeriod, allRequests, budgetItems, departments]);
+    }, [selectedDepartmentId, selectedPeriod, allRequests, budgetItems, departments, selectedDate]);
     
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
