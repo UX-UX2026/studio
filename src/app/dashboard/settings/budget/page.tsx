@@ -70,8 +70,7 @@ export default function BudgetPage() {
         category: string;
         yearTotal: string;
         forecastStart: string;
-        forecastEnd: string;
-    }>({ category: '', yearTotal: '', forecastStart: '', forecastEnd: '' });
+    }>({ category: '', yearTotal: '', forecastStart: '' });
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -168,7 +167,7 @@ export default function BudgetPage() {
             return null;
         }
 
-        let initialMappings = { category: '', yearTotal: '', forecastStart: '', forecastEnd: '' };
+        let initialMappings = { category: '', yearTotal: '', forecastStart: '' };
         const forecastColumns: string[] = [];
 
         derivedHeaders.forEach(h => {
@@ -186,7 +185,6 @@ export default function BudgetPage() {
         
         if (forecastColumns.length > 0) {
             initialMappings.forecastStart = forecastColumns[0];
-            initialMappings.forecastEnd = forecastColumns[forecastColumns.length - 1];
         }
 
         setColumnMappings(initialMappings);
@@ -295,29 +293,30 @@ export default function BudgetPage() {
         };
 
         try {
-            const { category, yearTotal, forecastStart, forecastEnd } = columnMappings;
+            const { category, yearTotal, forecastStart } = columnMappings;
 
             const stringifiedHeaders = derivedHeaders.map(h => String(h));
 
             const categoryIndex = stringifiedHeaders.indexOf(category);
             const yearTotalIndex = yearTotal ? stringifiedHeaders.indexOf(yearTotal) : -1;
             const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
-            const forecastEndIndex = stringifiedHeaders.indexOf(forecastEnd);
+            
+            if (categoryIndex === -1 || forecastStartIndex === -1) {
+                throw new Error("Please map 'Category' and 'First Forecast Month' columns.");
+            }
 
-            if (categoryIndex === -1 || forecastStartIndex === -1 || forecastEndIndex === -1) {
-                throw new Error("Please map 'Category' and 'Forecast' columns.");
+            if (forecastStartIndex + 11 >= stringifiedHeaders.length) {
+                throw new Error("Not enough columns for a 12-month forecast starting from your selection. Please check your sheet or selection.");
             }
             
-            if (forecastStartIndex > forecastEndIndex) {
-                 throw new Error("The 'Forecast Start Column' must come before the 'Forecast End Column'.");
-            }
             if (startRow > endRow && endRow !== 0) {
                 throw new Error('Start row cannot be after end row.');
             }
 
+            const forecastEndIndex = forecastStartIndex + 11;
             const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
         
-            const forecastIndices = Array.from({ length: forecastEndIndex - forecastStartIndex + 1 }, (_, i) => forecastStartIndex + i);
+            const forecastIndices = Array.from({ length: 12 }, (_, i) => forecastStartIndex + i);
 
             const newItems: Omit<BudgetItem, 'id'>[] = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
@@ -417,11 +416,11 @@ export default function BudgetPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/50">
                              <div className="grid gap-1.5">
                                 <Label htmlFor="department-select">Department</Label>
                                 <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                                    <SelectTrigger className="w-[250px]" id="department-select">
+                                    <SelectTrigger className="w-[250px] bg-background" id="department-select">
                                         <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -438,7 +437,7 @@ export default function BudgetPage() {
                                     type="number"
                                     value={financialYear}
                                     onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
-                                    className="w-[120px]"
+                                    className="w-[120px] bg-background"
                                     placeholder="e.g., 2026"
                                     disabled={!selectedDepartmentId}
                                 />
@@ -528,13 +527,13 @@ export default function BudgetPage() {
 
                         <div className="p-4 border rounded-lg bg-muted/50">
                             <h3 className="font-semibold text-foreground mb-4">2. Map Columns</h3>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                <div className="space-y-2">
                                     <Label>Category / Line Item Column</Label>
                                     <Select value={columnMappings.category} onValueChange={v => setColumnMappings(m => ({ ...m, category: v }))}>
                                         <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                         <SelectContent>
-                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-cat-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -546,26 +545,17 @@ export default function BudgetPage() {
                                     >
                                         <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="--none--">None (will be calculated)</SelectItem>
-                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                            <SelectItem value="--none--">None (will be auto-calculated)</SelectItem>
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-total-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
                                  <div className="space-y-2">
-                                    <Label>Forecast Start Column</Label>
+                                    <Label>First Forecast Month Column</Label>
                                     <Select value={columnMappings.forecastStart} onValueChange={v => setColumnMappings(m => ({ ...m, forecastStart: v }))}>
-                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
+                                        <SelectTrigger><SelectValue placeholder="Select starting month..." /></SelectTrigger>
                                         <SelectContent>
-                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-2">
-                                    <Label>Forecast End Column</Label>
-                                    <Select value={columnMappings.forecastEnd} onValueChange={v => setColumnMappings(m => ({ ...m, forecastEnd: v }))}>
-                                        <SelectTrigger><SelectValue placeholder="Select column..." /></SelectTrigger>
-                                        <SelectContent>
-                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
+                                            {derivedHeaders.filter(h => String(h).trim() !== '').map((h, i) => <SelectItem key={`${h}-start-${i}`} value={String(h)}>{String(h)}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -583,14 +573,14 @@ export default function BudgetPage() {
                                                 if (!header && derivedHeaders.every(h => !h)) return null;
                                                 const stringifiedHeaders = derivedHeaders.map(h => String(h));
                                                 const forecastStartIndex = stringifiedHeaders.indexOf(columnMappings.forecastStart);
-                                                const forecastEndIndex = stringifiedHeaders.indexOf(columnMappings.forecastEnd);
+                                                const forecastEndIndex = forecastStartIndex !== -1 ? forecastStartIndex + 11 : -1;
                                                 
                                                 return (
                                                     <TableHead key={`${header}-${i}`} className={cn(
                                                         "whitespace-nowrap",
                                                         columnMappings.category === String(header) && "bg-blue-100 dark:bg-blue-900/50",
                                                         columnMappings.yearTotal === String(header) && "bg-green-100 dark:bg-green-900/50",
-                                                        forecastStartIndex !== -1 && forecastEndIndex !== -1 && i >= forecastStartIndex && i <= forecastEndIndex && "bg-yellow-100 dark:bg-yellow-900/50",
+                                                        forecastStartIndex !== -1 && i >= forecastStartIndex && i <= forecastEndIndex && "bg-yellow-100 dark:bg-yellow-900/50",
                                                     )}>{String(header) || `Column ${i+1}`}</TableHead>
                                                 )
                                             })}
@@ -621,4 +611,3 @@ export default function BudgetPage() {
     );
 }
 
-    
