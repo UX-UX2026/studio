@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { MessageSquare } from "lucide-react";
+import { BrainCircuit, Loader, MessageSquare } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +31,16 @@ import { useFirestore } from "@/firebase";
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  recommendFulfillmentStrategy,
+  type RecommendFulfillmentStrategyOutput,
+} from "@/ai/flows/recommend-fulfillment-strategy";
 
 
 type FulfillmentItem = ApprovalItem & {
@@ -66,6 +76,10 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   const [newComment, setNewComment] = useState("");
   const { toast } = useToast();
   const firestore = useFirestore();
+
+  const [isAiDialogOpen, setIsAiDialogOpen] = useState(false);
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiRecommendation, setAiRecommendation] = useState<RecommendFulfillmentStrategyOutput | null>(null);
 
   const canEdit = role === 'Procurement Assistant' || role === 'Procurement Officer' || role === 'Administrator';
 
@@ -147,6 +161,37 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
       setSelectedItem(null);
   };
 
+  const handleGetAiStrategy = async (item: FulfillmentItem) => {
+    if (!item.request) {
+        toast({
+            variant: "destructive",
+            title: "AI Strategy Failed",
+            description: "Not enough item information to generate a strategy.",
+        });
+        return;
+    }
+    
+    setSelectedItem(item);
+    setIsAiLoading(true);
+    setIsAiDialogOpen(true);
+    setAiRecommendation(null);
+
+    try {
+        const recommendation = await recommendFulfillmentStrategy(item.request);
+        setAiRecommendation(recommendation);
+    } catch (error: any) {
+        console.error("AI Strategy Error:", error);
+        toast({
+            variant: "destructive",
+            title: "AI Strategy Failed",
+            description: error.message || "Could not generate a fulfillment strategy.",
+        });
+        setIsAiDialogOpen(false); 
+    } finally {
+        setIsAiLoading(false);
+    }
+  };
+
   return (
     <>
       <div className="overflow-auto border rounded-lg">
@@ -205,12 +250,21 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                           getStatusBadge(item.fulfillmentStatus)
                       )}
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right space-x-2">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                           <Button size="icon" variant="outline" onClick={() => handleGetAiStrategy(item)} disabled={isAiLoading && selectedItem?.id === item.id}>
+                                {isAiLoading && selectedItem?.id === item.id ? <Loader className="h-4 w-4 animate-spin"/> : <BrainCircuit className="h-4 w-4 text-primary" />}
+                            </Button>
+                        </TooltipTrigger>
+                        <TooltipContent><p>Get AI Fulfillment Strategy</p></TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                     <Button
                       size="sm"
                       variant="outline"
                       onClick={() => handleOpenCommentDialog(item)}
-                      className="mr-2"
                     >
                       <MessageSquare className="h-4 w-4 mr-2" />
                       Comments ({item.fulfillmentComments?.length || 0})
@@ -248,6 +302,65 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               <DialogFooter className="border-t pt-4">
                   <Button variant="outline" onClick={() => setIsCommentDialogOpen(false)}>Cancel</Button>
                   <Button onClick={handleAddComment} disabled={!canEdit}>Save Comment</Button>
+              </DialogFooter>
+          </DialogContent>
+      </Dialog>
+
+      <Dialog open={isAiDialogOpen} onOpenChange={setIsAiDialogOpen}>
+          <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                      <BrainCircuit className="h-5 w-5 text-primary" />
+                      AI Fulfillment Strategy for "{selectedItem?.item}"
+                  </DialogTitle>
+                  <DialogDescription>
+                      AI-powered recommendations to optimize fulfillment for this item.
+                  </DialogDescription>
+              </DialogHeader>
+              <div className="py-4 space-y-6 max-h-[60vh] overflow-y-auto pr-4">
+                  {isAiLoading ? (
+                      <div className="flex items-center justify-center h-48">
+                          <Loader className="h-8 w-8 animate-spin" />
+                          <p className="ml-4 text-muted-foreground">Analyzing and generating strategy...</p>
+                      </div>
+                  ) : aiRecommendation ? (
+                      <div className="space-y-4 text-sm">
+                          <div>
+                              <h4 className="font-semibold mb-1">Strategy Summary</h4>
+                              <p className="text-muted-foreground bg-muted p-3 rounded-md">{aiRecommendation.strategySummary}</p>
+                          </div>
+                          <div>
+                              <h4 className="font-semibold mb-2">Suggested Vendors</h4>
+                              <div className="space-y-2">
+                                  {aiRecommendation.suggestedVendors.map((vendor, index) => (
+                                      <div key={index} className="p-3 border rounded-md">
+                                          <p className="font-semibold">{vendor.name}</p>
+                                          <p className="text-muted-foreground text-xs">{vendor.reasoning}</p>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 pt-2">
+                              <div>
+                                  <h4 className="font-semibold mb-1">Estimated Lead Time</h4>
+                                  <p className="font-bold text-lg">{aiRecommendation.estimatedLeadTimeDays} days</p>
+                              </div>
+                              <div>
+                                  <h4 className="font-semibold mb-1">Cost-Saving Options</h4>
+                                  <ul className="list-disc list-inside text-muted-foreground space-y-1">
+                                      {aiRecommendation.costSavingOptions.map((option, index) => <li key={index}>{option}</li>)}
+                                  </ul>
+                              </div>
+                          </div>
+                      </div>
+                  ) : (
+                      <div className="flex items-center justify-center h-48">
+                          <p className="text-muted-foreground">No recommendation available.</p>
+                      </div>
+                  )}
+              </div>
+              <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsAiDialogOpen(false)}>Close</Button>
               </DialogFooter>
           </DialogContent>
       </Dialog>
