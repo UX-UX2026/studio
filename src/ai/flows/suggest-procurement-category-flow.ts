@@ -8,7 +8,7 @@
  */
 
 import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
 
 const SuggestProcurementCategoryInputSchema = z.object({
   itemDescription: z.string().describe('The description of the procurement item.').min(1),
