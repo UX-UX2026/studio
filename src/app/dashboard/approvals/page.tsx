@@ -93,6 +93,7 @@ export default function ApprovalsPage() {
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
     const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
+    const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
     const loading = userLoading || approvalsLoading || rolesLoading;
@@ -117,6 +118,18 @@ export default function ApprovalsPage() {
     }, [filteredRequests, selectedRequestId]);
 
     const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+
+    const canApprove = useMemo(() => {
+        if (!activeRequest || !role) return false;
+        const { status } = activeRequest;
+        
+        if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
+        if (role === 'Manager' && (status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
+        if (role === 'Executive' && (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
+        if (role === 'Procurement Officer' && status === 'Approved') return true;
+        
+        return false;
+    }, [activeRequest, role]);
 
 
     const approvalSummary = useMemo(() => {
@@ -277,13 +290,53 @@ export default function ApprovalsPage() {
     };
     
     const handleReject = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
-        setIsSubmittingAction(true);
+        setNewComment('');
+        setIsRejectDialogOpen(true);
+    };
 
-        const newStatus: ApprovalRequest['status'] = 'Rejected';
+    const handleConfirmReject = async () => {
+        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
         
+        if (!newComment.trim()) {
+            toast({
+                variant: "destructive",
+                title: "Rejection Reason Required",
+                description: "Please provide a reason for rejecting this request.",
+            });
+            return;
+        }
+
+        setIsSubmittingAction(true);
+        const newStatus: ApprovalRequest['status'] = 'Rejected';
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let newTimeline = [...activeRequest.timeline];
+        const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
+        if (currentStepIndex !== -1) {
+            newTimeline[currentStepIndex] = {
+                ...newTimeline[currentStepIndex],
+                status: 'rejected',
+                actor: user.displayName || 'System',
+                date: currentDate,
+            };
+        }
+        
+        const commentData = {
+            actor: user.displayName || "User",
+            actorId: user.uid,
+            text: `REJECTED: ${newComment}`,
+            timestamp: new Date().toLocaleString("en-GB", {
+                dateStyle: "medium",
+                timeStyle: "short",
+            }),
+        };
+
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
-        const updateData = { status: newStatus };
+        const updateData = { 
+            status: newStatus, 
+            timeline: newTimeline,
+            comments: arrayUnion(commentData)
+        };
         const action = 'request.reject';
 
         try {
@@ -292,6 +345,8 @@ export default function ApprovalsPage() {
                 title: "Request Rejected",
                 description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
             });
+            setNewComment('');
+            setIsRejectDialogOpen(false);
 
             const auditLogData = {
                 userId: user.uid,
@@ -543,8 +598,12 @@ export default function ApprovalsPage() {
                                                 <ul className="space-y-4">
                                                     {activeRequest.timeline.map(step => (
                                                         <li key={step.stage} className="flex items-center gap-4">
-                                                            <div className={`flex items-center justify-center h-10 w-10 rounded-full ${step.status === 'completed' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                                                                {step.status === 'completed' ? <Check className="h-5 w-5" /> : <User className="h-5 w-5"/>}
+                                                            <div className={cn('flex items-center justify-center h-10 w-10 rounded-full', {
+                                                                'bg-primary text-primary-foreground': step.status === 'completed',
+                                                                'bg-destructive text-destructive-foreground': step.status === 'rejected',
+                                                                'bg-muted text-muted-foreground': step.status === 'pending' || step.status === 'waiting'
+                                                            })}>
+                                                                {step.status === 'completed' ? <Check className="h-5 w-5" /> : step.status === 'rejected' ? <X className="h-5 w-5" /> : <User className="h-5 w-5"/>}
                                                             </div>
                                                             <div className="flex-1">
                                                                 <p className="font-semibold">{step.stage}</p>
@@ -552,7 +611,11 @@ export default function ApprovalsPage() {
                                                             </div>
                                                             <div className="text-right">
                                                                 <p className="text-sm font-medium">{step.date}</p>
-                                                                <p className={`text-xs font-semibold capitalize ${step.status === 'completed' ? 'text-green-500' : 'text-orange-500'}`}>{step.status}</p>
+                                                                <p className={cn('text-xs font-semibold capitalize', {
+                                                                    'text-green-500': step.status === 'completed',
+                                                                    'text-destructive': step.status === 'rejected',
+                                                                    'text-orange-500': step.status === 'pending',
+                                                                })}>{step.status}</p>
                                                             </div>
                                                         </li>
                                                     ))}
@@ -626,7 +689,7 @@ export default function ApprovalsPage() {
                                         <CardFooter className="flex justify-end gap-2 border-t pt-6">
                                             <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
                                             <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                            <Button onClick={handleApprove} disabled={isSubmittingAction}>
+                                            <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
                                                 {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
                                                 <Check className="mr-2 h-4 w-4" />
                                                 {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
@@ -668,6 +731,32 @@ export default function ApprovalsPage() {
                     <Button onClick={handleRaiseQuery} disabled={isSubmittingAction}>
                         {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
                         Submit Query
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Reject Request</DialogTitle>
+                    <DialogDescription>
+                        Please provide a reason for rejecting this request. This will be added to the communication log.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-4">
+                    <Textarea 
+                        placeholder="Enter rejection reason here..." 
+                        value={newComment} 
+                        onChange={(e) => setNewComment(e.target.value)}
+                        rows={5}
+                    />
+                </div>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => { setIsRejectDialogOpen(false); setNewComment(''); }}>Cancel</Button>
+                    <Button variant="destructive" onClick={handleConfirmReject} disabled={isSubmittingAction}>
+                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                        Confirm Rejection
                     </Button>
                 </DialogFooter>
             </DialogContent>

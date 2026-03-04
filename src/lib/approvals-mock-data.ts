@@ -22,7 +22,7 @@ export type ApprovalRequest = {
     status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
     submittedBy: string;
     submittedById: string;
-    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' }[];
+    timeline: { stage: string; actor: string; date: string | null; status: 'completed' | 'pending' | 'waiting' | 'rejected' }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: ApprovalItem[];
     createdAt?: { seconds: number, nanoseconds: number };
