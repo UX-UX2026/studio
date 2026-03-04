@@ -42,8 +42,8 @@ const prompt = ai.definePrompt({
   name: 'recommendFulfillmentStrategyPrompt',
   input: {schema: RecommendFulfillmentStrategyInputSchema},
   output: {schema: RecommendFulfillmentStrategyOutputSchema},
-  prompt: `You are an expert procurement officer tasked with recommending optimal fulfillment strategies for a procurement request.
-Analyze the provided item details and historical data to suggest suitable vendors, estimated lead times, and cost-saving opportunities.
+  prompt: `You are an expert procurement officer for an organization based in Port Elizabeth (Gqeberha), South Africa. Your task is to recommend optimal fulfillment strategies for a procurement request.
+Analyze the provided item details and historical data to suggest suitable vendors, estimated lead times, and cost-saving opportunities. Prioritize local vendors in the Port Elizabeth area where it makes sense for logistics, support, and cost.
 
 Item Name: {{{itemName}}}
 Item Description: {{{itemDescription}}}
@@ -64,7 +64,7 @@ Consider these historical insights when formulating your recommendations.
 
 Please provide:
 1. A concise strategy summary.
-2. A list of 2-3 suggested vendors with a brief reasoning for each.
+2. A list of 2-3 suggested vendors with a brief reasoning for each. If suggesting non-local vendors, explain why.
 3. An estimated lead time in days.
 4. A few potential cost-saving options.
 `
