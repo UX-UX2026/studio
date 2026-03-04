@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -20,6 +21,7 @@ import {
   Workflow,
   Building,
   Shield,
+  CalendarClock,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -59,13 +61,14 @@ const allLinks = [
   { 
     label: 'Settings', 
     icon: Settings, 
-    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog', 'settings:errorlog'],
+    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog', 'settings:errorlog', 'settings:procurement-periods'],
     subLinks: [
         { href: '/dashboard/settings', label: 'General', icon: Settings, permission: 'settings:general', iconClass: "text-gray-500" },
         { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow', iconClass: "text-blue-500" },
         { href: '/dashboard/settings/departments', label: 'Departments', icon: Building, permission: 'settings:departments', iconClass: "text-orange-500" },
         { href: '/dashboard/settings/roles', label: 'Roles', icon: Shield, permission: 'settings:roles', iconClass: "text-purple-500" },
         { href: '/dashboard/settings/budget', label: 'Budget', icon: Banknote, permission: 'settings:budget', iconClass: "text-green-500" },
+        { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', icon: CalendarClock, permission: 'settings:procurement-periods', iconClass: "text-teal-500" },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', icon: History, permission: 'settings:auditlog', iconClass: "text-indigo-500" },
         { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog', iconClass: "text-yellow-600" },
         { href: '/dashboard/settings/database-log', label: 'Database Test', icon: DatabaseZap, permission: 'settings:errorlog', iconClass: "text-red-500" },
@@ -172,3 +175,5 @@ export function NavLinks({ role }: { role: UserRole }) {
     </SidebarMenu>
   );
 }
+
+    

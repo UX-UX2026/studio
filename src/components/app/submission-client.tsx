@@ -20,11 +20,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Upload, Download } from "lucide-react";
+import { Lock, Plus, Trash2, Upload, Download, Paperclip } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { procurementCategories } from "@/lib/procurement-categories";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
 
 type Item = {
   id: number | string;
@@ -188,7 +195,7 @@ export function SubmissionClient({
               <Lock className="h-5 w-5"/>
               <div className="text-sm font-medium">
                   <p>This submission is locked.</p>
-                  <p className="text-xs">It has been submitted for approval and can no longer be edited.</p>
+                  <p className="text-xs">It may be in the approval process or administratively locked.</p>
               </div>
           </div>
       )}
@@ -306,13 +313,27 @@ export function SubmissionClient({
             Add Manual Item
             </Button>
             <Button variant="outline" onClick={handleImportClick} disabled={isLocked}>
-                <Upload className="h-4 w-4 mr-2" /> Import
+                <Upload className="h-4 w-4 mr-2" /> Import from CSV
             </Button>
-            <Button variant="outline" onClick={handleExport} disabled={isLocked}>
-                <Download className="h-4 w-4 mr-2" /> Export
-            </Button>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span tabIndex={0}>
+                            <Button variant="outline" disabled>
+                                <Paperclip className="h-4 w-4 mr-2" /> Attach Files
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                        <p>File attachment integration (e.g., Google Drive) is planned for a future update.</p>
+                    </TooltipContent>
+                </Tooltip>
+            </TooltipProvider>
+
         </div>
       </div>
     </div>
   );
 }
+
+    

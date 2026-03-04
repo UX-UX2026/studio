@@ -308,6 +308,19 @@
           "items": {
             "type": "string"
           }
+        },
+        "periodSettings": {
+          "type": "object",
+          "description": "Settings for each procurement period, like 'Open' or 'Locked'.",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": ["Open", "Locked"]
+              }
+            }
+          }
         }
       },
       "required": [
@@ -344,7 +357,8 @@
               "settings:roles",
               "settings:workflow",
               "settings:auditlog",
-              "settings:errorlog"
+              "settings:errorlog",
+              "settings:procurement-periods"
             ]
           }
         }
@@ -640,3 +654,5 @@
     }
   }
 }
+
+    

@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -39,6 +39,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building, iconClass: "text-orange-500" },
         { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield, iconClass: "text-purple-500" },
         { href: '/dashboard/settings/budget', label: 'Budget Integration', description: 'Import, view, and manage budget data from an external sheet.', icon: Banknote, iconClass: "text-green-500" },
+        { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', description: 'Lock and unlock submission periods for each department.', icon: CalendarClock, iconClass: "text-teal-500" },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A log of all significant write operations performed on the database.', icon: History, iconClass: "text-indigo-500" },
         { href: '/dashboard/settings/error-log', label: 'Error Log', description: 'Review client-side errors captured from user interactions.', icon: AlertTriangle, iconClass: "text-yellow-600" },
         { href: '/dashboard/settings/database-log', label: 'Database Test', description: 'Run a direct write test to verify the connection to Firestore.', icon: DatabaseZap, iconClass: "text-red-500" },
@@ -84,3 +85,5 @@ export default function SettingsPage() {
         </div>
     );
 }
+
+    

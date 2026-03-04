@@ -47,6 +47,7 @@ const allPermissions = [
     { id: 'settings:budget', label: 'Manage Budgets' },
     { id: 'settings:roles', label: 'Manage Roles & Permissions' },
     { id: 'settings:workflow', label: 'Manage Approval Workflows' },
+    { id: 'settings:procurement-periods', label: 'Manage Procurement Periods'},
     { id: 'settings:auditlog', label: 'View Audit Log' },
     { id: 'settings:errorlog', label: 'View Error Log' },
 ];
@@ -303,3 +304,5 @@ export default function RolesPage() {
         </>
     );
 }
+
+    

@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon, Lock } from "lucide-react";
+import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon, Lock, Globe } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
@@ -54,6 +54,11 @@ type Department = {
     budgetHeaders?: string[];
     workflow?: WorkflowStage[];
     budgetYear?: number;
+    periodSettings?: {
+        [period: string]: {
+            status: 'Open' | 'Locked';
+        }
+    }
 };
 
 type BudgetItem = {
@@ -186,7 +191,16 @@ export default function ProcurementQuickSubmitPage() {
         ).sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
     }, [allRequests, selectedDepartmentId, departments]);
 
-    const isLocked = useMemo(() => {
+    const isPeriodAdministrativelyLocked = useMemo(() => {
+        if (role === 'Administrator') return false; // Admins can bypass this lock
+        const dept = departments?.find(d => d.id === selectedDepartmentId);
+        if (!dept) return true; // Default to locked if department not found
+        const periodSetting = dept.periodSettings?.[selectedPeriod];
+        // Default to locked if not explicitly opened by an admin
+        return periodSetting?.status !== 'Open';
+    }, [selectedDepartmentId, selectedPeriod, departments, role]);
+
+    const isLockedByWorkflow = useMemo(() => {
         if (!selectedDepartmentId) return false;
         const periodStatusInfo = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
 
@@ -206,6 +220,8 @@ export default function ProcurementQuickSubmitPage() {
 
         return false;
     }, [selectedDepartmentId, selectedPeriod, allRequests, role]);
+
+    const isLocked = isPeriodAdministrativelyLocked || isLockedByWorkflow;
 
     // This summary now uses the live draftItems state
     const summaryData = useMemo(() => {
@@ -424,6 +440,16 @@ export default function ProcurementQuickSubmitPage() {
                 <Loader className="h-8 w-8 animate-spin" />
             </div>
         );
+    }
+
+    const getLockMessage = () => {
+        if (isPeriodAdministrativelyLocked) {
+            return "This period is locked by an administrator. Submissions are not currently being accepted.";
+        }
+        if (isLockedByWorkflow) {
+            return "This submission is locked because it is already in the approval process.";
+        }
+        return "This submission is locked.";
     }
 
   return (
@@ -658,25 +684,25 @@ export default function ProcurementQuickSubmitPage() {
             </CardHeader>
             <CardFooter className="flex justify-between items-center">
                  {isLocked ? (
-                    <div className="flex items-center gap-3 text-yellow-800">
-                        <Lock className="h-5 w-5"/>
+                    <div className={cn("flex items-center gap-3", isPeriodAdministrativelyLocked ? "text-red-700" : "text-yellow-800")}>
+                        {isPeriodAdministrativelyLocked ? <Globe className="h-5 w-5"/> : <Lock className="h-5 w-5"/>}
                         <div className="text-sm font-medium">
-                            <p>This submission is locked because it is already in the approval process.</p>
+                            <p>{getLockMessage()}</p>
                         </div>
                     </div>
                 ) : (
                     <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
                  )}
                 <div className="flex gap-3">
-                    {isLocked ? (
+                    {isLockedByWorkflow ? (
                         <Button onClick={handleRequestEdit}>Request Edit</Button>
                     ) : (
                         <>
-                            <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving}>
+                            <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving || isLocked}>
                                 {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
                                 Save as Draft
                             </Button>
-                            <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving}>
+                            <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving || isLocked}>
                                 {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
                                 Submit For Approval
                             </Button>
@@ -689,5 +715,7 @@ export default function ProcurementQuickSubmitPage() {
     </div>
   );
 }
+
+    
 
     
