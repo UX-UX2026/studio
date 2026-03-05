@@ -647,26 +647,34 @@ export default function ApprovalsPage() {
                                                 <TabsTrigger value="communication">Communication Log</TabsTrigger>
                                             </TabsList>
                                             <TabsContent value="workflow" className="pt-6">
-                                                <ul className="space-y-4">
-                                                    {activeRequest.timeline.map(step => (
-                                                        <li key={step.stage} className="flex items-center gap-4">
-                                                            <div className={cn('flex items-center justify-center h-10 w-10 rounded-full', {
-                                                                'bg-primary text-primary-foreground': step.status === 'completed',
-                                                                'bg-destructive text-destructive-foreground': step.status === 'rejected',
-                                                                'bg-muted text-muted-foreground': step.status === 'pending' || step.status === 'waiting'
-                                                            })}>
+                                                <ul className="space-y-0">
+                                                    {activeRequest.timeline.map((step, index) => (
+                                                        <li key={step.stage} className="relative flex items-start gap-4 pb-8">
+                                                            {index < activeRequest.timeline.length - 1 && (
+                                                                <div className="absolute left-5 top-5 -ml-px mt-0.5 h-full w-0.5 bg-border" />
+                                                            )}
+                                                            <div className={cn(
+                                                                'relative z-10 flex h-10 w-10 items-center justify-center rounded-full',
+                                                                {
+                                                                    'bg-primary text-primary-foreground': step.status === 'completed',
+                                                                    'bg-destructive text-destructive-foreground': step.status === 'rejected',
+                                                                    'border-2 border-orange-500 bg-background text-orange-500': step.status === 'pending',
+                                                                    'border-2 border-border bg-background text-muted-foreground': step.status === 'waiting'
+                                                                }
+                                                            )}>
                                                                 {step.status === 'completed' ? <Check className="h-5 w-5" /> : step.status === 'rejected' ? <X className="h-5 w-5" /> : <User className="h-5 w-5"/>}
                                                             </div>
-                                                            <div className="flex-1">
+                                                            <div className="flex-1 pt-1.5">
                                                                 <p className="font-semibold">{step.stage}</p>
                                                                 <p className="text-sm text-muted-foreground">{step.actor}</p>
                                                             </div>
-                                                            <div className="text-right">
+                                                            <div className="text-right pt-1.5">
                                                                 <p className="text-sm font-medium">{step.date}</p>
                                                                 <p className={cn('text-xs font-semibold capitalize', {
-                                                                    'text-green-500': step.status === 'completed',
+                                                                    'text-primary': step.status === 'completed',
                                                                     'text-destructive': step.status === 'rejected',
                                                                     'text-orange-500': step.status === 'pending',
+                                                                    'text-muted-foreground': step.status === 'waiting'
                                                                 })}>{step.status}</p>
                                                             </div>
                                                         </li>
