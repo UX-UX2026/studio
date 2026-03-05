@@ -314,22 +314,22 @@ export default function UsersPage() {
     return (
         <>
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Shield className="h-6 w-6 text-primary" />
-                        User & Permission Management
-                    </CardTitle>
-                    <CardDescription>
-                        Manage roles and departments for existing users. New users are automatically assigned a 'Requester' role upon their first sign-in.
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Shield className="h-6 w-6 text-primary" />
+                            User & Permission Management
+                        </CardTitle>
+                        <CardDescription>
+                            Manage roles and departments for existing users. New users are automatically assigned a 'Requester' role upon their first sign-in.
+                        </CardDescription>
+                    </div>
+                    <Button onClick={openAddDialog}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add User
+                    </Button>
                 </CardHeader>
                 <CardContent>
-                    <div className="mb-4 flex justify-end">
-                        <Button onClick={openAddDialog}>
-                            <Plus className="h-4 w-4 mr-2" />
-                            Add User
-                        </Button>
-                    </div>
                     <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
