@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, setDoc, serverTimestamp, addDoc } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, addDoc, writeBatch } from "firebase/firestore";
 import { format, addMonths } from "date-fns";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
@@ -36,7 +36,7 @@ export default function ProcurementPeriodsPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
+    const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('__all__');
     const [periodSettings, setPeriodSettings] = useState<Department['periodSettings']>({});
     const [isSaving, setIsSaving] = useState(false);
 
@@ -48,19 +48,6 @@ export default function ProcurementPeriodsPage() {
         }
     }, [user, role, userLoading, router]);
 
-    useEffect(() => {
-        if (!selectedDepartmentId && departments && departments.length > 0) {
-            setSelectedDepartmentId(departments[0].id);
-        }
-    }, [departments, selectedDepartmentId]);
-
-    useEffect(() => {
-        if (selectedDepartmentId) {
-            const selectedDept = departments?.find(d => d.id === selectedDepartmentId);
-            setPeriodSettings(selectedDept?.periodSettings || {});
-        }
-    }, [selectedDepartmentId, departments]);
-
     const generatedPeriods = useMemo(() => {
         const periods = [];
         const now = new Date();
@@ -69,6 +56,22 @@ export default function ProcurementPeriodsPage() {
         }
         return periods;
     }, []);
+
+    useEffect(() => {
+        if (selectedDepartmentId === '__all__') {
+            const allSettings: Department['periodSettings'] = {};
+            if (departments && departments.length > 0) {
+                generatedPeriods.forEach(period => {
+                    const isAllOpen = departments.every(d => d.periodSettings?.[period]?.status === 'Open');
+                    allSettings[period] = { status: isAllOpen ? 'Open' : 'Locked' };
+                });
+            }
+            setPeriodSettings(allSettings);
+        } else {
+            const selectedDept = departments?.find(d => d.id === selectedDepartmentId);
+            setPeriodSettings(selectedDept?.periodSettings || {});
+        }
+    }, [selectedDepartmentId, departments, generatedPeriods]);
 
     const handleStatusChange = (period: string, isOpen: boolean) => {
         setPeriodSettings(currentSettings => ({
@@ -87,25 +90,51 @@ export default function ProcurementPeriodsPage() {
 
         setIsSaving(true);
         const action = 'procurement_periods.update';
-        const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
 
         try {
-            await setDoc(departmentRef, { periodSettings }, { merge: true });
-            
-            toast({
-                title: "Settings Saved",
-                description: `Procurement period settings have been updated for ${departments?.find(d => d.id === selectedDepartmentId)?.name}.`,
-            });
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: user.displayName,
-                action: action,
-                details: `Updated procurement period settings.`,
-                entity: { type: 'department', id: selectedDepartmentId },
-                timestamp: serverTimestamp()
-            });
+            if (selectedDepartmentId === '__all__') {
+                if (!departments) throw new Error("Department list not loaded.");
 
+                const batch = writeBatch(firestore);
+                departments.forEach(dept => {
+                    const deptRef = doc(firestore, 'departments', dept.id);
+                    const newDeptSettings = { ...dept.periodSettings, ...periodSettings };
+                    batch.set(deptRef, { periodSettings: newDeptSettings }, { merge: true });
+                });
+
+                await batch.commit();
+
+                toast({
+                    title: "Settings Saved",
+                    description: `Procurement period settings have been updated for all departments.`,
+                });
+                
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: action,
+                    details: `Updated procurement period settings for ALL departments.`,
+                    entity: { type: 'system', id: 'all_departments' },
+                    timestamp: serverTimestamp()
+                });
+            } else {
+                const departmentRef = doc(firestore, 'departments', selectedDepartmentId);
+                await setDoc(departmentRef, { periodSettings }, { merge: true });
+                
+                toast({
+                    title: "Settings Saved",
+                    description: `Procurement period settings have been updated for ${departments?.find(d => d.id === selectedDepartmentId)?.name}.`,
+                });
+                
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid,
+                    userName: user.displayName,
+                    action: action,
+                    details: `Updated procurement period settings.`,
+                    entity: { type: 'department', id: selectedDepartmentId },
+                    timestamp: serverTimestamp()
+                });
+            }
         } catch (error: any) {
             console.error("Save Period Settings Error:", error);
             toast({
@@ -155,6 +184,7 @@ export default function ProcurementPeriodsPage() {
                                 <SelectValue placeholder="Select a department..." />
                             </SelectTrigger>
                             <SelectContent>
+                                <SelectItem value="__all__">All Departments</SelectItem>
                                 {departments?.map(d => (
                                     <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
                                 ))}
@@ -167,7 +197,7 @@ export default function ProcurementPeriodsPage() {
                             <div>
                                 <h4 className="font-semibold">How this works</h4>
                                 <p className="text-sm">
-                                    When a period is set to "Open", users in that department can create and submit procurement requests for that month. When "Locked", they cannot.
+                                    When a period is set to "Open", users in that department can create and submit procurement requests for that month. When "Locked", they cannot. Selecting "All Departments" allows you to apply a setting across all departments at once.
                                 </p>
                             </div>
                         </div>
@@ -208,5 +238,3 @@ export default function ProcurementPeriodsPage() {
         </Card>
     );
 }
-
-    

@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Calendar as CalendarIcon, Lock, Globe } from "lucide-react";
+import { Loader, AlertTriangle, Globe } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
@@ -14,14 +14,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { SubmissionClient } from "@/components/app/submission-client";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -89,12 +86,12 @@ export default function ProcurementQuickSubmitPage() {
     const { toast } = useToast();
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date(new Date().getFullYear() + 2, 1, 1));
-    const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
+    const [selectedPeriod, setSelectedPeriod] = useState<string>('');
     
     const [draftItems, setDraftItems] = useState<Item[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
+    const [openPeriods, setOpenPeriods] = useState<string[]>([]);
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -127,9 +124,33 @@ export default function ProcurementQuickSubmitPage() {
         }
     }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
 
+    // Update the list of open periods when the department changes
+    useEffect(() => {
+        if (selectedDepartmentId && departments) {
+            const dept = departments.find(d => d.id === selectedDepartmentId);
+            if (dept && dept.periodSettings) {
+                const periods = Object.entries(dept.periodSettings)
+                    .filter(([, settings]) => settings.status === 'Open')
+                    .map(([period]) => period);
+                setOpenPeriods(periods);
+                
+                // If the previously selected period isn't open for the new dept, reset it
+                if (!periods.includes(selectedPeriod)) {
+                    setSelectedPeriod(periods[0] || '');
+                }
+            } else {
+                setOpenPeriods([]);
+                setSelectedPeriod('');
+            }
+        }
+    }, [selectedDepartmentId, departments, selectedPeriod]);
+
     // Effect to initialize or load a draft
     useEffect(() => {
-        if (requestsLoading || recurringLoading) return;
+        if (requestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
+            if (!selectedPeriod) setDraftItems([]);
+            return;
+        };
 
         const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
 
@@ -156,17 +177,8 @@ export default function ProcurementQuickSubmitPage() {
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
 
-    const isPeriodAdministrativelyLocked = useMemo(() => {
-        if (role === 'Administrator') return false; // Admins can bypass this lock
-        const dept = departments?.find(d => d.id === selectedDepartmentId);
-        if (!dept) return true; // Default to locked if department not found
-        const periodSetting = dept.periodSettings?.[selectedPeriod];
-        // Default to locked if not explicitly opened by an admin
-        return periodSetting?.status !== 'Open';
-    }, [selectedDepartmentId, selectedPeriod, departments, role]);
-
     const isLockedByWorkflow = useMemo(() => {
-        if (!selectedDepartmentId) return false;
+        if (!selectedDepartmentId || !selectedPeriod) return false;
         const periodStatusInfo = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
 
         if (!periodStatusInfo) return false;
@@ -186,7 +198,7 @@ export default function ProcurementQuickSubmitPage() {
         return false;
     }, [selectedDepartmentId, selectedPeriod, allRequests, role]);
 
-    const isLocked = isPeriodAdministrativelyLocked || isLockedByWorkflow;
+    const isLocked = isLockedByWorkflow || !selectedPeriod;
 
     const summaryData = useMemo(() => {
         const procurementItems = draftItems;
@@ -196,7 +208,7 @@ export default function ProcurementQuickSubmitPage() {
         }
 
         const selectedDept = departments.find(d => d.id === selectedDepartmentId);
-        const procurementYear = new Date(selectedDate).getFullYear();
+        const procurementYear = new Date(selectedPeriod).getFullYear();
         
         const monthName = selectedPeriod.split(' ')[0];
         const monthIndex = (selectedDept?.budgetYear === procurementYear)
@@ -240,7 +252,7 @@ export default function ProcurementQuickSubmitPage() {
 
         return { lines, totals };
 
-    }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments, selectedDate]);
+    }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
 
     const handleRequestEdit = () => {
         toast({
@@ -399,23 +411,13 @@ export default function ProcurementQuickSubmitPage() {
         );
     }
 
-    const getLockMessage = () => {
-        if (isPeriodAdministrativelyLocked) {
-            return "This period is locked by an administrator. Submissions are not currently being accepted.";
-        }
-        if (isLockedByWorkflow) {
-            return "This submission is locked because it is already in the approval process.";
-        }
-        return "This submission is locked.";
-    }
-
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
                     <CardTitle>Procurement Quick Submit</CardTitle>
                     <CardDescription>
-                        A consolidated view for managing your procurement request. Select a department and period to begin.
+                        A consolidated view for managing your procurement request. Select a department and an open period to begin.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -437,30 +439,18 @@ export default function ProcurementQuickSubmitPage() {
                         </div>
                         <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
                             <Label htmlFor="period">Procurement Period</Label>
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant={"outline"}
-                                        className={cn(
-                                            "w-full justify-start text-left font-normal",
-                                            !selectedDate && "text-muted-foreground"
-                                        )}
-                                    >
-                                        <CalendarIcon className="mr-2 h-4 w-4" />
-                                        {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0">
-                                    <Calendar
-                                        mode="single"
-                                        selected={selectedDate}
-                                        onSelect={(date) => {
-                                            if(date) setSelectedDate(date)
-                                        }}
-                                        initialFocus
-                                    />
-                                </PopoverContent>
-                            </Popover>
+                             <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}>
+                                <SelectTrigger id="period">
+                                    <SelectValue placeholder="Select an open period..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {openPeriods.length > 0 ? (
+                                        openPeriods.map(period => <SelectItem key={period} value={period}>{period}</SelectItem>)
+                                    ) : (
+                                        <div className="p-4 text-sm text-muted-foreground">No open periods found for this department.</div>
+                                    )}
+                                </SelectContent>
+                            </Select>
                         </div>
                     </div>
                 </CardContent>
@@ -550,10 +540,10 @@ export default function ProcurementQuickSubmitPage() {
                 </Tabs>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
                     {isLocked ? (
-                        <div className={cn("flex items-center gap-3", isPeriodAdministrativelyLocked ? "text-red-700" : "text-yellow-800")}>
-                            {isPeriodAdministrativelyLocked ? <Globe className="h-5 w-5"/> : <Lock className="h-5 w-5"/>}
+                        <div className="flex items-center gap-3 text-yellow-800">
+                             <Globe className="h-5 w-5"/>
                             <div className="text-sm font-medium">
-                                <p>{getLockMessage()}</p>
+                                <p>{isLockedByWorkflow ? "This submission is locked as it is already in the approval pipeline." : "Select an open period to begin."}</p>
                             </div>
                         </div>
                     ) : (
