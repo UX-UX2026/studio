@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Loader, AlertTriangle, Globe, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
@@ -52,6 +52,12 @@ type Department = {
         }
     }
 };
+
+type AppMetadata = {
+    id: string;
+    adminIsSetUp?: boolean;
+    limitToOneSubmissionPerPeriod?: boolean;
+}
 
 type BudgetItem = {
     id: string;
@@ -122,6 +128,9 @@ export default function ProcurementQuickSubmitPage() {
 
     const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), where('active', '==', true)), [firestore]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
+    
+    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
     // Handle incoming query params to resume a draft
     useEffect(() => {
@@ -326,14 +335,14 @@ export default function ProcurementQuickSubmitPage() {
             req.departmentId === selectedDepartmentId && 
             req.period === selectedPeriod &&
             req.id !== editingRequestId &&
-            !['Draft', 'Completed', 'Rejected', 'Queries Raised'].includes(req.status)
+            !['Draft', 'Completed', 'Rejected', 'Queries Raised', 'Archived'].includes(req.status)
         );
 
-        if (role !== 'Administrator' && activePipelineRequest) {
+        if (appMetadata?.limitToOneSubmissionPerPeriod && role !== 'Administrator' && activePipelineRequest) {
             toast({
                 variant: "destructive",
                 title: "Active Submission Exists",
-                description: "A request for this period is already in the approval process. You cannot submit another.",
+                description: "A request for this period is already in the approval process. You cannot submit another while the submission limit is active.",
             });
             return;
         }
@@ -442,23 +451,25 @@ export default function ProcurementQuickSubmitPage() {
     
     const handleDeleteDraft = async () => {
         if (!deletingRequestId || !user || !firestore) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not delete draft.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not archive draft.' });
             return;
         }
 
-        const draftToDelete = allRequests?.find(req => req.id === deletingRequestId);
-        if (!draftToDelete) return;
+        const draftToArchive = allRequests?.find(req => req.id === deletingRequestId);
+        if (!draftToArchive) return;
 
-        const action = 'request.draft_delete';
+        const action = 'request.draft_archive';
         try {
-            await deleteDoc(doc(firestore, 'procurementRequests', deletingRequestId));
-            toast({ title: 'Draft Deleted', description: 'The draft has been successfully removed.' });
+            const docRef = doc(firestore, 'procurementRequests', deletingRequestId);
+            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() });
+            
+            toast({ title: 'Draft Archived', description: 'The draft has been moved to the recycle bin.' });
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
-                details: `Deleted draft for ${draftToDelete.period}`,
+                details: `Archived draft for ${draftToArchive.period}`,
                 entity: { type: 'procurementRequest', id: deletingRequestId },
                 timestamp: serverTimestamp()
             });
@@ -469,8 +480,8 @@ export default function ProcurementQuickSubmitPage() {
                 setDraftItems([]);
             }
         } catch (error: any) {
-            console.error("Delete Draft Error:", error);
-            toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+            console.error("Archive Draft Error:", error);
+            toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
             await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
@@ -496,7 +507,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || requestsLoading || deptsLoading || budgetsLoading || recurringLoading;
+    const loading = userLoading || requestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -563,7 +574,7 @@ export default function ProcurementQuickSubmitPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Your Draft Submissions</CardTitle>
-                        <CardDescription>Resume editing or delete your saved drafts for other periods.</CardDescription>
+                        <CardDescription>Resume editing or archive your saved drafts for other periods.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="overflow-auto rounded-lg border">
@@ -719,14 +730,14 @@ export default function ProcurementQuickSubmitPage() {
              <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogTitle>Archive this draft?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete this draft submission. This action cannot be undone.
+                           This will move the draft to the recycle bin. You can restore it later.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel onClick={() => setDeletingRequestId(null)}>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleDeleteDraft}>Delete</AlertDialogAction>
+                        <AlertDialogAction onClick={handleDeleteDraft}>Archive</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

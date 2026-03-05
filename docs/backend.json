@@ -32,7 +32,8 @@
             "Completed",
             "Queries Raised",
             "Rejected",
-            "Draft"
+            "Draft",
+            "Archived"
           ],
           "description": "The current status of the approval workflow."
         },
@@ -364,7 +365,8 @@
               "settings:workflow",
               "settings:auditlog",
               "settings:errorlog",
-              "settings:procurement-periods"
+              "settings:procurement-periods",
+              "settings:data"
             ]
           }
         }
@@ -459,6 +461,10 @@
         "adminIsSetUp": {
           "type": "boolean",
           "description": "Flag to indicate if the first administrator has been created."
+        },
+        "limitToOneSubmissionPerPeriod": {
+          "type": "boolean",
+          "description": "If true, allows only one active procurement request per department per period."
         }
       }
     },

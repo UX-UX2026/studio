@@ -25,14 +25,15 @@ import {
   Briefcase,
   TrendingUp,
   AlertCircle,
-  Trash2
+  Trash2,
+  BarChart
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
 import { useFirestore, useCollection, useUser } from '@/firebase';
-import { collection, query, orderBy, limit, where, doc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
@@ -46,6 +47,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { logErrorToFirestore } from '@/lib/error-logger';
+import { Bar, BarChart as RechartsBarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 
 
 export default function DashboardPage() {
@@ -157,30 +160,32 @@ export default function DashboardPage() {
 
     const handleDeleteDraft = async () => {
         if (!deletingRequestId || !user || !firestore) {
-            toast({ variant: 'destructive', title: 'Error', description: 'Could not delete draft.' });
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not archive draft.' });
             return;
         }
 
-        const draftToDelete = userDrafts?.find(req => req.id === deletingRequestId);
-        if (!draftToDelete) return;
-
-        const action = 'request.draft_delete';
+        const draftToArchive = userDrafts?.find(req => req.id === deletingRequestId);
+        if (!draftToArchive) return;
+        
+        const action = 'request.draft_archive';
         try {
-            await deleteDoc(doc(firestore, 'procurementRequests', deletingRequestId));
-            toast({ title: 'Draft Deleted', description: 'The draft has been successfully removed.' });
+            const docRef = doc(firestore, 'procurementRequests', deletingRequestId);
+            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() });
+            
+            toast({ title: 'Draft Archived', description: 'The draft has been moved to the recycle bin.' });
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
-                details: `Deleted draft for ${draftToDelete.period}`,
+                details: `Archived draft for ${draftToArchive.period}`,
                 entity: { type: 'procurementRequest', id: deletingRequestId },
                 timestamp: serverTimestamp()
             });
 
         } catch (error: any) {
-            console.error("Delete Draft Error:", error);
-            toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+            console.error("Archive Draft Error:", error);
+            toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
             await logErrorToFirestore({
                 userId: user.uid,
                 userName: user.displayName,
@@ -193,6 +198,30 @@ export default function DashboardPage() {
             setIsDeleteDialogOpen(false);
         }
     };
+    
+    const chartData = useMemo(() => [
+      { stage: "Manager", count: dashboardStats.pendingManager || 0, fill: "var(--color-manager)" },
+      { stage: "Executive", count: dashboardStats.pendingExecutive || 0, fill: "var(--color-executive)" },
+      { stage: "Queries", count: dashboardStats.queriesRaised || 0, fill: "var(--color-queries)" },
+    ], [dashboardStats]);
+
+    const chartConfig = {
+      count: {
+        label: "Count",
+      },
+      manager: {
+        label: "Manager",
+        color: "hsl(var(--chart-1))",
+      },
+      executive: {
+        label: "Executive",
+        color: "hsl(var(--chart-2))",
+      },
+      queries: {
+        label: "Queries",
+        color: "hsl(var(--chart-3))",
+      }
+    } satisfies ChartConfig
 
   return (
     <>
@@ -296,8 +325,8 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
@@ -359,6 +388,42 @@ export default function DashboardPage() {
         </Card>
 
         <Card>
+           <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart className="h-5 w-5 text-primary"/>
+                Approval Pipeline
+              </CardTitle>
+              <CardDescription>Live view of requests awaiting action.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {requestsLoading ? (
+              <div className="flex items-center justify-center h-[200px]">
+                <Loader className="h-6 w-6 animate-spin" />
+              </div>
+            ) : (
+              <ChartContainer config={chartConfig} className="h-[200px] w-full">
+                <RechartsBarChart accessibilityLayer data={chartData} layout="vertical" margin={{ left: 10 }}>
+                   <YAxis
+                      dataKey="stage"
+                      type="category"
+                      tickLine={false}
+                      tickMargin={10}
+                      axisLine={false}
+                      className="text-xs"
+                    />
+                    <XAxis dataKey="count" type="number" hide />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="line" />}
+                  />
+                  <Bar dataKey="count" radius={5} />
+                </RechartsBarChart>
+              </ChartContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-3">
           <CardHeader>
               <CardTitle>My Drafts</CardTitle>
               <CardDescription>
@@ -410,14 +475,14 @@ export default function DashboardPage() {
      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
             <AlertDialogHeader>
-                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogTitle>Archive this draft?</AlertDialogTitle>
                 <AlertDialogDescription>
-                    This will permanently delete this draft submission. This action cannot be undone.
+                    This will move the draft to the recycle bin. You can restore it later.
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setDeletingRequestId(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={handleDeleteDraft}>Delete</AlertDialogAction>
+                <AlertDialogAction onClick={handleDeleteDraft}>Archive</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
     </AlertDialog>
