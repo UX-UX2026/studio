@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Edit } from "lucide-react";
+import { Loader, Shield, Trash2, Edit, Plus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -25,8 +25,9 @@ import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { cn } from "@/lib/utils";
 
 type UserProfile = {
     id: string;
@@ -81,6 +82,14 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
+        } else if (isDialogOpen && !editingUser) {
+            // Reset form for new user
+            setName('');
+            setEmail('');
+            setUserRole('');
+            setDepartment('');
+            setAlternateEmail('');
+            setNotificationPreference('Primary');
         }
     }, [editingUser, isDialogOpen]);
 
@@ -109,38 +118,66 @@ export default function UsersPage() {
     
     const handleSave = async () => {
         setIsSaving(true);
-
-        if (!editingUser) {
-            toast({
-                variant: 'destructive',
-                title: 'Error',
-                description: 'Cannot create a new user from this interface. New users are created upon their first sign-in.',
-            });
+        
+        if (!adminUser || !firestore) {
+            toast({ variant: 'destructive', title: 'Save Failed', description: 'Authentication or database service is not available.' });
             setIsSaving(false);
             return;
         }
 
-        const action = 'user.update';
-        
-        try {
-            if (!name.trim() || !email.trim() || !userRole) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Validation Error',
-                    description: 'Name, email, and role are required.',
-                });
-                return;
-            }
+        if (!name.trim() || !email.trim() || !userRole) {
+            toast({ variant: 'destructive', title: 'Validation Error', description: 'Name, email, and role are required.' });
+            setIsSaving(false);
+            return;
+        }
 
-            if (!adminUser || !firestore) {
-                toast({
-                    variant: 'destructive',
-                    title: 'Save Failed',
-                    description: 'User or database service not available.',
+        if (!editingUser) { // Handle "Add User"
+            const action = 'user.create';
+            try {
+                const usersRef = collection(firestore, 'users');
+                const q = query(usersRef, where("email", "==", email));
+                const querySnapshot = await getDocs(q);
+                if (!querySnapshot.empty) {
+                    toast({ variant: 'destructive', title: 'User Exists', description: 'A user with this email address already exists.' });
+                    setIsSaving(false);
+                    return;
+                }
+
+                const newUserData = {
+                    displayName: name,
+                    email,
+                    role: userRole,
+                    department,
+                    photoURL: `https://i.pravatar.cc/150?u=${email}`,
+                    status: 'Invited' as const,
+                    alternateEmail: alternateEmail,
+                    notificationPreference: notificationPreference,
+                };
+                const docRef = await addDoc(usersRef, newUserData);
+                toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
+
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action,
+                    details: `Invited new user: ${email}`,
+                    entity: { type: 'user', id: docRef.id },
+                    timestamp: serverTimestamp()
                 });
-                return;
+                
+                setIsDialogOpen(false);
+            } catch(error: any) {
+                logErrorToFirestore({ userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
+                toast({ variant: 'destructive', title: 'Invitation Failed', description: error.message });
+            } finally {
+                setIsSaving(false);
             }
-            
+            return;
+        }
+        
+        // Handle "Edit User"
+        const action = 'user.update';
+        try {
             const userData = {
                 displayName: name,
                 email,
@@ -229,6 +266,11 @@ export default function UsersPage() {
             });
         }
     };
+    
+    const openAddDialog = () => {
+        setEditingUser(null);
+        setIsDialogOpen(true);
+    };
 
     const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
         if (!adminUser || !firestore) return;
@@ -273,14 +315,20 @@ export default function UsersPage() {
     return (
         <>
             <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Shield className="h-6 w-6 text-primary" />
-                        User & Permission Management
-                    </CardTitle>
-                    <CardDescription>
-                        Manage roles and departments for existing users. New users are automatically assigned a 'Requester' role upon their first sign-in.
-                    </CardDescription>
+                <CardHeader className="flex flex-row items-start justify-between">
+                    <div>
+                        <CardTitle className="flex items-center gap-2">
+                            <Shield className="h-6 w-6 text-primary" />
+                            User & Permission Management
+                        </CardTitle>
+                        <CardDescription>
+                            Manage roles and departments for existing users. New users are automatically assigned a 'Requester' role upon their first sign-in.
+                        </CardDescription>
+                    </div>
+                    <Button onClick={openAddDialog}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add User
+                    </Button>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-auto rounded-lg border">
@@ -328,13 +376,18 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell>
-                                            {u.status === 'Active' ? (
-                                                <Badge variant={'default'} className={'bg-green-600 hover:bg-green-700'}>
-                                                    Active
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="secondary">{u.status}</Badge>
-                                            )}
+                                            <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
+                                                <SelectTrigger className={cn(
+                                                    "w-[120px] font-semibold border-none focus:ring-0",
+                                                    u.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                )}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Active">Active</SelectItem>
+                                                    <SelectItem value="Invited">Invited</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
@@ -355,9 +408,11 @@ export default function UsersPage() {
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Edit User</DialogTitle>
+                        <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
                         <DialogDescription>
-                            Edit the user's details below.
+                             {editingUser 
+                                ? "Edit the user's details below."
+                                : "Fill in the details to create a new user profile. They will appear as 'Invited' until they sign in for the first time."}
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
@@ -367,7 +422,7 @@ export default function UsersPage() {
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="email" className="text-right">Email</Label>
-                            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="col-span-3" required />
+                            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="col-span-3" required disabled={!!editingUser} />
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="role" className="text-right">Role</Label>
