@@ -26,4 +26,5 @@ export type ApprovalRequest = {
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: ApprovalItem[];
     createdAt?: { seconds: number, nanoseconds: number };
+    updatedAt?: { seconds: number, nanoseconds: number };
 };

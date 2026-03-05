@@ -49,6 +49,11 @@
           "format": "date-time",
           "description": "The timestamp when the request was created."
         },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The timestamp when the request was last updated."
+        },
         "timeline": {
           "type": "array",
           "description": "An ordered list of stages and their status in the approval process.",
@@ -171,7 +176,8 @@
         "submittedById",
         "timeline",
         "items",
-        "createdAt"
+        "createdAt",
+        "updatedAt"
       ]
     },
     "userProfile": {
@@ -654,5 +660,3 @@
     }
   }
 }
-
-    

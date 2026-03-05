@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Lock, Plus, Trash2, Upload, Download, Paperclip } from "lucide-react";
+import { Lock, Plus, Trash2, Upload, Paperclip, History, Loader } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 
 type Item = {
@@ -47,6 +54,14 @@ type Item = {
   comments?: string;
 };
 
+type RecurringItem = {
+    id: string;
+    category: string;
+    name: string;
+    amount: number;
+    active: boolean;
+};
+
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-ZA", {
     style: "currency",
@@ -58,15 +73,26 @@ export function SubmissionClient({
     userRole, 
     items,
     setItems,
-    isLocked
+    isLocked,
+    recurringItems,
+    recurringLoading,
 }: { 
     userRole: UserRole, 
     items: Item[],
     setItems: React.Dispatch<React.SetStateAction<Item[]>>,
     isLocked: boolean,
+    recurringItems: RecurringItem[] | null,
+    recurringLoading: boolean,
 }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isRecurringDialogOpen, setIsRecurringDialogOpen] = useState(false);
+
+  const availableRecurringItems = useMemo(() => {
+    if (!recurringItems) return [];
+    const submissionItemDescriptions = new Set(items.map(item => item.description));
+    return recurringItems.filter(item => !submissionItemDescriptions.has(item.name));
+  }, [items, recurringItems]);
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
@@ -96,34 +122,26 @@ export function SubmissionClient({
   const handleRemoveItem = (id: number | string) => {
     setItems(prev => prev.filter((item) => item.id !== id));
   };
+
+  const handleAddRecurringFromMaster = (itemToAdd: RecurringItem) => {
+    const newItem: Item = {
+      id: itemToAdd.id, // Use master item ID
+      type: "Recurring",
+      description: itemToAdd.name,
+      brand: itemToAdd.name.split(" ")[0] || '',
+      qty: 1,
+      category: itemToAdd.category,
+      unitPrice: itemToAdd.amount,
+      fulfillmentStatus: 'Pending',
+      receivedQty: 0,
+      fulfillmentComments: [],
+    };
+    setItems(prev => [...prev, newItem]);
+    toast({ title: "Item Added", description: `Added "${itemToAdd.name}" to the submission.`})
+  };
   
   const handleImportClick = () => {
     fileInputRef.current?.click();
-  };
-
-  const handleExport = () => {
-    if (items.length === 0) {
-        toast({ title: "No Data to Export", description: "There are no submission items to export." });
-        return;
-    }
-
-    const headers: (keyof Item)[] = ['id', 'type', 'description', 'brand', 'qty', 'category', 'unitPrice', 'comments'];
-    const csvContent = [
-        headers.join(','),
-        ...items.map(item =>
-            headers.map(header => `"${(item as any)[header] || ''}"`).join(',')
-        )
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.setAttribute('download', 'submission-items.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,6 +199,7 @@ export function SubmissionClient({
   };
 
   return (
+    <>
     <div className="space-y-6">
        <input
             type="file"
@@ -309,8 +328,12 @@ export function SubmissionClient({
       <div className="flex items-center justify-start pt-4">
         <div className="flex gap-2">
             <Button variant="outline" onClick={handleAddItem} disabled={isLocked}>
-            <Plus className="w-4 h-4 mr-2" />
-            Add Manual Item
+                <Plus className="w-4 h-4 mr-2" />
+                Add Manual Item
+            </Button>
+             <Button variant="outline" onClick={() => setIsRecurringDialogOpen(true)} disabled={isLocked}>
+                <History className="w-4 h-4 mr-2" />
+                Add Recurring Item
             </Button>
             <Button variant="outline" onClick={handleImportClick} disabled={isLocked}>
                 <Upload className="h-4 w-4 mr-2" /> Import from CSV
@@ -329,11 +352,60 @@ export function SubmissionClient({
                     </TooltipContent>
                 </Tooltip>
             </TooltipProvider>
-
         </div>
       </div>
     </div>
+    
+    <Dialog open={isRecurringDialogOpen} onOpenChange={setIsRecurringDialogOpen}>
+        <DialogContent className="max-w-3xl">
+            <DialogHeader>
+                <DialogTitle>Add Recurring Item to Submission</DialogTitle>
+                <DialogDescription>
+                    Select a master recurring item to add it to your current submission. Items already in the submission are not shown.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto">
+                {recurringLoading ? (
+                    <div className="flex items-center justify-center h-40">
+                        <Loader className="h-6 w-6 animate-spin" />
+                    </div>
+                ) : (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Item</TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead className="text-right">Amount</TableHead>
+                                <TableHead className="w-[100px] text-center">Action</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {availableRecurringItems.length > 0 ? (
+                                availableRecurringItems.map(item => (
+                                    <TableRow key={item.id}>
+                                        <TableCell className="font-medium">{item.name}</TableCell>
+                                        <TableCell>{item.category}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.amount)}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Button size="sm" onClick={() => handleAddRecurringFromMaster(item)}>
+                                                <Plus className="h-4 w-4 mr-2" /> Add
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            ) : (
+                                <TableRow>
+                                    <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                        All master recurring items are already in this submission.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                )}
+            </div>
+        </DialogContent>
+    </Dialog>
+    </>
   );
 }
-
-    

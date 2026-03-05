@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Loader, AlertTriangle, Globe } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -314,7 +314,7 @@ export default function ProcurementQuickSubmitPage() {
             }
         }
 
-        const requestData = {
+        const baseRequestData = {
             department: departmentName,
             departmentId: selectedDepartmentId,
             period: selectedPeriod,
@@ -325,7 +325,7 @@ export default function ProcurementQuickSubmitPage() {
             timeline: timeline,
             comments: editingRequestId ? allRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: draftItems,
-            ...(editingRequestId ? {} : { createdAt: serverTimestamp() })
+            updatedAt: serverTimestamp(),
         };
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
@@ -338,10 +338,14 @@ export default function ProcurementQuickSubmitPage() {
         try {
             let docId: string;
             if (editingRequestId) {
-                await setDoc(doc(firestore, 'procurementRequests', editingRequestId), requestData, { merge: true });
+                const docRef = doc(firestore, 'procurementRequests', editingRequestId);
+                await updateDoc(docRef, baseRequestData);
                 docId = editingRequestId;
             } else {
-                const docRef = await addDoc(collection(firestore, 'procurementRequests'), requestData);
+                const docRef = await addDoc(collection(firestore, 'procurementRequests'), {
+                    ...baseRequestData,
+                    createdAt: serverTimestamp()
+                });
                 docId = docRef.id;
             }
 
@@ -475,6 +479,8 @@ export default function ProcurementQuickSubmitPage() {
                                 items={draftItems}
                                 setItems={setDraftItems}
                                 isLocked={isLocked}
+                                recurringItems={recurringItems}
+                                recurringLoading={recurringLoading}
                             />
                         </TabsContent>
                         <TabsContent value="summary">
