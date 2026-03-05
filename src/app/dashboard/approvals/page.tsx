@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, X } from "lucide-react";
@@ -36,6 +36,23 @@ import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
 
 
+type WorkflowStage = {
+    id: string;
+    name: string;
+    role: UserRole;
+    permissions: string[];
+    useAlternateEmail?: boolean;
+    alternateEmail?: string;
+    sendToBoth?: boolean;
+};
+
+type Department = {
+  id: string;
+  name: string;
+  workflow?: WorkflowStage[];
+};
+
+
 const getStatusBadge = (status: string) => {
     switch (status) {
         case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
@@ -59,7 +76,7 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, role, department, loading: userLoading } = useUser();
+    const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -78,17 +95,20 @@ export default function ApprovalsPage() {
             return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised']));
         }
         if (role === 'Manager') {
-            if (!department) return null; // Manager must have a department
-            return query(baseQuery, where('department', '==', department));
+            if (!userDepartment) return null; // Manager must have a department
+            return query(baseQuery, where('department', '==', userDepartment));
         }
         if (role === 'Procurement Officer') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
 
         return null; // No requests for other roles on this page
-    }, [firestore, role, department]);
+    }, [firestore, role, userDepartment]);
 
     const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
@@ -96,7 +116,7 @@ export default function ApprovalsPage() {
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-    const loading = userLoading || approvalsLoading || rolesLoading;
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading;
 
     useEffect(() => {
         const reqId = searchParams.get('id');
@@ -270,6 +290,38 @@ export default function ApprovalsPage() {
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+            
+            if (departments && activeRequest.departmentId) {
+                const department = departments.find(d => d.id === activeRequest.departmentId);
+                const nextStage = newTimeline.find(step => step.status === 'pending');
+                
+                if (department && department.workflow && nextStage) {
+                    const workflowStageConfig = department.workflow.find(wfStage => wfStage.name === nextStage.stage);
+                    
+                    if (workflowStageConfig) {
+                        let notificationDetails = `System triggered notification for stage '${nextStage.stage}' to role '${workflowStageConfig.role}'.`;
+                        
+                        if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
+                            if (workflowStageConfig.sendToBoth) {
+                                notificationDetails += ` Recipient: Primary and Alternate (${workflowStageConfig.alternateEmail}).`;
+                            } else {
+                                notificationDetails = `System triggered notification for stage '${nextStage.stage}' to alternate email: ${workflowStageConfig.alternateEmail}.`;
+                            }
+                        }
+
+                        const notificationLogData = {
+                            userId: user.uid,
+                            userName: 'System', // Attributing to system as it's an automated notification
+                            action: 'notification.sent',
+                            details: notificationDetails,
+                            entity: { type: 'procurementRequest', id: selectedRequestId },
+                            timestamp: serverTimestamp()
+                        };
+                        await addDoc(collection(firestore, 'auditLogs'), notificationLogData);
+                    }
+                }
+            }
+            
         } catch (error: any) {
             console.error("Approval Error:", error);
             toast({

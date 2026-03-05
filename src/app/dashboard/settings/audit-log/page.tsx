@@ -67,6 +67,7 @@ export default function DatabaseLogPage() {
             case 'department': return <Badge variant="outline" className="text-purple-500 border-purple-500">{action}</Badge>;
             case 'role': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">{action}</Badge>;
             case 'vendor': return <Badge variant="outline" className="text-green-500 border-green-500">{action}</Badge>;
+            case 'notification': return <Badge variant="outline" className="text-cyan-500 border-cyan-500">{action}</Badge>;
             default: return <Badge variant="secondary">{action}</Badge>;
         }
     }
