@@ -16,7 +16,6 @@ import { cn } from "@/lib/utils";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Progress } from "@/components/ui/progress";
 import { SubmissionClient } from "@/components/app/submission-client";
-import { RecurringClient } from "@/components/app/recurring-client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -280,11 +279,6 @@ export default function ProcurementQuickSubmitPage() {
 
     }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments, selectedDate]);
 
-    const recurringItemsTotal = useMemo(() => {
-        if (!recurringItems) return 0;
-        return recurringItems.reduce((sum, item) => sum + item.amount, 0);
-    }, [recurringItems]);
-    
     const handleRequestEdit = () => {
         toast({
           title: "Edit Request Sent",
@@ -509,7 +503,7 @@ export default function ProcurementQuickSubmitPage() {
             </CardContent>
         </Card>
 
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['open-submissions', 'summary', 'submission', 'recurring']}>
+        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['open-submissions', 'summary', 'submission']}>
             <AccordionItem value="open-submissions" className="border-0 rounded-lg bg-card shadow-sm">
                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                     <div className="flex items-center gap-3">
@@ -648,27 +642,6 @@ export default function ProcurementQuickSubmitPage() {
                         setItems={setDraftItems}
                         isLocked={isLocked}
                     />
-                </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="recurring" className="border-0 rounded-lg bg-card shadow-sm">
-                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                    <div className="flex items-center gap-3">
-                        <History className="h-6 w-6 text-primary"/>
-                        <div className="text-left">
-                            <h3 className="font-semibold">Recurring Items</h3>
-                            <p className="text-sm text-muted-foreground">Manage automatically added items.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6 ml-auto">
-                        <div className="text-right">
-                           <p className="text-sm font-semibold">{formatCurrency(recurringItemsTotal)}</p>
-                           <p className="text-xs text-muted-foreground">Monthly Total</p>
-                        </div>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-4 pt-0">
-                    <RecurringClient />
                 </AccordionContent>
             </AccordionItem>
         </Accordion>
