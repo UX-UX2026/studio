@@ -145,7 +145,7 @@ export default function ProcurementQuickSubmitPage() {
         }
     }, [selectedDepartmentId, departments, selectedPeriod]);
 
-    // Effect to initialize or load a draft
+    // Effect to initialize or load a draft, now with logic to sync recurring items.
     useEffect(() => {
         if (requestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
             if (!selectedPeriod) setDraftItems([]);
@@ -154,24 +154,41 @@ export default function ProcurementQuickSubmitPage() {
 
         const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
 
+        // Prepare a function to convert master recurring items to submission items
+        const mapRecurringToSubmissionItem = (item: RecurringItem): Item => ({
+            id: item.id,
+            type: "Recurring",
+            description: item.name,
+            brand: item.name.split(" ")[0] || '',
+            qty: 1,
+            category: item.category,
+            unitPrice: item.amount,
+            fulfillmentStatus: 'Pending',
+            receivedQty: 0,
+            fulfillmentComments: [],
+        });
+
         if (existingRequest) {
-            setDraftItems(existingRequest.items);
+            // A draft or submitted request exists. Load its items...
+            const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
+
+            // ...and also add any NEW recurring items from the master list that are not already present.
+            const savedItemDescriptions = new Set(savedItems.map(i => i.description));
+            const newRecurringItems = recurringItems
+                ?.filter(masterItem => masterItem.active && !savedItemDescriptions.has(masterItem.name))
+                .map(mapRecurringToSubmissionItem) || [];
+
+            setDraftItems([...savedItems, ...newRecurringItems]);
+
         } else {
+            // This is a brand new submission for the period.
             setEditingRequestId(null);
-            const recurringSubmissionItems: Item[] = recurringItems?.map(item => ({
-                id: item.id,
-                type: "Recurring",
-                description: item.name,
-                brand: item.name.split(" ")[0] || '',
-                qty: 1,
-                category: item.category,
-                unitPrice: item.amount,
-                fulfillmentStatus: 'Pending',
-                receivedQty: 0,
-                fulfillmentComments: [],
-            })) || [];
-            setDraftItems(recurringSubmissionItems);
+            // Start with all active recurring items from the master list.
+            const initialItems = recurringItems
+                ?.filter(item => item.active)
+                .map(mapRecurringToSubmissionItem) || [];
+            setDraftItems(initialItems);
         }
     }, [selectedDepartmentId, selectedPeriod, allRequests, requestsLoading, recurringItems, recurringLoading]);
 
