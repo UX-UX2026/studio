@@ -5,7 +5,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, onAuthStateChanged, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot, setDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader } from 'lucide-react';
 
@@ -93,35 +93,70 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                     setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
                     setIsLoading(false);
                 } else {
-                    // Profile does NOT exist. This is the user's first sign-in.
-                    try {
-                        const metadataRef = doc(firestore, 'app', 'metadata');
-                        const metadataSnap = await getDoc(metadataRef);
+                    // Profile does NOT exist for this UID. This is the user's first sign-in.
+                    // CHECK FOR AN INVITE FIRST.
+                    const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email), where('status', '==', 'Invited'));
+                    const invitesSnapshot = await getDocs(invitesQuery);
 
-                        let userRole = 'Requester'; // Default role for new users
-                        if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
-                            userRole = 'Administrator';
-                            // Set the flag to true so subsequent users don't become admins.
-                            await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-                        }
-
-                        const newProfile: Omit<UserProfile, 'id'> = {
-                            displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+                    if (!invitesSnapshot.empty) {
+                        // An invitation exists. Use it to create the profile.
+                        const inviteDoc = invitesSnapshot.docs[0];
+                        const invitedProfileData = inviteDoc.data();
+                        
+                        const newProfileData = {
+                            ...invitedProfileData,
+                            displayName: authUser.displayName || invitedProfileData.displayName,
                             email: authUser.email!,
-                            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                            role: userRole,
-                            department: userRole === 'Administrator' ? 'Executive' : 'Unassigned',
+                            photoURL: authUser.photoURL || invitedProfileData.photoURL,
                             status: 'Active' as const,
                         };
 
-                        await setDoc(userRef, newProfile);
-                        // The onSnapshot listener will now fire with the new data,
-                        // which will then correctly set the profile and stop loading.
-                    } catch(e) {
-                        console.error("Fatal: Could not create user profile.", e);
-                        toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred." });
-                        if(firebaseAuth) firebaseAuth.signOut();
-                        setIsLoading(false);
+                        try {
+                            // Create the new user doc with the correct UID
+                            await setDoc(userRef, newProfileData);
+                            
+                            // Delete the old invitation document
+                            await deleteDoc(inviteDoc.ref);
+                            
+                            // The onSnapshot listener on userRef will now fire with the new data, setting state and loading.
+                        } catch (e) {
+                            console.error("Fatal: Could not migrate invited user profile.", e);
+                            toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred while activating your account." });
+                            if(firebaseAuth) firebaseAuth.signOut();
+                            setIsLoading(false);
+                        }
+
+                    } else {
+                        // No invitation found. Proceed with default first-time user creation.
+                        try {
+                            const metadataRef = doc(firestore, 'app', 'metadata');
+                            const metadataSnap = await getDoc(metadataRef);
+
+                            let userRole = 'Requester'; // Default role for new users
+                            if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+                                userRole = 'Administrator';
+                                // Set the flag to true so subsequent users don't become admins.
+                                await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
+                            }
+
+                            const newProfile: Omit<UserProfile, 'id'> = {
+                                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+                                email: authUser.email!,
+                                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+                                role: userRole,
+                                department: userRole === 'Administrator' ? 'Executive' : 'Unassigned',
+                                status: 'Active' as const,
+                            };
+
+                            await setDoc(userRef, newProfile);
+                            // The onSnapshot listener will now fire with the new data,
+                            // which will then correctly set the profile and stop loading.
+                        } catch(e) {
+                            console.error("Fatal: Could not create user profile.", e);
+                            toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred." });
+                            if(firebaseAuth) firebaseAuth.signOut();
+                            setIsLoading(false);
+                        }
                     }
                 }
               },
