@@ -3,14 +3,13 @@
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useMemo } from "react";
-import { Loader, X } from "lucide-react";
+import React, { useEffect, useState, useMemo } from "react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, MessageSquare, Paperclip, Send, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -647,39 +646,42 @@ export default function ApprovalsPage() {
                                                 <TabsTrigger value="communication">Communication Log</TabsTrigger>
                                             </TabsList>
                                             <TabsContent value="workflow" className="pt-6">
-                                                <ul className="space-y-0">
-                                                    {activeRequest.timeline.map((step, index) => (
-                                                        <li key={step.stage} className="relative flex items-start gap-4 pb-8">
-                                                            {index < activeRequest.timeline.length - 1 && (
-                                                                <div className="absolute left-5 top-5 -ml-px mt-0.5 h-full w-0.5 bg-border" />
-                                                            )}
-                                                            <div className={cn(
-                                                                'relative z-10 flex h-10 w-10 items-center justify-center rounded-full',
-                                                                {
-                                                                    'bg-primary text-primary-foreground': step.status === 'completed',
-                                                                    'bg-destructive text-destructive-foreground': step.status === 'rejected',
-                                                                    'border-2 border-orange-500 bg-background text-orange-500': step.status === 'pending',
-                                                                    'border-2 border-border bg-background text-muted-foreground': step.status === 'waiting'
-                                                                }
-                                                            )}>
-                                                                {step.status === 'completed' ? <Check className="h-5 w-5" /> : step.status === 'rejected' ? <X className="h-5 w-5" /> : <User className="h-5 w-5"/>}
-                                                            </div>
-                                                            <div className="flex-1 pt-1.5">
-                                                                <p className="font-semibold">{step.stage}</p>
-                                                                <p className="text-sm text-muted-foreground">{step.actor}</p>
-                                                            </div>
-                                                            <div className="text-right pt-1.5">
-                                                                <p className="text-sm font-medium">{step.date}</p>
-                                                                <p className={cn('text-xs font-semibold capitalize', {
-                                                                    'text-primary': step.status === 'completed',
-                                                                    'text-destructive': step.status === 'rejected',
-                                                                    'text-orange-500': step.status === 'pending',
-                                                                    'text-muted-foreground': step.status === 'waiting'
-                                                                })}>{step.status}</p>
-                                                            </div>
-                                                        </li>
-                                                    ))}
-                                                </ul>
+                                                <div className="w-full overflow-x-auto pb-4">
+                                                    <div className="flex items-center gap-4 px-2 min-w-max">
+                                                        {activeRequest.timeline.map((step, index) => (
+                                                            <React.Fragment key={step.stage}>
+                                                                {/* Stage Card */}
+                                                                <Card className={cn(
+                                                                    'w-48 shrink-0',
+                                                                    {
+                                                                        'border-primary/50 bg-primary/5': step.status === 'completed',
+                                                                        'border-destructive/50 bg-destructive/5': step.status === 'rejected',
+                                                                        'border-orange-500/50 bg-orange-500/5': step.status === 'pending',
+                                                                    }
+                                                                )}>
+                                                                    <CardHeader className="p-3 flex flex-row items-center justify-between space-y-0 pb-2">
+                                                                        <CardTitle className="text-sm font-semibold">{step.stage}</CardTitle>
+                                                                        {step.status === 'completed' && <Check className="h-4 w-4 text-primary" />}
+                                                                        {step.status === 'rejected' && <X className="h-4 w-4 text-destructive" />}
+                                                                        {step.status === 'pending' && <Loader className="h-4 w-4 animate-spin text-orange-500" />}
+                                                                        {step.status === 'waiting' && <Circle className="h-4 w-4 text-muted-foreground" />}
+                                                                    </CardHeader>
+                                                                    <CardContent className="p-3 pt-0">
+                                                                        <div className="text-xs text-muted-foreground">
+                                                                            <p><span className="font-semibold">Actor:</span> {step.actor}</p>
+                                                                            <p><span className="font-semibold">Status:</span> {step.status}</p>
+                                                                            <p><span className="font-semibold">Date:</span> {step.date || '...'}</p>
+                                                                        </div>
+                                                                    </CardContent>
+                                                                </Card>
+                                                                {/* Connector */}
+                                                                {index < activeRequest.timeline.length - 1 && (
+                                                                    <ChevronRight className="h-6 w-6 text-muted-foreground shrink-0" />
+                                                                )}
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
+                                                </div>
                                             </TabsContent>
                                             <TabsContent value="items" className="pt-4">
                                                 <div>
