@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { cn } from "@/lib/utils";
 
 type UserProfile = {
     id: string;
@@ -375,13 +376,18 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell>
-                                            {u.status === 'Active' ? (
-                                                <Badge variant={'default'} className={'bg-green-600 hover:bg-green-700'}>
-                                                    Active
-                                                </Badge>
-                                            ) : (
-                                                <Badge variant="secondary">{u.status}</Badge>
-                                            )}
+                                            <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
+                                                <SelectTrigger className={cn(
+                                                    "w-[120px] font-semibold border-none focus:ring-0",
+                                                    u.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                )}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Active">Active</SelectItem>
+                                                    <SelectItem value="Invited">Invited</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
