@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Briefcase, FileText, History, BarChart, ChevronDown, Calendar as CalendarIcon, Lock, Globe } from "lucide-react";
+import { Loader, AlertTriangle, Calendar as CalendarIcon, Lock, Globe } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc } from "firebase/firestore";
@@ -13,8 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Progress } from "@/components/ui/progress";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
@@ -22,8 +20,8 @@ import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
-import { Badge } from "@/components/ui/badge";
-import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -33,19 +31,6 @@ const formatCurrency = (amount: number) => {
         maximumFractionDigits: 2
     }).format(amount);
 };
-
-const getStatusBadge = (status: string) => {
-    switch (status) {
-        case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
-        case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
-        case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
-        case 'In Fulfillment': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">In Fulfillment</Badge>;
-        case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
-        case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
-        case 'Rejected': return <Badge variant="destructive">{status}</Badge>;
-        default: return <Badge variant="secondary">{status}</Badge>
-    }
-}
 
 type Department = {
     id: string;
@@ -76,7 +61,6 @@ type RecurringItem = {
     active: boolean;
 };
 
-// Item type is now managed by the parent component
 type Item = {
   id: number | string;
   type: "Recurring" | "One-Off";
@@ -98,7 +82,6 @@ type WorkflowStage = {
     permissions: string[];
 };
 
-
 export default function ProcurementQuickSubmitPage() {
     const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
@@ -109,11 +92,9 @@ export default function ProcurementQuickSubmitPage() {
     const [selectedDate, setSelectedDate] = useState<Date>(new Date(new Date().getFullYear() + 2, 1, 1));
     const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
     
-    // State for draft items is lifted up to this parent component
     const [draftItems, setDraftItems] = useState<Item[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
-
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -175,21 +156,6 @@ export default function ProcurementQuickSubmitPage() {
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
 
-    // This is the LIVE total for the accordion trigger, based on the current draft
-    const periodSubmissionTotal = useMemo(() => {
-        return draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
-    }, [draftItems]);
-    
-    const openRequests = useMemo(() => {
-        if (!allRequests || !selectedDepartmentId) return [];
-        const dept = departments?.find(d => d.id === selectedDepartmentId);
-        if (!dept) return [];
-        return allRequests.filter(req => 
-            req.departmentId === selectedDepartmentId && 
-            !['Draft', 'Completed', 'Rejected'].includes(req.status)
-        ).sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-    }, [allRequests, selectedDepartmentId, departments]);
-
     const isPeriodAdministrativelyLocked = useMemo(() => {
         if (role === 'Administrator') return false; // Admins can bypass this lock
         const dept = departments?.find(d => d.id === selectedDepartmentId);
@@ -222,7 +188,6 @@ export default function ProcurementQuickSubmitPage() {
 
     const isLocked = isPeriodAdministrativelyLocked || isLockedByWorkflow;
 
-    // This summary now uses the live draftItems state
     const summaryData = useMemo(() => {
         const procurementItems = draftItems;
         
@@ -237,7 +202,6 @@ export default function ProcurementQuickSubmitPage() {
         const monthIndex = (selectedDept?.budgetYear === procurementYear)
             ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
             : -1;
-
 
         const allCategories = new Set([
             ...procurementItems.map(item => item.category),
@@ -263,7 +227,6 @@ export default function ProcurementQuickSubmitPage() {
                 .filter(item => item.category === category && item.comments)
                 .map(item => item.comments)
                 .join('; ');
-
 
             return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments };
         }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; }[];
@@ -423,8 +386,8 @@ export default function ProcurementQuickSubmitPage() {
 
     const budgetProgress = useMemo(() => {
         const { procurement, forecast } = summaryData.totals;
-        if (forecast === 0) return 0;
-        return Math.round((procurement / forecast) * 100);
+        if (forecast === 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [summaryData]);
 
     const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
@@ -446,249 +409,174 @@ export default function ProcurementQuickSubmitPage() {
         return "This submission is locked.";
     }
 
-  return (
-    <div className="space-y-6">
-        <Card>
-            <CardHeader>
-                <CardTitle>Procurement Quick Submit</CardTitle>
-                <CardDescription>
-                    A consolidated view of your procurement activities. Select a department and period to begin.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="flex flex-wrap items-end gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
-                    <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
-                        <Label htmlFor="department">Department</Label>
-                        <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role === 'Manager' && !!userDepartment)}>
-                            <SelectTrigger id="department">
-                                <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer' ? (
-                                    departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)
-                                ) : (
-                                    <SelectItem value={selectedDepartmentId}>{departments?.find(d => d.id === selectedDepartmentId)?.name}</SelectItem>
-                                )}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
-                        <Label htmlFor="period">Procurement Period</Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                        "w-full justify-start text-left font-normal",
-                                        !selectedDate && "text-muted-foreground"
+    return (
+        <div className="space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle>Procurement Quick Submit</CardTitle>
+                    <CardDescription>
+                        A consolidated view for managing your procurement request. Select a department and period to begin.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex flex-wrap items-end gap-4">
+                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                            <Label htmlFor="department">Department</Label>
+                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role === 'Manager' && !!userDepartment)}>
+                                <SelectTrigger id="department">
+                                    <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer' ? (
+                                        departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)
+                                    ) : (
+                                        <SelectItem value={selectedDepartmentId}>{departments?.find(d => d.id === selectedDepartmentId)?.name}</SelectItem>
                                     )}
-                                >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                                <Calendar
-                                    mode="single"
-                                    selected={selectedDate}
-                                    onSelect={(date) => {
-                                        if(date) setSelectedDate(date)
-                                    }}
-                                    initialFocus
-                                />
-                            </PopoverContent>
-                        </Popover>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                            <Label htmlFor="period">Procurement Period</Label>
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant={"outline"}
+                                        className={cn(
+                                            "w-full justify-start text-left font-normal",
+                                            !selectedDate && "text-muted-foreground"
+                                        )}
+                                    >
+                                        <CalendarIcon className="mr-2 h-4 w-4" />
+                                        {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0">
+                                    <Calendar
+                                        mode="single"
+                                        selected={selectedDate}
+                                        onSelect={(date) => {
+                                            if(date) setSelectedDate(date)
+                                        }}
+                                        initialFocus
+                                    />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
                     </div>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
 
-        <Accordion type="multiple" className="w-full space-y-4" defaultValue={['open-submissions', 'summary', 'submission']}>
-            <AccordionItem value="open-submissions" className="border-0 rounded-lg bg-card shadow-sm">
-                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                    <div className="flex items-center gap-3">
-                        <Briefcase className="h-6 w-6 text-primary"/>
-                        <div className="text-left">
-                            <h3 className="font-semibold">Open Submissions</h3>
-                            <p className="text-sm text-muted-foreground">Track requests currently in the approval pipeline.</p>
+            <Card>
+                <Tabs defaultValue="submission" className="w-full">
+                    <CardHeader className="flex flex-row items-start justify-between">
+                         <div>
+                            <CardTitle>Period Submission</CardTitle>
+                            <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
+                         </div>
+                         <TabsList className="grid grid-cols-2">
+                            <TabsTrigger value="submission">Submission Items</TabsTrigger>
+                            <TabsTrigger value="summary">Budget Summary</TabsTrigger>
+                        </TabsList>
+                    </CardHeader>
+                    <CardContent>
+                        <TabsContent value="submission">
+                            <SubmissionClient 
+                                userRole={role} 
+                                items={draftItems}
+                                setItems={setDraftItems}
+                                isLocked={isLocked}
+                            />
+                        </TabsContent>
+                        <TabsContent value="summary">
+                            <div className="space-y-4">
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-semibold text-lg">Budget vs. Actuals: {monthForHeader}</h3>
+                                            <p className="text-sm text-muted-foreground">This is a live comparison of your draft items against the forecast.</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-2xl font-bold">{formatCurrency(summaryData.totals.procurement)}</p>
+                                            <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(summaryData.totals.forecast)}</p>
+                                        </div>
+                                    </div>
+                                    <Progress value={budgetProgress} className="mt-4" />
+                                </div>
+                                <div className="overflow-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow className="bg-muted hover:bg-muted">
+                                                <TableHead className="font-bold">Category</TableHead>
+                                                <TableHead className="text-right font-bold">Procurement Total</TableHead>
+                                                <TableHead className="text-right font-bold">Forecast Total</TableHead>
+                                                <TableHead className="text-right font-bold">Variance</TableHead>
+                                                <TableHead className="font-bold">Comments</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
+                                                <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                    <TableCell className="font-medium">{item.category}</TableCell>
+                                                    <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                    <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                    <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                        {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                        {formatCurrency(item.variance)}
+                                                    </TableCell>
+                                                    <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                                                </TableRow>
+                                            )) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                                        No budget or submission data available.
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                        <TableFooter>
+                                            <TableRow className="bg-muted hover:bg-muted font-bold">
+                                                <TableCell>Subtotal</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                                                <TableCell></TableCell>
+                                            </TableRow>
+                                        </TableFooter>
+                                    </Table>
+                                </div>
+                            </div>
+                        </TabsContent>
+                    </CardContent>
+                </Tabs>
+                <CardFooter className="flex justify-between items-center border-t pt-6">
+                    {isLocked ? (
+                        <div className={cn("flex items-center gap-3", isPeriodAdministrativelyLocked ? "text-red-700" : "text-yellow-800")}>
+                            {isPeriodAdministrativelyLocked ? <Globe className="h-5 w-5"/> : <Lock className="h-5 w-5"/>}
+                            <div className="text-sm font-medium">
+                                <p>{getLockMessage()}</p>
+                            </div>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-6 ml-auto">
-                        <Badge variant="secondary">{openRequests.length} open</Badge>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-4 pt-0">
-                    <div className="overflow-auto rounded-lg border mt-4">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Period</TableHead>
-                                    <TableHead className="text-right">Total</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {openRequests.length > 0 ? openRequests.map(req => (
-                                    <TableRow key={req.id}>
-                                        <TableCell className="font-semibold">{req.period}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
-                                        <TableCell>{getStatusBadge(req.status)}</TableCell>
-                                        <TableCell className="text-right">
-                                            <Button asChild variant="outline" size="sm">
-                                                <Link href={`/dashboard/approvals?id=${req.id}`}>View</Link>
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )) : (
-                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
-                                            No open submissions for this department.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="summary" className="border-0 rounded-lg bg-card shadow-sm">
-                <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                    <div className="flex items-center gap-3">
-                        <BarChart className="h-6 w-6 text-primary"/>
-                        <div className="text-left">
-                            <h3 className="font-semibold">Budget Summary</h3>
-                            <p className="text-sm text-muted-foreground">Compare procurement vs. forecast.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6 ml-auto">
-                        <div className="text-right">
-                           <p className="text-sm font-semibold">{formatCurrency(summaryData.totals.procurement)}</p>
-                           <p className="text-xs text-muted-foreground">vs {formatCurrency(summaryData.totals.forecast)}</p>
-                        </div>
-                        <div className="w-32">
-                           <Progress value={budgetProgress} />
-                        </div>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-4 pt-0">
-                    <div className="overflow-auto rounded-lg border mt-4">
-                        <Table>
-                            <TableHeader>
-                                <TableRow className="bg-muted hover:bg-muted">
-                                    <TableHead className="font-bold">Category</TableHead>
-                                    <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
-                                    <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
-                                    <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
-                                    <TableHead className="font-bold">Comments</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                    <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                        <TableCell className="font-medium">{item.category}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                            {formatCurrency(item.variance)}
-                                        </TableCell>
-                                         <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
-                                    </TableRow>
-                                )) : (
-                                    <TableRow>
-                                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                                            No data available for the selected department and period.
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                            </TableBody>
-                            <TableFooter>
-                                <TableRow className="bg-muted hover:bg-muted font-bold">
-                                    <TableCell>Subtotal</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
-                                    <TableCell></TableCell>
-                                </TableRow>
-                            </TableFooter>
-                        </Table>
-                    </div>
-                </AccordionContent>
-            </AccordionItem>
-            <AccordionItem value="submission" className="border-0 rounded-lg bg-card shadow-sm">
-                 <AccordionTrigger className="p-4 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                    <div className="flex items-center gap-3">
-                        <FileText className="h-6 w-6 text-primary"/>
-                        <div className="text-left">
-                            <h3 className="font-semibold">Period Submission</h3>
-                            <p className="text-sm text-muted-foreground">Manage your request for the period.</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6 ml-auto">
-                        <div className="text-right">
-                           <p className="text-sm font-semibold">{formatCurrency(periodSubmissionTotal)}</p>
-                           <p className="text-xs text-muted-foreground">Request Total</p>
-                        </div>
-                        <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
-                    </div>
-                </AccordionTrigger>
-                <AccordionContent className="p-4 pt-0">
-                    <SubmissionClient 
-                        userRole={role} 
-                        items={draftItems}
-                        setItems={setDraftItems}
-                        isLocked={isLocked}
-                    />
-                </AccordionContent>
-            </AccordionItem>
-        </Accordion>
-        
-        <Card>
-            <CardHeader>
-                <CardTitle>Submission Actions</CardTitle>
-                <CardDescription>
-                    {isLocked
-                        ? "This submission is locked for editing."
-                        : "Once you are finished, save your request as a draft or submit it for approval."}
-                </CardDescription>
-            </CardHeader>
-            <CardFooter className="flex justify-between items-center">
-                 {isLocked ? (
-                    <div className={cn("flex items-center gap-3", isPeriodAdministrativelyLocked ? "text-red-700" : "text-yellow-800")}>
-                        {isPeriodAdministrativelyLocked ? <Globe className="h-5 w-5"/> : <Lock className="h-5 w-5"/>}
-                        <div className="text-sm font-medium">
-                            <p>{getLockMessage()}</p>
-                        </div>
-                    </div>
-                ) : (
-                    <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
-                 )}
-                <div className="flex gap-3">
-                    {isLockedByWorkflow ? (
-                        <Button onClick={handleRequestEdit}>Request Edit</Button>
                     ) : (
-                        <>
-                            <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving || isLocked}>
-                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                Save as Draft
-                            </Button>
-                            <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving || isLocked}>
-                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                Submit For Approval
-                            </Button>
-                        </>
+                        <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
                     )}
-                </div>
-            </CardFooter>
-        </Card>
-
-    </div>
-  );
+                    <div className="flex gap-3">
+                        {isLockedByWorkflow ? (
+                            <Button onClick={handleRequestEdit}>Request Edit</Button>
+                        ) : (
+                            <>
+                                <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving || isLocked}>
+                                    {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                    Save as Draft
+                                </Button>
+                                <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving || isLocked}>
+                                    {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                    Submit For Approval
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                </CardFooter>
+            </Card>
+        </div>
+    );
 }
-
-    
-
-    
