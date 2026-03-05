@@ -2,12 +2,12 @@
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Globe } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -19,6 +19,17 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
+import { formatDistanceToNow } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -84,6 +95,7 @@ export default function ProcurementQuickSubmitPage() {
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
+    const searchParams = useSearchParams();
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -92,6 +104,8 @@ export default function ProcurementQuickSubmitPage() {
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -108,6 +122,23 @@ export default function ProcurementQuickSubmitPage() {
 
     const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), where('active', '==', true)), [firestore]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
+
+    // Handle incoming query params to resume a draft
+    useEffect(() => {
+        const deptId = searchParams.get('deptId');
+        const period = searchParams.get('period');
+
+        if (deptId && period) {
+            // Check if this is a valid department before setting
+            if (departments?.some(d => d.id === deptId)) {
+                setSelectedDepartmentId(deptId);
+                setSelectedPeriod(period);
+                // Clear the search params so a refresh doesn't keep reloading it
+                router.replace('/dashboard/procurement', { scroll: false });
+            }
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [searchParams, departments]);
 
     // Set default department based on user role and data
     useEffect(() => {
@@ -270,6 +301,13 @@ export default function ProcurementQuickSubmitPage() {
         return { lines, totals };
 
     }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
+    
+    const userDrafts = useMemo(() => {
+        if (!allRequests || !user) return [];
+        return allRequests
+            .filter(req => req.status === 'Draft' && req.submittedById === user.uid)
+            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+    }, [allRequests, user]);
 
     const handleRequestEdit = () => {
         toast({
@@ -402,6 +440,50 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
     
+    const handleDeleteDraft = async () => {
+        if (!deletingRequestId || !user || !firestore) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not delete draft.' });
+            return;
+        }
+
+        const draftToDelete = allRequests?.find(req => req.id === deletingRequestId);
+        if (!draftToDelete) return;
+
+        const action = 'request.draft_delete';
+        try {
+            await deleteDoc(doc(firestore, 'procurementRequests', deletingRequestId));
+            toast({ title: 'Draft Deleted', description: 'The draft has been successfully removed.' });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                details: `Deleted draft for ${draftToDelete.period}`,
+                entity: { type: 'procurementRequest', id: deletingRequestId },
+                timestamp: serverTimestamp()
+            });
+
+            // If the deleted draft was the one being edited, clear the form
+            if (editingRequestId === deletingRequestId) {
+                setEditingRequestId(null);
+                setDraftItems([]);
+            }
+        } catch (error: any) {
+            console.error("Delete Draft Error:", error);
+            toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+            await logErrorToFirestore({
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
+        } finally {
+            setDeletingRequestId(null);
+            setIsDeleteDialogOpen(false);
+        }
+    };
+
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
       if (userLoading) return;
@@ -476,6 +558,49 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {userDrafts.length > 0 && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Your Draft Submissions</CardTitle>
+                        <CardDescription>Resume editing or delete your saved drafts for other periods.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="overflow-auto rounded-lg border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Department</TableHead>
+                                        <TableHead>Period</TableHead>
+                                        <TableHead className="text-right">Total</TableHead>
+                                        <TableHead className="text-right">Last Saved</TableHead>
+                                        <TableHead className="text-right">Actions</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {userDrafts.map(draft => (
+                                        <TableRow key={draft.id}>
+                                            <TableCell>{draft.department}</TableCell>
+                                            <TableCell>{draft.period}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
+                                            <TableCell className="text-right text-muted-foreground">{draft.updatedAt ? formatDistanceToNow(new Date(draft.updatedAt.seconds * 1000), { addSuffix: true }) : 'N/A'}</TableCell>
+                                            <TableCell className="text-right space-x-2">
+                                                <Button variant="outline" size="sm" onClick={() => {
+                                                    setSelectedDepartmentId(draft.departmentId);
+                                                    setSelectedPeriod(draft.period);
+                                                }}>Resume</Button>
+                                                <Button variant="destructive" size="icon" onClick={() => { setDeletingRequestId(draft.id); setIsDeleteDialogOpen(true); }}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             <Card>
                 <Tabs defaultValue="submission" className="w-full">
@@ -590,6 +715,21 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardFooter>
             </Card>
+
+             <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this draft submission. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeletingRequestId(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteDraft}>Delete</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

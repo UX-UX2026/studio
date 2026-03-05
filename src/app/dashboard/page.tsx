@@ -1,12 +1,13 @@
 
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
+  CardDescription
 } from "@/components/ui/card";
 import {
   Table,
@@ -21,33 +22,40 @@ import {
   ClipboardCheck,
   Loader,
   Rocket,
-  DatabaseZap,
   Briefcase,
   TrendingUp,
   AlertCircle,
+  Trash2
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, limit, where } from 'firebase/firestore';
+import { useFirestore, useCollection, useUser } from '@/firebase';
+import { collection, query, orderBy, limit, where, doc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { formatDistanceToNow } from 'date-fns';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-
-
-type AuditEvent = {
-    id: string;
-    userName: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-};
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { useToast } from '@/hooks/use-toast';
+import { logErrorToFirestore } from '@/lib/error-logger';
 
 
 export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
+  const { user } = useUser();
+  const { toast } = useToast();
+
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
   // Define statuses for open requests
   const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
@@ -90,16 +98,19 @@ export default function DashboardPage() {
 
   const { data: fulfillmentRequests, loading: fulfillmentLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
 
-  const auditLogsQuery = useMemo(() => {
-      if (!firestore) return null;
-      return query(
-          collection(firestore, 'auditLogs'),
-          orderBy('timestamp', 'desc'),
-          limit(5)
-      );
-  }, [firestore]);
+  const draftsQuery = useMemo(() => {
+    if (!firestore || !user) return null;
+    return query(
+        collection(firestore, 'procurementRequests'),
+        where('status', '==', 'Draft'),
+        where('submittedById', '==', user.uid),
+        orderBy('updatedAt', 'desc'),
+        limit(5)
+    );
+  }, [firestore, user]);
 
-  const { data: recentLogs, loading: logsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+  const { data: userDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(draftsQuery);
+
 
   const allFulfillmentItems = useMemo(() => {
       if (!fulfillmentRequests) return [];
@@ -144,7 +155,47 @@ export default function DashboardPage() {
         }
     }
 
+    const handleDeleteDraft = async () => {
+        if (!deletingRequestId || !user || !firestore) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not delete draft.' });
+            return;
+        }
+
+        const draftToDelete = userDrafts?.find(req => req.id === deletingRequestId);
+        if (!draftToDelete) return;
+
+        const action = 'request.draft_delete';
+        try {
+            await deleteDoc(doc(firestore, 'procurementRequests', deletingRequestId));
+            toast({ title: 'Draft Deleted', description: 'The draft has been successfully removed.' });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                details: `Deleted draft for ${draftToDelete.period}`,
+                entity: { type: 'procurementRequest', id: deletingRequestId },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Delete Draft Error:", error);
+            toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
+            await logErrorToFirestore({
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
+        } finally {
+            setDeletingRequestId(null);
+            setIsDeleteDialogOpen(false);
+        }
+    };
+
   return (
+    <>
     <div className="space-y-6">
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -309,43 +360,67 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <DatabaseZap className="h-5 w-5 text-primary"/>
-                Database Status: Recent Activity
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Showing the last 5 write operations to the database.
-              </p>
+              <CardTitle>My Drafts</CardTitle>
+              <CardDescription>
+                Resume or delete your recent draft submissions.
+              </CardDescription>
           </CardHeader>
           <CardContent>
-             {logsLoading ? (
+             {draftsLoading ? (
                 <div className="flex items-center justify-center h-full">
                   <Loader className="h-6 w-6 animate-spin" />
                 </div>
-            ) : recentLogs && recentLogs.length > 0 ? (
-              <div className="space-y-4">
-                {recentLogs.map(log => (
-                  <div key={log.id} className="flex items-center gap-3">
-                    <Avatar className="h-9 w-9">
-                      <AvatarFallback>{log.userName?.charAt(0) || 'S'}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium leading-tight">{log.details}</p>
-                      <p className="text-xs text-muted-foreground">
-                        by {log.userName} &bull; {log.timestamp ? formatDistanceToNow(new Date(log.timestamp.seconds * 1000), { addSuffix: true }) : 'just now'}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            ) : userDrafts && userDrafts.length > 0 ? (
+              <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Last Saved</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {userDrafts.map(draft => (
+                        <TableRow key={draft.id}>
+                            <TableCell>
+                                <Link href={`/dashboard/procurement?deptId=${draft.departmentId}&period=${encodeURIComponent(draft.period)}`} className="hover:underline text-primary font-medium">{draft.period}</Link>
+                                <div className="text-xs text-muted-foreground">{draft.department}</div>
+                            </TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
+                            <TableCell className="text-right text-muted-foreground">{draft.updatedAt ? formatDistanceToNow(new Date(draft.updatedAt.seconds * 1000), { addSuffix: true }) : 'N/A'}</TableCell>
+                            <TableCell className="text-right">
+                                <Button variant="ghost" size="icon" onClick={() => { setDeletingRequestId(draft.id); setIsDeleteDialogOpen(true); }}>
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
             ) : (
                 <div className="flex items-center justify-center h-24 text-muted-foreground">
-                  No recent activity found in the database.
+                  You have no saved drafts.
                 </div>
             )}
           </CardContent>
         </Card>
       </div>
     </div>
+     <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    This will permanently delete this draft submission. This action cannot be undone.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel onClick={() => setDeletingRequestId(null)}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteDraft}>Delete</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
