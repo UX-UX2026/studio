@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc } from "@/firebase";
-import { doc, setDoc, serverTimestamp, addDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 
 type AppMetadata = {
