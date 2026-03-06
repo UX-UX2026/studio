@@ -64,6 +64,7 @@ export default function BudgetPage() {
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
     const [originalFileData, setOriginalFileData] = useState<any[][]>([]);
     const [headerRow, setHeaderRow] = useState(1);
+    const [startRow, setStartRow] = useState(2);
     const [endRow, setEndRow] = useState(0);
     const [isImporting, setIsImporting] = useState(false);
     const [columnMappings, setColumnMappings] = useState<{
@@ -132,7 +133,7 @@ export default function BudgetPage() {
             return String(h);
         });
 
-        const dataStartIndex = headerRowIndex + 1;
+        const dataStartIndex = startRow > 0 ? startRow - 1 : headerRowIndex + 1;
         const dataEndIndex = endRow > 0 ? endRow : originalFileData.length;
         const dataRows = originalFileData.slice(dataStartIndex, dataEndIndex);
 
@@ -152,7 +153,7 @@ export default function BudgetPage() {
             derivedPreview: previewRows,
             dataRowsForImport: dataRows,
         };
-    }, [originalFileData, headerRow, endRow]);
+    }, [originalFileData, headerRow, startRow, endRow]);
 
     useEffect(() => {
         if (derivedHeaders.length === 0) return;
@@ -260,6 +261,7 @@ export default function BudgetPage() {
                 setOriginalFileData(visibleData);
 
                 setHeaderRow(1);
+                setStartRow(2);
                 setEndRow(visibleData.length);
                 
                 setIsMappingDialogOpen(true);
@@ -293,6 +295,13 @@ export default function BudgetPage() {
         };
 
         try {
+            if (headerRow >= startRow) {
+                throw new Error('Header row must be before the start data row.');
+            }
+            if (startRow > endRow && endRow !== 0) {
+                throw new Error('Start data row cannot be after end row.');
+            }
+
             const { category, yearTotal, forecastStart } = columnMappings;
 
             const stringifiedHeaders = derivedHeaders.map(h => String(h));
@@ -307,10 +316,6 @@ export default function BudgetPage() {
 
             if (forecastStartIndex + 11 >= stringifiedHeaders.length) {
                 throw new Error("Not enough columns for a 12-month forecast starting from your selection. Please check your sheet or selection.");
-            }
-            
-            if (headerRow > endRow && endRow !== 0) {
-                throw new Error('Header row cannot be after end row.');
             }
 
             const forecastEndIndex = forecastStartIndex + 11;
@@ -524,13 +529,17 @@ export default function BudgetPage() {
                         
                         <div className="p-4 border rounded-lg bg-muted/50">
                             <h3 className="font-semibold text-foreground mb-4">1. Define Data Range</h3>
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-3 gap-4">
                                <div className="space-y-2">
-                                    <Label>Header Row Number</Label>
+                                    <Label>Header Row</Label>
                                     <Input type="number" value={headerRow} onChange={e => setHeaderRow(parseInt(e.target.value) || 1)} min={1} />
                                 </div>
                                 <div className="space-y-2">
-                                    <Label>End Row Number (0 for end of file)</Label>
+                                    <Label>Start Data Row</Label>
+                                    <Input type="number" value={startRow} onChange={e => setStartRow(parseInt(e.target.value) || 1)} min={1} />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label>End Data Row (0 for end)</Label>
                                     <Input type="number" value={endRow} onChange={e => setEndRow(parseInt(e.target.value) || 0)} min={0} />
                                 </div>
                             </div>
@@ -600,7 +609,7 @@ export default function BudgetPage() {
                                     <TableBody>
                                         {derivedPreview.slice(0, 500).map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
-                                                <TableCell className="font-mono text-muted-foreground text-center sticky left-0 bg-muted/95 z-10">{headerRow + 1 + rowIndex}</TableCell>
+                                                <TableCell className="font-mono text-muted-foreground text-center sticky left-0 bg-muted/95 z-10">{startRow + rowIndex}</TableCell>
                                                 {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`} className="whitespace-nowrap">{String(cell)}</TableCell>)}
                                             </TableRow>
                                         ))}
