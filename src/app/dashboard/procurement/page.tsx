@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -19,7 +18,7 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { formatDistanceToNow } from "date-fns";
+import { format, addMonths, formatDistanceToNow } from "date-fns";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -168,20 +167,33 @@ export default function ProcurementQuickSubmitPage() {
     useEffect(() => {
         if (selectedDepartmentId && departments) {
             const dept = departments.find(d => d.id === selectedDepartmentId);
-            if (dept && dept.periodSettings) {
-                const periods = Object.entries(dept.periodSettings)
-                    .filter(([, settings]) => settings.status === 'Open')
-                    .map(([period]) => period);
-                setOpenPeriods(periods);
-                
-                // If the previously selected period isn't open for the new dept, reset it
-                if (!periods.includes(selectedPeriod)) {
-                    setSelectedPeriod(periods[0] || '');
-                }
-            } else {
-                setOpenPeriods([]);
-                setSelectedPeriod('');
+
+            // Generate base periods
+            const baseGeneratedPeriods = [];
+            const now = new Date();
+            for (let i = 0; i < 18; i++) {
+                baseGeneratedPeriods.push(format(addMonths(now, i), "MMMM yyyy"));
             }
+
+            // Get all possible periods by combining generated and saved ones
+            const periodSettings = dept?.periodSettings || {};
+            const allKnownPeriods = new Set(baseGeneratedPeriods);
+            Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
+
+            // Filter for only the open ones
+            const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
+            
+            // Sort them chronologically
+            periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+            
+            setOpenPeriods(periods);
+            
+            if (!periods.includes(selectedPeriod)) {
+                setSelectedPeriod(periods[0] || '');
+            }
+        } else {
+            setOpenPeriods([]);
+            setSelectedPeriod('');
         }
     }, [selectedDepartmentId, departments, selectedPeriod]);
 
