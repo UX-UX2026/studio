@@ -63,7 +63,7 @@ export default function BudgetPage() {
     // State for mapping dialog
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
     const [originalFileData, setOriginalFileData] = useState<any[][]>([]);
-    const [startRow, setStartRow] = useState(1);
+    const [headerRow, setHeaderRow] = useState(1);
     const [endRow, setEndRow] = useState(0);
     const [isImporting, setIsImporting] = useState(false);
     const [columnMappings, setColumnMappings] = useState<{
@@ -114,17 +114,17 @@ export default function BudgetPage() {
     const selectedDepartmentName = selectedDepartment?.name || '';
 
     const { derivedHeaders, derivedPreview, dataRowsForImport } = useMemo(() => {
-        if (!originalFileData || originalFileData.length === 0 || startRow === 0) {
+        if (!originalFileData || originalFileData.length === 0 || headerRow === 0) {
             return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
-        const headerRowIndex = startRow > 0 ? startRow - 1 : 0;
+        const headerRowIndex = headerRow > 0 ? headerRow - 1 : 0;
         if (headerRowIndex >= originalFileData.length) {
             return { derivedHeaders: [], derivedPreview: [], dataRowsForImport: [] };
         }
 
-        const headerRow = originalFileData[headerRowIndex];
-        const headers = (headerRow as any[]).map(h => {
+        const rawHeaders = originalFileData[headerRowIndex];
+        const headers = (rawHeaders as any[]).map(h => {
             if (h === null || h === undefined) return "";
             if (h instanceof Date) {
                 return format(h, "MMM yy");
@@ -152,7 +152,7 @@ export default function BudgetPage() {
             derivedPreview: previewRows,
             dataRowsForImport: dataRows,
         };
-    }, [originalFileData, startRow, endRow]);
+    }, [originalFileData, headerRow, endRow]);
 
     useEffect(() => {
         if (derivedHeaders.length === 0) return;
@@ -259,7 +259,7 @@ export default function BudgetPage() {
                 
                 setOriginalFileData(visibleData);
 
-                setStartRow(1);
+                setHeaderRow(1);
                 setEndRow(visibleData.length);
                 
                 setIsMappingDialogOpen(true);
@@ -309,8 +309,8 @@ export default function BudgetPage() {
                 throw new Error("Not enough columns for a 12-month forecast starting from your selection. Please check your sheet or selection.");
             }
             
-            if (startRow > endRow && endRow !== 0) {
-                throw new Error('Start row cannot be after end row.');
+            if (headerRow > endRow && endRow !== 0) {
+                throw new Error('Header row cannot be after end row.');
             }
 
             const forecastEndIndex = forecastStartIndex + 11;
@@ -516,7 +516,7 @@ export default function BudgetPage() {
                             <div className="grid grid-cols-2 gap-4">
                                <div className="space-y-2">
                                     <Label>Header Row Number</Label>
-                                    <Input type="number" value={startRow} onChange={e => setStartRow(parseInt(e.target.value) || 1)} min={1} />
+                                    <Input type="number" value={headerRow} onChange={e => setHeaderRow(parseInt(e.target.value) || 1)} min={1} />
                                 </div>
                                 <div className="space-y-2">
                                     <Label>End Row Number (0 for end of file)</Label>
@@ -589,7 +589,7 @@ export default function BudgetPage() {
                                     <TableBody>
                                         {derivedPreview.slice(0, 500).map((row, rowIndex) => (
                                             <TableRow key={`preview-${rowIndex}`}>
-                                                <TableCell className="font-mono text-muted-foreground text-center sticky left-0 bg-muted/95 z-10">{startRow + 1 + rowIndex}</TableCell>
+                                                <TableCell className="font-mono text-muted-foreground text-center sticky left-0 bg-muted/95 z-10">{headerRow + 1 + rowIndex}</TableCell>
                                                 {row.map((cell, cellIndex) => <TableCell key={`cell-${rowIndex}-${cellIndex}`} className="whitespace-nowrap">{String(cell)}</TableCell>)}
                                             </TableRow>
                                         ))}
