@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Loader, Banknote, Upload, Download } from "lucide-react";
+import { Loader, Banknote, Upload, Download, AlertCircle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -451,6 +452,17 @@ export default function BudgetPage() {
                             </Button>
                         </div>
                     </div>
+                    {selectedDepartmentId && (
+                        <div className="p-4 border bg-amber-50 border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 mb-6 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300">
+                            <AlertCircle className="h-5 w-5 mt-0.5 shrink-0"/>
+                            <div>
+                                <h4 className="font-semibold">How the importer works</h4>
+                                <p className="text-sm">
+                                    When you import an Excel or CSV file, a mapping dialog will appear. This allows you to define your data range and match your spreadsheet columns to the system fields, ensuring your budget data is imported correctly.
+                                </p>
+                            </div>
+                        </div>
+                    )}
                     {loading ? (
                          <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
                             <Loader className="h-8 w-8 animate-spin" />
