@@ -4,13 +4,13 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Loader, Banknote, Upload, Download, AlertCircle } from "lucide-react";
+import { Loader, Banknote, Upload, Download, AlertCircle, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, getDocs, query, where, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, getDocs, query, where, serverTimestamp, writeBatch } from "firebase/firestore";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import * as XLSX from 'xlsx';
@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { Badge } from "@/components/ui/badge";
 
 type Department = {
     id: string;
@@ -34,8 +35,21 @@ type Department = {
     budgetYear?: number;
 };
 
+type BudgetUpload = {
+    id: string;
+    departmentId: string;
+    departmentName: string;
+    financialYear: number;
+    uploadedAt: { seconds: number, nanoseconds: number };
+    uploadedById: string;
+    uploadedByName: string;
+    monthHeaders: string[];
+    isActive: boolean;
+}
+
 type BudgetItem = {
     id: string;
+    budgetUploadId: string;
     departmentId: string;
     departmentName?: string;
     category: string;
@@ -59,6 +73,7 @@ export default function BudgetPage() {
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [financialYear, setFinancialYear] = useState<number>(new Date().getFullYear());
+    const [activeUpload, setActiveUpload] = useState<BudgetUpload | null>(null);
 
     // State for mapping dialog
     const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
@@ -76,12 +91,24 @@ export default function BudgetPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    const budgetsQuery = useMemo(() => {
+    const budgetUploadsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
-        return query(collection(firestore, 'budgets'), where('departmentId', '==', selectedDepartmentId));
-    }, [firestore, selectedDepartmentId]);
-    
+        return query(collection(firestore, 'budgetUploads'), where('departmentId', '==', selectedDepartmentId), where('financialYear', '==', financialYear));
+    }, [firestore, selectedDepartmentId, financialYear]);
+    const { data: budgetUploads, loading: uploadsLoading } = useCollection<BudgetUpload>(budgetUploadsQuery);
+
+    const budgetsQuery = useMemo(() => {
+        if (!firestore || !activeUpload) return null;
+        return query(collection(firestore, 'budgets'), where('budgetUploadId', '==', activeUpload.id));
+    }, [firestore, activeUpload]);
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
+
+    useEffect(() => {
+        if (budgetUploads) {
+            const active = budgetUploads.find(u => u.isActive);
+            setActiveUpload(active || null);
+        }
+    }, [budgetUploads]);
 
      useEffect(() => {
         const allowedRoles = ['Administrator', 'Procurement Officer'];
@@ -95,7 +122,7 @@ export default function BudgetPage() {
         }
     }, [user, role, userLoading, router]);
     
-    const loading = userLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
+    const loading = userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading);
     
     const selectedDepartment = useMemo(() => {
         return departments?.find(d => d.id === selectedDepartmentId);
@@ -109,8 +136,8 @@ export default function BudgetPage() {
 
 
     const monthHeaders = useMemo(() => {
-        return selectedDepartment?.budgetHeaders || [];
-    }, [selectedDepartment]);
+        return activeUpload?.monthHeaders || selectedDepartment?.budgetHeaders || [];
+    }, [activeUpload, selectedDepartment]);
 
     const selectedDepartmentName = selectedDepartment?.name || '';
 
@@ -196,6 +223,10 @@ export default function BudgetPage() {
             toast({ variant: 'destructive', title: 'No Department Selected', description: 'Please select a department before importing.' });
             return;
         }
+        if (!financialYear) {
+            toast({ variant: 'destructive', title: 'Financial Year Not Set', description: 'Please set a financial year before importing.' });
+            return;
+        }
         fileInputRef.current?.click();
     };
 
@@ -205,7 +236,7 @@ export default function BudgetPage() {
             return;
         }
         
-        const exportMonthHeaders = selectedDepartment?.budgetHeaders || [];
+        const exportMonthHeaders = activeUpload?.monthHeaders || [];
         const headers = ['category', ...exportMonthHeaders, 'yearTotal'];
         
         const csvContent = [
@@ -279,7 +310,7 @@ export default function BudgetPage() {
     const handleConfirmImport = async () => {
         if (!user || !firestore) return;
         setIsImporting(true);
-        const action = 'budget.import';
+        const action = 'budget.import_revision';
 
         const parseNumericValue = (value: any): number => {
             if (typeof value === 'number') {
@@ -295,46 +326,31 @@ export default function BudgetPage() {
         };
 
         try {
-            if (headerRow >= startRow) {
-                throw new Error('Header row must be before the start data row.');
-            }
-            if (startRow > endRow && endRow !== 0) {
-                throw new Error('Start data row cannot be after end row.');
-            }
+            if (headerRow >= startRow) throw new Error('Header row must be before the start data row.');
+            if (startRow > endRow && endRow !== 0) throw new Error('Start data row cannot be after end row.');
 
             const { category, yearTotal, forecastStart } = columnMappings;
 
             const stringifiedHeaders = derivedHeaders.map(h => String(h));
-
             const categoryIndex = stringifiedHeaders.indexOf(category);
             const yearTotalIndex = yearTotal ? stringifiedHeaders.indexOf(yearTotal) : -1;
             const forecastStartIndex = stringifiedHeaders.indexOf(forecastStart);
             
-            if (categoryIndex === -1 || forecastStartIndex === -1) {
-                throw new Error("Please map 'Category' and 'First Forecast Month' columns.");
-            }
+            if (categoryIndex === -1 || forecastStartIndex === -1) throw new Error("Please map 'Category' and 'First Forecast Month' columns.");
+            if (forecastStartIndex + 11 >= stringifiedHeaders.length) throw new Error("Not enough columns for a 12-month forecast starting from your selection.");
 
-            if (forecastStartIndex + 11 >= stringifiedHeaders.length) {
-                throw new Error("Not enough columns for a 12-month forecast starting from your selection. Please check your sheet or selection.");
-            }
-
-            const forecastEndIndex = forecastStartIndex + 11;
-            const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastEndIndex + 1);
-        
+            const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastStartIndex + 12);
             const forecastIndices = Array.from({ length: 12 }, (_, i) => forecastStartIndex + i);
 
-            const newItems: Omit<BudgetItem, 'id'>[] = dataRowsForImport.map(row => {
+            const newItems: Omit<BudgetItem, 'id'|'budgetUploadId'>[] = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
                 if (!categoryValue) return null;
 
                 const forecasts = forecastIndices.map(index => parseNumericValue(row[index]));
                 
-                let yearTotalValue: number;
-                if (yearTotalIndex !== -1) {
-                    yearTotalValue = parseNumericValue(row[yearTotalIndex]);
-                } else {
-                    yearTotalValue = forecasts.reduce((sum, current) => sum + current, 0);
-                }
+                const yearTotalValue = (yearTotalIndex !== -1) 
+                    ? parseNumericValue(row[yearTotalIndex])
+                    : forecasts.reduce((sum, current) => sum + current, 0);
 
                 return {
                     departmentId: selectedDepartmentId,
@@ -343,24 +359,41 @@ export default function BudgetPage() {
                     forecasts,
                     yearTotal: yearTotalValue,
                 };
-            }).filter((item): item is Omit<BudgetItem, 'id'> => item !== null);
+            }).filter((item): item is Omit<BudgetItem, 'id'|'budgetUploadId'> => item !== null);
             
             const batch = writeBatch(firestore);
 
-            const existingBudgetsQuery = query(collection(firestore, 'budgets'), where('departmentId', '==', selectedDepartmentId));
-            const existingBudgetsSnapshot = await getDocs(existingBudgetsQuery);
-            existingBudgetsSnapshot.forEach(doc => {
-                batch.delete(doc.ref);
+            // Deactivate previous active upload for this dept/year
+            const activeUploadsQuery = query(collection(firestore, 'budgetUploads'), where('departmentId', '==', selectedDepartmentId), where('financialYear', '==', financialYear), where('isActive', '==', true));
+            const activeUploadsSnapshot = await getDocs(activeUploadsQuery);
+            activeUploadsSnapshot.forEach(doc => {
+                batch.update(doc.ref, { isActive: false });
             });
 
-            const deptRef = doc(firestore, 'departments', selectedDepartmentId);
-            batch.set(deptRef, { budgetHeaders: newMonthHeaders, budgetYear: financialYear }, { merge: true });
+            // Create new upload record
+            const newUploadRef = doc(collection(firestore, 'budgetUploads'));
+            const newUploadData: Omit<BudgetUpload, 'id'> = {
+                departmentId: selectedDepartmentId,
+                departmentName: selectedDepartmentName,
+                financialYear: financialYear,
+                uploadedAt: serverTimestamp() as any, // Cast for client-side representation
+                uploadedById: user.uid,
+                uploadedByName: user.displayName || 'N/A',
+                monthHeaders: newMonthHeaders,
+                isActive: true,
+            };
+            batch.set(newUploadRef, newUploadData);
 
+            // Create new budget items linked to the new upload
             const budgetsCollectionRef = collection(firestore, 'budgets');
             newItems.forEach(item => {
                 const newDocRef = doc(budgetsCollectionRef);
-                batch.set(newDocRef, item);
+                batch.set(newDocRef, { ...item, budgetUploadId: newUploadRef.id });
             });
+
+            // Update department with active headers
+            const deptRef = doc(firestore, 'departments', selectedDepartmentId);
+            batch.update(deptRef, { budgetHeaders: newMonthHeaders, budgetYear: financialYear });
 
             await batch.commit();
 
@@ -371,7 +404,7 @@ export default function BudgetPage() {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
-                details: `Imported ${newItems.length} budget items for department ${selectedDepartmentName} for FY${financialYear}.`,
+                details: `Imported new budget version for ${selectedDepartmentName} - FY${financialYear}.`,
                 entity: { type: 'department', id: selectedDepartmentId },
                 timestamp: serverTimestamp()
             });
@@ -388,6 +421,55 @@ export default function BudgetPage() {
             });
         } finally {
             setIsImporting(false);
+        }
+    };
+    
+    const handleSetActive = async (uploadIdToActivate: string) => {
+        if (!user || !firestore || !budgetUploads) return;
+        setIsSaving(true);
+        const action = 'budget.activate_revision';
+        
+        try {
+            const batch = writeBatch(firestore);
+            
+            // Deactivate all current uploads for this dept/year
+            budgetUploads.forEach(upload => {
+                const uploadRef = doc(firestore, 'budgetUploads', upload.id);
+                batch.update(uploadRef, { isActive: false });
+            });
+            
+            // Activate the selected one
+            const newActiveUploadRef = doc(firestore, 'budgetUploads', uploadIdToActivate);
+            batch.update(newActiveUploadRef, { isActive: true });
+            
+            // Update the department doc with the headers/year from the newly activated version
+            const newActiveUploadData = budgetUploads.find(u => u.id === uploadIdToActivate);
+            if (newActiveUploadData) {
+                const deptRef = doc(firestore, 'departments', selectedDepartmentId);
+                batch.update(deptRef, { 
+                    budgetHeaders: newActiveUploadData.monthHeaders, 
+                    budgetYear: newActiveUploadData.financialYear 
+                });
+            }
+
+            await batch.commit();
+            toast({ title: "Budget Version Activated", description: "The selected budget is now active." });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Activated budget version for ${selectedDepartmentName} - FY${financialYear}.`,
+                entity: { type: 'department', id: selectedDepartmentId },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Budget Activation Error:", error);
+            toast({ variant: "destructive", title: "Activation Failed", description: error.message });
+            await logErrorToFirestore({ userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+        } finally {
+            setIsSaving(false);
         }
     };
 
@@ -409,113 +491,158 @@ export default function BudgetPage() {
                 accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
                 onChange={handleFileChange}
             />
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Banknote className="h-6 w-6 text-primary" />
-                        Budget Integration by Department
-                    </CardTitle>
-                    <CardDescription>
-                        Import, view, and export departmental budget data from a CSV or Excel file. Select a department to begin.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                        <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/50">
-                             <div className="grid gap-1.5">
-                                <Label htmlFor="department-select">Department</Label>
-                                <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                                    <SelectTrigger className="w-[250px] bg-background" id="department-select">
-                                        <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {departments?.map(d => (
-                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+            <div className="space-y-6">
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Banknote className="h-6 w-6 text-primary" />
+                            Budget Integration by Department
+                        </CardTitle>
+                        <CardDescription>
+                            Import, view, and manage versioned departmental budget forecasts. Select a department to begin.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+                            <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/50">
+                                <div className="grid gap-1.5">
+                                    <Label htmlFor="department-select">Department</Label>
+                                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                                        <SelectTrigger className="w-[250px] bg-background" id="department-select">
+                                            <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {departments?.map(d => (
+                                                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-1.5">
+                                    <Label htmlFor="financial-year">Financial Year</Label>
+                                    <Input
+                                        id="financial-year"
+                                        type="number"
+                                        value={financialYear}
+                                        onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
+                                        className="w-[120px] bg-background"
+                                        placeholder="e.g., 2026"
+                                        disabled={!selectedDepartmentId}
+                                    />
+                                </div>
                             </div>
-                            <div className="grid gap-1.5">
-                                <Label htmlFor="financial-year">Financial Year</Label>
-                                <Input
-                                    id="financial-year"
-                                    type="number"
-                                    value={financialYear}
-                                    onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
-                                    className="w-[120px] bg-background"
-                                    placeholder="e.g., 2026"
-                                    disabled={!selectedDepartmentId}
-                                />
-                            </div>
-                        </div>
-                        <div className="flex justify-end gap-2">
-                            <Button variant="outline" onClick={handleImportClick} disabled={!selectedDepartmentId}>
-                                <Upload className="h-4 w-4 mr-2" /> Import Budget
-                            </Button>
-                            <Button variant="outline" onClick={handleExport} disabled={!selectedDepartmentId || !budgetItems || budgetItems.length === 0}>
-                                <Download className="h-4 w-4 mr-2" /> Export Budget
-                            </Button>
-                        </div>
-                    </div>
-                    {selectedDepartmentId && (
-                        <div className="p-4 border bg-amber-50 border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 mb-6 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300">
-                            <AlertCircle className="h-5 w-5 mt-0.5 shrink-0"/>
-                            <div>
-                                <h4 className="font-semibold">How the importer works</h4>
-                                <p className="text-sm">
-                                    When you import an Excel or CSV file, a mapping dialog will appear. This allows you to define your data range and match your spreadsheet columns to the system fields, ensuring your budget data is imported correctly.
-                                </p>
+                            <div className="flex justify-end gap-2">
+                                <Button variant="outline" onClick={handleImportClick} disabled={!selectedDepartmentId}>
+                                    <Upload className="h-4 w-4 mr-2" /> Import Revision
+                                </Button>
+                                <Button variant="outline" onClick={handleExport} disabled={!selectedDepartmentId || !budgetItems || budgetItems.length === 0}>
+                                    <Download className="h-4 w-4 mr-2" /> Export Active Budget
+                                </Button>
                             </div>
                         </div>
-                    )}
-                    {loading ? (
-                         <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
-                            <Loader className="h-8 w-8 animate-spin" />
-                        </div>
-                    ) : selectedDepartmentId ? (
-                        <div className="overflow-auto border rounded-lg">
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="font-bold min-w-[250px]">
-                                            {`EXPENSES ${selectedDepartmentName ? `- FY ${selectedDepartment.budgetYear || 'N/A'}` : ''}`}
-                                        </TableHead>
-                                        {monthHeaders.map(month => (
-                                            <TableHead key={month} className="text-right">{month}</TableHead>
-                                        ))}
-                                        <TableHead className="text-right font-bold">Year Total</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {budgetItems && budgetItems.length > 0 ? (
-                                        budgetItems.map((item) => (
-                                            <TableRow key={item.id}>
-                                                <TableCell className="font-medium">{item.category}</TableCell>
-                                                {item.forecasts.map((forecast, index) => (
-                                                    <TableCell key={index} className="text-right font-mono">
-                                                        {forecast ? formatCurrency(forecast) : '-'}
-                                                    </TableCell>
-                                                ))}
-                                                <TableCell className="text-right font-mono font-bold">{formatCurrency(item.yearTotal)}</TableCell>
-                                            </TableRow>
-                                        ))
-                                    ) : (
+                        {selectedDepartmentId && (
+                            <div className="p-4 border bg-amber-50 border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 mb-6 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300">
+                                <AlertCircle className="h-5 w-5 mt-0.5 shrink-0"/>
+                                <div>
+                                    <h4 className="font-semibold">How budget versions work</h4>
+                                    <p className="text-sm">
+                                        Importing a new forecast creates a new version for the selected year. The latest upload is automatically set as 'Active'. You can view past versions and activate an older forecast from the 'Upload History' table below.
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                        {loading ? (
+                            <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
+                                <Loader className="h-8 w-8 animate-spin" />
+                            </div>
+                        ) : selectedDepartmentId ? (
+                            <div className="overflow-auto border rounded-lg">
+                                <Table>
+                                    <TableHeader>
                                         <TableRow>
-                                            <TableCell colSpan={monthHeaders.length + 2} className="h-24 text-center text-muted-foreground">
-                                                No budget data found for this department and year. Use the 'Import Budget' button to add data.
-                                            </TableCell>
+                                            <TableHead className="font-bold min-w-[250px]">
+                                                {`Active Budget: ${selectedDepartmentName ? ` - FY ${financialYear}` : ''}`}
+                                            </TableHead>
+                                            {monthHeaders.map(month => (
+                                                <TableHead key={month} className="text-right">{month}</TableHead>
+                                            ))}
+                                            <TableHead className="text-right font-bold">Year Total</TableHead>
                                         </TableRow>
-                                    )}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    ) : (
-                        <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
-                            <p className="text-muted-foreground">Please select a department to view or manage its budget.</p>
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {budgetItems && budgetItems.length > 0 ? (
+                                            budgetItems.map((item) => (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="font-medium">{item.category}</TableCell>
+                                                    {item.forecasts.map((forecast, index) => (
+                                                        <TableCell key={index} className="text-right font-mono">
+                                                            {forecast ? formatCurrency(forecast) : '-'}
+                                                        </TableCell>
+                                                    ))}
+                                                    <TableCell className="text-right font-mono font-bold">{formatCurrency(item.yearTotal)}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={monthHeaders.length + 2} className="h-24 text-center text-muted-foreground">
+                                                    No active budget found for this department and year. Use the 'Import' button to create one.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
+                                <p className="text-muted-foreground">Please select a department to view or manage its budget.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                
+                {selectedDepartmentId && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" />Upload History</CardTitle>
+                            <CardDescription>History of budget uploads for {selectedDepartmentName} - FY {financialYear}</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="overflow-auto border rounded-lg">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Upload Date</TableHead>
+                                            <TableHead>Uploaded By</TableHead>
+                                            <TableHead>Status</TableHead>
+                                            <TableHead className="text-right">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {uploadsLoading ? (
+                                            <TableRow><TableCell colSpan={4} className="text-center h-24"><Loader className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
+                                        ) : budgetUploads && budgetUploads.length > 0 ? (
+                                            budgetUploads.sort((a,b) => b.uploadedAt.seconds - a.uploadedAt.seconds).map(upload => (
+                                                <TableRow key={upload.id}>
+                                                    <TableCell>{upload.uploadedAt ? format(new Date(upload.uploadedAt.seconds * 1000), "yyyy-MM-dd, HH:mm") : 'N/A'}</TableCell>
+                                                    <TableCell>{upload.uploadedByName}</TableCell>
+                                                    <TableCell>{upload.isActive ? <Badge>Active</Badge> : <Badge variant="secondary">Archived</Badge>}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Button variant="outline" size="sm" onClick={() => handleSetActive(upload.id)} disabled={upload.isActive || isSaving}>
+                                                            {isSaving && !upload.isActive ? <Loader className="h-4 w-4 animate-spin"/> : 'Set Active' }
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No upload history found.</TableCell></TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+            </div>
             
             <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
                 <DialogContent className="max-w-7xl flex flex-col max-h-[90dvh]">

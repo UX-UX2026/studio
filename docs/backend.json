@@ -554,11 +554,53 @@
         "timestamp"
       ]
     },
-    "budgetItem": {
-      "title": "Budget Item",
-      "description": "Represents a single budget line item from an external sheet, associated with a specific department.",
+    "budgetUpload": {
+      "title": "Budget Upload",
+      "description": "Represents a version of an imported budget forecast.",
       "type": "object",
       "properties": {
+        "departmentId": {
+          "type": "string",
+          "description": "The ID of the department this budget upload belongs to."
+        },
+        "departmentName": {
+            "type": "string",
+            "description": "The name of the department."
+        },
+        "financialYear": {
+          "type": "number",
+          "description": "The financial year for this budget."
+        },
+        "uploadedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "uploadedById": {
+          "type": "string"
+        },
+        "uploadedByName": {
+          "type": "string"
+        },
+        "monthHeaders": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Whether this is the currently active budget for the department and year."
+        }
+      },
+      "required": ["departmentId", "financialYear", "uploadedAt", "uploadedById", "isActive"]
+    },
+    "budgetItem": {
+      "title": "Budget Item",
+      "description": "Represents a single budget line item from an external sheet, associated with a specific department and upload.",
+      "type": "object",
+      "properties": {
+        "budgetUploadId": {
+          "type": "string",
+          "description": "The ID of the budget upload this item belongs to."
+        },
         "departmentId": {
           "type": "string",
           "description": "The ID of the department this budget item belongs to."
@@ -584,6 +626,7 @@
         }
       },
       "required": [
+        "budgetUploadId",
         "departmentId",
         "category",
         "forecasts",
@@ -657,6 +700,12 @@
         "$ref": "#/entities/errorLog"
       },
       "description": "Collection of all client-side application errors for debugging."
+    },
+    "/budgetUploads/{uploadId}": {
+      "schema": {
+        "$ref": "#/entities/budgetUpload"
+      },
+      "description": "Collection of all imported budget versions."
     },
     "/budgets/{budgetId}": {
       "schema": {
