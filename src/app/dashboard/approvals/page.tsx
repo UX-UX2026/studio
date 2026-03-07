@@ -647,10 +647,9 @@ export default function ApprovalsPage() {
                                             </TabsList>
                                             <TabsContent value="workflow" className="pt-6">
                                                 <div className="w-full overflow-x-auto pb-4">
-                                                    <div className="flex items-center gap-4 px-2 min-w-max">
+                                                    <ul className="flex items-center">
                                                         {activeRequest.timeline.map((step, index) => (
-                                                            <React.Fragment key={step.stage}>
-                                                                {/* Stage Card */}
+                                                            <li key={step.stage} className="flex items-center">
                                                                 <Card className={cn(
                                                                     'w-48 shrink-0',
                                                                     {
@@ -674,13 +673,18 @@ export default function ApprovalsPage() {
                                                                         </div>
                                                                     </CardContent>
                                                                 </Card>
-                                                                {/* Connector */}
+
                                                                 {index < activeRequest.timeline.length - 1 && (
-                                                                    <ChevronRight className="h-6 w-6 text-muted-foreground shrink-0" />
+                                                                     <div aria-hidden="true" className="w-16 shrink-0 text-muted-foreground px-2">
+                                                                        <svg width="100%" height="24" viewBox="0 0 64 24" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                                                                            <path d="M0 12H54" stroke="currentColor" strokeWidth="2"/>
+                                                                            <path d="M46 7L54 12L46 17" stroke="currentColor" strokeWidth="2"/>
+                                                                        </svg>
+                                                                    </div>
                                                                 )}
-                                                            </React.Fragment>
+                                                            </li>
                                                         ))}
-                                                    </div>
+                                                    </ul>
                                                 </div>
                                             </TabsContent>
                                             <TabsContent value="items" className="pt-4">
@@ -826,3 +830,5 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
+    
