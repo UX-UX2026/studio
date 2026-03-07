@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
@@ -75,12 +75,15 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, role, department: userDepartment, loading: userLoading } = useUser();
+    const { user, profile, loading: userLoading } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
     const firestore = useFirestore();
     const { roles, loading: rolesLoading } = useRoles();
+    const role = profile?.role;
+    const userDepartment = profile?.department;
+
 
     const requestsQuery = useMemo(() => {
         if (!firestore || !role) return null;
@@ -298,8 +301,8 @@ export default function ApprovalsPage() {
                     const workflowStageConfig = department.workflow.find(wfStage => wfStage.name === nextStage.stage);
                     
                     if (workflowStageConfig) {
+                        // Log simulated notification
                         let notificationDetails = `System triggered notification for stage '${nextStage.stage}' to role '${workflowStageConfig.role}'.`;
-                        
                         if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
                             if (workflowStageConfig.sendToBoth) {
                                 notificationDetails += ` Recipient: Primary and Alternate (${workflowStageConfig.alternateEmail}).`;
@@ -307,16 +310,64 @@ export default function ApprovalsPage() {
                                 notificationDetails = `System triggered notification for stage '${nextStage.stage}' to alternate email: ${workflowStageConfig.alternateEmail}.`;
                             }
                         }
-
                         const notificationLogData = {
                             userId: user.uid,
-                            userName: 'System', // Attributing to system as it's an automated notification
+                            userName: 'System',
                             action: 'notification.sent',
                             details: notificationDetails,
                             entity: { type: 'procurementRequest', id: selectedRequestId },
                             timestamp: serverTimestamp()
                         };
                         await addDoc(collection(firestore, 'auditLogs'), notificationLogData);
+
+                        // Real Email Sending Logic
+                        const usersCollectionRef = collection(firestore, 'users');
+                        const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
+                        const querySnapshot = await getDocs(q);
+                        
+                        const recipients: string[] = [];
+                        querySnapshot.forEach(doc => {
+                            const userProfile = doc.data();
+                            if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
+                                if (workflowStageConfig.sendToBoth) {
+                                    recipients.push(userProfile.email);
+                                    recipients.push(workflowStageConfig.alternateEmail);
+                                } else {
+                                    recipients.push(workflowStageConfig.alternateEmail);
+                                }
+                            } else {
+                                 recipients.push(userProfile.email);
+                            }
+                        });
+                        
+                        const uniqueRecipients = [...new Set(recipients)];
+                
+                        if (uniqueRecipients.length > 0) {
+                            try {
+                                const response = await fetch('/api/send-email', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        to: uniqueRecipients.join(','),
+                                        subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
+                                        html: `<p>A procurement request for department <strong>${activeRequest.department}</strong> requires your attention.</p><p>Request ID: ${activeRequest.id}</p><p>Total: ${formatCurrency(activeRequest.total)}</p><p>Please log in to the portal to review the request.</p>`
+                                    })
+                                });
+                                const responseData = await response.json();
+                                if (!response.ok) {
+                                  throw new Error(responseData.error || 'Failed to send email');
+                                }
+                            } catch (emailError) {
+                                console.error("Email API call failed:", emailError);
+                                await logErrorToFirestore({
+                                    userId: user.uid,
+                                    userName: user.displayName || 'System',
+                                    action: 'notification.email_api_failed',
+                                    errorMessage: (emailError as Error).message,
+                                    errorStack: (emailError as Error).stack,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -830,5 +881,3 @@ export default function ApprovalsPage() {
     </>
   );
 }
-
-    
