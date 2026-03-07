@@ -1,37 +1,38 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { Loader, FilePieChart, BarChart, Clock, Building } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from "next/link";
 
 const reports = [
     {
         title: "Spend by Department",
         description: "Analyze procurement spend across all departments for a selected period.",
         icon: BarChart,
-        options: { period: true }
+        href: "/dashboard/procurement-summary"
     },
     {
         title: "Vendor Performance",
         description: "Review vendor lead times, cost-effectiveness, and item quality.",
         icon: Building,
-        options: {}
+        href: "/dashboard/vendors"
     },
     {
         title: "Approval Cycle Time",
         description: "Measure the average time it takes for requests to be approved.",
         icon: Clock,
-        options: { period: true }
+        href: "/dashboard/approvals"
     },
     {
         title: "Budget vs. Actuals",
         description: "Compare budgeted amounts against actual spend for each cost center.",
         icon: FilePieChart,
-        options: { department: true, period: true }
+        href: "/dashboard/procurement-summary"
     }
 ];
 
@@ -76,44 +77,21 @@ export default function ReportsPage() {
         <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {reports.map((report) => (
-                    <Card key={report.title} className="flex flex-col">
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-3">
-                                <report.icon className="h-5 w-5 text-muted-foreground" />
-                                {report.title}
-                            </CardTitle>
-                            <CardDescription className="!mt-3">{report.description}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="flex-grow space-y-4">
-                            {report.options.period && (
-                                <Select>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Period" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="q1-2026">Q1 2026</SelectItem>
-                                        <SelectItem value="q4-2025">Q4 2025</SelectItem>
-                                        <SelectItem value="fy-2025">FY 2025</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                             {report.options.department && (
-                                <Select>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Department" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="ict">ICT</SelectItem>
-                                        <SelectItem value="marketing">Marketing</SelectItem>
-                                        <SelectItem value="operations">Operations</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </CardContent>
-                        <div className="p-6 pt-0">
-                            <Button className="w-full" disabled>Generate Report</Button>
-                        </div>
-                    </Card>
+                     <Link key={report.title} href={report.href} className="flex">
+                        <Card className="flex flex-col w-full transition-all hover:shadow-lg hover:border-primary/50">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-3">
+                                    <report.icon className="h-5 w-5 text-muted-foreground" />
+                                    {report.title}
+                                </CardTitle>
+                                <CardDescription className="!mt-3">{report.description}</CardDescription>
+                            </CardHeader>
+                            <CardContent className="flex-grow" />
+                            <CardFooter>
+                                <Button variant="outline" className="w-full">View Details</Button>
+                            </CardFooter>
+                        </Card>
+                    </Link>
                 ))}
             </div>
         </CardContent>
@@ -121,3 +99,5 @@ export default function ReportsPage() {
     </div>
   );
 }
+
+    
