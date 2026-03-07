@@ -25,6 +25,7 @@ import {
   Scale,
   Recycle,
   Eraser,
+  Mail,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -79,6 +80,7 @@ const allLinks = [
         { href: '/dashboard/settings/data-management', label: 'Data Management', icon: Eraser, permission: 'settings:data', iconClass: "text-red-500" },
         { href: '/dashboard/settings/error-log', label: 'Error Log', icon: AlertTriangle, permission: 'settings:errorlog', iconClass: "text-yellow-600" },
         { href: '/dashboard/settings/database-log', label: 'Database Test', icon: DatabaseZap, permission: 'settings:errorlog', iconClass: "text-cyan-500" },
+        { href: '/dashboard/settings/mailflow', label: 'Mailflow Test', icon: Mail, permission: 'settings:errorlog', iconClass: "text-pink-500" },
         { href: '/dashboard/settings/system-log', label: 'System Log', icon: BrainCircuit, permission: 'settings:errorlog', iconClass: "text-gray-500" },
     ]
   },

@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -46,6 +46,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/data-management', label: 'Backup & Data', description: 'Export all submissions or perform destructive data operations.', icon: HardDriveDownload, iconClass: "text-red-500" },
         { href: '/dashboard/settings/error-log', label: 'Error Log', description: 'Review client-side errors captured from user interactions.', icon: AlertTriangle, iconClass: "text-yellow-600" },
         { href: '/dashboard/settings/database-log', label: 'Database Test', description: 'Run a direct write test to verify the connection to Firestore.', icon: DatabaseZap, iconClass: "text-cyan-500" },
+        { href: '/dashboard/settings/mailflow', label: 'Mailflow Test', description: 'Send a test email to verify your email configuration.', icon: Mail, iconClass: "text-pink-500" },
         { href: '/dashboard/settings/system-log', label: 'System Log', description: 'View a live feed of client-side application events for diagnostics.', icon: BrainCircuit, iconClass: "text-gray-500" },
     ]
 
