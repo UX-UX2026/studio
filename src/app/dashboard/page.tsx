@@ -26,7 +26,7 @@ import {
   TrendingUp,
   AlertCircle,
   Trash2,
-  BarChart
+  Workflow
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -47,8 +47,29 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import { logErrorToFirestore } from '@/lib/error-logger';
-import { Bar, BarChart as RechartsBarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
+
+const PipelineStage = ({ name, count, highlight }: { name: string, count: number, highlight?: boolean }) => (
+    <div className="flex flex-col items-center gap-1 text-center w-16">
+        <div className={cn(
+            "flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold text-base",
+            highlight ? "border-primary text-primary bg-primary/10" : "border-muted-foreground/30 text-muted-foreground"
+        )}>
+            {count}
+        </div>
+        <div className="text-xs font-medium text-muted-foreground">{name}</div>
+    </div>
+);
+
+const PipelineArrow = () => (
+    <div className="flex-1 text-muted-foreground/50 -mx-1">
+        <svg width="100%" viewBox="0 0 24 12" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <path d="M0 6H24" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
+            <path d="M19 2L24 6L19 10" stroke="currentColor" strokeWidth="1.5"/>
+        </svg>
+    </div>
+);
 
 
 export default function DashboardPage() {
@@ -137,6 +158,9 @@ export default function DashboardPage() {
         return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
     }, [monthlyRequests, allOpenRequests]);
 
+    const approvedCount = useMemo(() => allOpenRequests?.filter(req => req.status === 'Approved').length || 0, [allOpenRequests]);
+    const fulfillmentCount = useMemo(() => allOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [allOpenRequests]);
+
     const requestsLoading = openRequestsLoading || monthlyRequestsLoading;
 
   const formatCurrency = (amount: number) => {
@@ -199,30 +223,6 @@ export default function DashboardPage() {
         }
     };
     
-    const chartData = useMemo(() => [
-      { stage: "Manager", count: dashboardStats.pendingManager || 0, fill: "var(--color-manager)" },
-      { stage: "Executive", count: dashboardStats.pendingExecutive || 0, fill: "var(--color-executive)" },
-      { stage: "Queries", count: dashboardStats.queriesRaised || 0, fill: "var(--color-queries)" },
-    ], [dashboardStats]);
-
-    const chartConfig = {
-      count: {
-        label: "Count",
-      },
-      manager: {
-        label: "Manager",
-        color: "hsl(var(--chart-1))",
-      },
-      executive: {
-        label: "Executive",
-        color: "hsl(var(--chart-2))",
-      },
-      queries: {
-        label: "Queries",
-        color: "hsl(var(--chart-3))",
-      }
-    } satisfies ChartConfig
-
   return (
     <>
     <div className="space-y-6">
@@ -390,35 +390,43 @@ export default function DashboardPage() {
         <Card>
            <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <BarChart className="h-5 w-5 text-primary"/>
+                <Workflow className="h-5 w-5 text-primary"/>
                 Approval Pipeline
               </CardTitle>
               <CardDescription>Live view of requests awaiting action.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             {requestsLoading ? (
-              <div className="flex items-center justify-center h-[200px]">
+              <div className="flex items-center justify-center h-24">
                 <Loader className="h-6 w-6 animate-spin" />
               </div>
             ) : (
-              <ChartContainer config={chartConfig} className="h-[200px] w-full">
-                <RechartsBarChart accessibilityLayer data={chartData} layout="vertical" margin={{ left: 10 }}>
-                   <YAxis
-                      dataKey="stage"
-                      type="category"
-                      tickLine={false}
-                      tickMargin={10}
-                      axisLine={false}
-                      className="text-xs"
-                    />
-                    <XAxis dataKey="count" type="number" hide />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="line" />}
-                  />
-                  <Bar dataKey="count" radius={5} />
-                </RechartsBarChart>
-              </ChartContainer>
+            <div className="space-y-4">
+                <div className="flex items-center">
+                    <PipelineStage name="Manager" count={dashboardStats.pendingManager} highlight={dashboardStats.pendingManager > 0} />
+                    <PipelineArrow />
+                    <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
+                    <PipelineArrow />
+                    <PipelineStage name="Procurement" count={approvedCount} highlight={approvedCount > 0}/>
+                </div>
+                
+                {(dashboardStats.queriesRaised > 0 || fulfillmentCount > 0) && <Separator className="my-4"/>}
+
+                <div className="flex justify-around items-center text-center text-sm gap-4">
+                    {fulfillmentCount > 0 && (
+                        <div className="flex items-center gap-2">
+                            <div className="font-bold text-lg text-indigo-500">{fulfillmentCount}</div>
+                            <div className="text-muted-foreground text-xs">In Fulfillment</div>
+                        </div>
+                    )}
+                    {dashboardStats.queriesRaised > 0 && (
+                         <div className="flex items-center gap-2">
+                            <div className="font-bold text-lg text-yellow-500">{dashboardStats.queriesRaised}</div>
+                            <div className="text-muted-foreground text-xs">With Queries</div>
+                        </div>
+                    )}
+                </div>
+            </div>
             )}
           </CardContent>
         </Card>
