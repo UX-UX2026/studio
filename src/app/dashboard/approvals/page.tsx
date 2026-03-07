@@ -120,6 +120,15 @@ export default function ApprovalsPage() {
 
     const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading;
 
+    const filteredRequests = useMemo(() => {
+        if (!approvals) return [];
+        const statusFilter = searchParams.get('status');
+        if (statusFilter) {
+            return approvals.filter(req => req.status === decodeURIComponent(statusFilter));
+        }
+        return approvals;
+    }, [approvals, searchParams]);
+
     useEffect(() => {
         const reqId = searchParams.get('id');
         if (reqId) {
@@ -127,17 +136,13 @@ export default function ApprovalsPage() {
         }
     }, [searchParams]);
 
-    const filteredRequests = useMemo(() => {
-        if (!approvals) return [];
-        return approvals;
-    }, [approvals]);
-
     useEffect(() => {
         if (!selectedRequestId && filteredRequests.length > 0) {
             const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
             setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
         }
     }, [filteredRequests, selectedRequestId]);
+
 
     const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
 

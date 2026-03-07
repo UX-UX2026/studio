@@ -50,17 +50,27 @@ import { logErrorToFirestore } from '@/lib/error-logger';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 
+const stageToStatusMap: { [key: string]: string } = {
+    "Manager": "Pending Manager Approval",
+    "Executive": "Pending Executive",
+    "Procurement": "Approved",
+};
+
 const PipelineStage = ({ name, count, highlight }: { name: string, count: number, highlight?: boolean }) => (
-    <div className="flex flex-col items-center gap-1 text-center w-16">
+    <Link 
+        href={`/dashboard/approvals?status=${encodeURIComponent(stageToStatusMap[name] || '')}`}
+        className="flex flex-col items-center gap-1 text-center w-16 cursor-pointer transition-transform duration-200 hover:scale-110 group"
+    >
         <div className={cn(
-            "flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold text-base",
+            "flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold text-base transition-colors group-hover:border-primary group-hover:text-primary",
             highlight ? "border-primary text-primary bg-primary/10" : "border-muted-foreground/30 text-muted-foreground"
         )}>
             {count}
         </div>
-        <div className="text-xs font-medium text-muted-foreground">{name}</div>
-    </div>
+        <div className="text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">{name}</div>
+    </Link>
 );
+
 
 const PipelineArrow = () => (
     <div className="flex-1 text-muted-foreground/50 -mx-1">
@@ -414,16 +424,16 @@ export default function DashboardPage() {
 
                 <div className="flex justify-around items-center text-center text-sm gap-4">
                     {fulfillmentCount > 0 && (
-                        <div className="flex items-center gap-2">
+                        <Link href={`/dashboard/approvals?status=In%20Fulfillment`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
                             <div className="font-bold text-lg text-indigo-500">{fulfillmentCount}</div>
                             <div className="text-muted-foreground text-xs">In Fulfillment</div>
-                        </div>
+                        </Link>
                     )}
                     {dashboardStats.queriesRaised > 0 && (
-                         <div className="flex items-center gap-2">
+                         <Link href={`/dashboard/approvals?status=Queries%20Raised`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
                             <div className="font-bold text-lg text-yellow-500">{dashboardStats.queriesRaised}</div>
                             <div className="text-muted-foreground text-xs">With Queries</div>
-                        </div>
+                        </Link>
                     )}
                 </div>
             </div>
