@@ -99,7 +99,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
             const metadataSnap = await getDoc(metadataRef);
             
             let userRole = 'Requester'; // Default role
-            if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+            // Ensure heinrich@ubuntux.co.za is always an admin on first sign-up
+            if (authUser.email === 'heinrich@ubuntux.co.za' || !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
               userRole = 'Administrator';
               await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
             }
