@@ -192,7 +192,7 @@ export default function WorkflowPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the workflow.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -388,3 +388,5 @@ export default function WorkflowPage() {
         </Card>
     );
 }
+
+    

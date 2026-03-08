@@ -220,7 +220,7 @@ export default function DashboardPage() {
         } catch (error: any) {
             console.error("Archive Draft Error:", error);
             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -508,4 +508,5 @@ export default function DashboardPage() {
   );
 }
 
+    
     
