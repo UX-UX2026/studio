@@ -89,11 +89,12 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="text-center">
-                    <div className="mx-auto mb-4 text-center">
+                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
+                        <span className="text-4xl font-bold text-primary-foreground">U</span>
+                    </div>
                     <p className="text-sm font-medium uppercase text-primary">ProcurePortal</p>
                     <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
-                    </div>
-                    <CardTitle className="text-2xl">Welcome</CardTitle>
+                    <CardTitle className="text-2xl !mt-6">Welcome</CardTitle>
                     <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
                 </CardHeader>
                 <CardContent>
