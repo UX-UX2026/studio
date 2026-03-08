@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -26,6 +25,7 @@ import {
   Recycle,
   Eraser,
   Mail,
+  LifeBuoy,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -63,6 +63,7 @@ const allLinks = [
   { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, permission: 'reports:view' },
   { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
   { href: '/dashboard/users', label: 'User Management', icon: Users, permission: 'settings:users' },
+  { href: '/dashboard/help', label: 'Help', icon: LifeBuoy, permission: 'help:view' },
   { 
     label: 'Settings', 
     icon: Settings, 
@@ -99,6 +100,8 @@ export function NavLinks({ role }: { role: UserRole }) {
 
   const hasPermission = (permission: string) => {
     if (role === 'Administrator') return true;
+    // Let's grant help:view to all logged in users.
+    if (permission === 'help:view') return true;
     return userPermissions.includes(permission);
   };
   

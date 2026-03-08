@@ -41,6 +41,7 @@ const allPermissions = [
     { id: 'fulfillment:manage', label: 'Manage Fulfillment Tasks' },
     { id: 'reports:view', label: 'View Reports' },
     { id: 'vendors:manage', 'label': 'Manage Vendors' },
+    { id: 'help:view', label: 'View Help Guide' },
     { id: 'settings:general', label: 'View General Settings' },
     { id: 'settings:users', label: 'Manage Users' },
     { id: 'settings:departments', label: 'Manage Departments' },
@@ -304,5 +305,3 @@ export default function RolesPage() {
         </>
     );
 }
-
-    
