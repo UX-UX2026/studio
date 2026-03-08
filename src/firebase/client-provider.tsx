@@ -2,7 +2,7 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
-import { app, auth, firestore } from './client';
+import { app, auth, firestore } from '@/firebase/client';
 import { enableIndexedDbPersistence } from 'firebase/firestore';
 import { Loader } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
