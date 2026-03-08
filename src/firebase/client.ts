@@ -1,10 +1,5 @@
 'use client';
 
-import { initializeApp, getApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, Auth } from 'firebase/auth';
-import { getFirestore, Firestore } from 'firebase/firestore';
-
-
 // =================================================================================
 // IMPORTANT - DEPLOYMENT CONFIGURATION
 // =================================================================================
@@ -26,36 +21,7 @@ export const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
-
-let app: FirebaseApp;
-let auth: Auth;
-let firestore: Firestore;
-
-// This pattern ensures that we only initialize Firebase once.
-try {
-  if (getApps().length) {
-    app = getApp();
-  } else {
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("YOUR_")) {
-      console.error("Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) with your project's configuration.");
-    }
-    // @ts-ignore
-    app = initializeApp(firebaseConfig);
-  }
-  auth = getAuth(app);
-  firestore = getFirestore(app);
-} catch (error) {
-  console.error("Firebase initialization error:", error);
-  // To prevent the app from crashing, we'll assign dummy objects.
-  // The app will not function correctly with Firebase, but it won't crash.
-  // @ts-ignore
-  app = app || {};
-  // @ts-ignore
-  auth = auth || {};
-  // @ts-ignore
-  firestore = firestore || {};
-}
-
-
-// Export the initialized services as singletons.
-export { app, auth, firestore };
+// NOTE: Firebase services (app, auth, firestore) are now initialized
+// within FirebaseClientProvider.tsx to ensure they are only created
+// on the client-side and after config validation. This file now only
+// exports the configuration.
