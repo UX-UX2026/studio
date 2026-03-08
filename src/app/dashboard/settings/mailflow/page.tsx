@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -10,11 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { useFirestore } from "@/firebase";
 
 export default function MailflowTestPage() {
     const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
     const { toast } = useToast();
+    const firestore = useFirestore();
 
     const [recipient, setRecipient] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -84,8 +87,8 @@ export default function MailflowTestPage() {
                 title: 'Failed to Send Email',
                 description: error.message,
             });
-            if (user) {
-                await logErrorToFirestore({
+            if (user && firestore) {
+                await logErrorToFirestore(firestore, {
                     userId: user.uid,
                     userName: user.displayName || 'System',
                     action: 'mailflow.test',

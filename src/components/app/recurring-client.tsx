@@ -68,7 +68,7 @@ export function RecurringClient() {
                 title: 'Update Failed',
                 description: error.message || 'Could not update recurring item.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
@@ -112,7 +112,7 @@ export function RecurringClient() {
                 title: 'Add Failed',
                 description: error.message || 'Could not add new recurring item.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
@@ -149,7 +149,7 @@ export function RecurringClient() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete recurring item.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,

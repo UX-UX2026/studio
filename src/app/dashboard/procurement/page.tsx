@@ -461,7 +461,7 @@ export default function ProcurementQuickSubmitPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save your request. Check your connection.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -506,7 +506,7 @@ export default function ProcurementQuickSubmitPage() {
         } catch (error: any) {
             console.error("Archive Draft Error:", error);
             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,

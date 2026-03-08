@@ -101,7 +101,7 @@ export default function DataManagementPage() {
                 title: 'Export Failed',
                 description: error.message || 'Could not export submissions.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -155,7 +155,7 @@ export default function DataManagementPage() {
                 title: 'Operation Failed',
                 description: error.message || 'Could not delete submissions.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,

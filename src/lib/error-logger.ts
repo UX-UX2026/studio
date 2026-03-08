@@ -1,6 +1,5 @@
 
-import { firestore } from '@/firebase/client';
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, type Firestore } from 'firebase/firestore';
 
 export type LogErrorOptions = {
     userId?: string;
@@ -10,7 +9,7 @@ export type LogErrorOptions = {
     errorStack?: string;
 };
 
-export const logErrorToFirestore = async (options: LogErrorOptions) => {
+export const logErrorToFirestore = async (firestore: Firestore, options: LogErrorOptions) => {
     try {
         if (!firestore) {
             console.error("Firestore is not initialized. Could not log error.", options);

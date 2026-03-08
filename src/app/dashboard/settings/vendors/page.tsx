@@ -169,7 +169,7 @@ export default function VendorsPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the vendor.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -212,7 +212,7 @@ export default function VendorsPage() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the vendor.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,

@@ -138,7 +138,7 @@ export default function RolesPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the role. You may not have permissions.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user?.uid,
                 userName: user?.displayName,
                 action,
@@ -182,7 +182,7 @@ export default function RolesPage() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the role.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                  userId: user.uid,
                  userName: user.displayName,
                  action,

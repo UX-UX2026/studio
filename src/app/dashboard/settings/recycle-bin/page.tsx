@@ -84,7 +84,7 @@ export default function RecycleBinPage() {
 
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Restore Failed', description: error.message });
-            await logErrorToFirestore({ userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
         }
     };
     
@@ -107,7 +107,7 @@ export default function RecycleBinPage() {
 
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Delete Failed', description: error.message });
-            await logErrorToFirestore({ userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
         } finally {
             setDeletingRequestId(null);
             setIsDialogOpen(false);
@@ -160,7 +160,7 @@ export default function RecycleBinPage() {
                                 ))
                             ) : (
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
                                         The recycle bin is empty.
                                     </TableCell>
                                 </TableRow>

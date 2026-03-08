@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -195,7 +196,7 @@ export default function ProcurementPeriodsPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the settings.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,

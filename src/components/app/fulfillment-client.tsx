@@ -133,7 +133,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                 title: 'Update Failed',
                 description: error.message || 'Could not update the fulfillment item. Check your connection.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,

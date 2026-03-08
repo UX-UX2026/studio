@@ -366,7 +366,7 @@ export default function ApprovalsPage() {
                                 }
                             } catch (emailError) {
                                 console.error("Email API call failed:", emailError);
-                                await logErrorToFirestore({
+                                await logErrorToFirestore(firestore, {
                                     userId: user.uid,
                                     userName: user.displayName || 'System',
                                     action: 'notification.email_api_failed',
@@ -386,7 +386,7 @@ export default function ApprovalsPage() {
                 title: "Approval Failed",
                 description: error.message || "Could not update the request. Please check your connection and try again.",
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action: 'request.approve',
@@ -473,7 +473,7 @@ export default function ApprovalsPage() {
                 title: "Reject Failed",
                 description: error.message || "Could not update the request. Please check your connection and try again.",
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
@@ -542,7 +542,7 @@ export default function ApprovalsPage() {
                 title: "Query Failed",
                 description: error.message || "Could not update the request. Please check your connection and try again.",
             });
-             await logErrorToFirestore({
+             await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
@@ -593,7 +593,7 @@ export default function ApprovalsPage() {
                 title: "Comment Failed",
                 description: error.message || "Could not add comment. Please check your connection and try again.",
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,

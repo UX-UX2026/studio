@@ -158,7 +158,7 @@ export default function DepartmentsPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the department. Please check your connection.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
@@ -202,7 +202,7 @@ export default function DepartmentsPage() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the department. Check your connection.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,

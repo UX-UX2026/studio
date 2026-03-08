@@ -82,6 +82,7 @@ export default function BudgetPage() {
     const [startRow, setStartRow] = useState(2);
     const [endRow, setEndRow] = useState(0);
     const [isImporting, setIsImporting] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
     const [columnMappings, setColumnMappings] = useState<{
         category: string;
         yearTotal: string;
@@ -412,7 +413,7 @@ export default function BudgetPage() {
         } catch (error: any) {
              console.error("Budget Import Error:", error);
              toast({ variant: "destructive", title: "Import Failed", description: error.message || "An unknown error occurred during the import process. Check console for details." });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
@@ -467,7 +468,7 @@ export default function BudgetPage() {
         } catch (error: any) {
             console.error("Budget Activation Error:", error);
             toast({ variant: "destructive", title: "Activation Failed", description: error.message });
-            await logErrorToFirestore({ userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
         } finally {
             setIsSaving(false);
         }
