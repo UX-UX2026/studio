@@ -4,10 +4,9 @@ import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/client';
 import { AlertTriangle, Loader } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
 
 interface FirebaseServices {
   app: FirebaseApp;
@@ -20,7 +19,6 @@ const CONNECTION_TIMEOUT = 10000; // 10 seconds
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [firebase, setFirebase] = useState<FirebaseServices | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { toast } = useToast();
 
   useEffect(() => {
     console.log("FirebaseClientProvider: Mounting...");
@@ -36,14 +34,25 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
     const initialize = async () => {
       try {
-        console.log("FirebaseClientProvider: Initializing Firebase (online-only mode)...");
+        console.log("FirebaseClientProvider: Initializing Firebase...");
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         const firestore = getFirestore(app);
         
-        // NOTE: Offline persistence has been temporarily disabled to diagnose the connection issue.
-        console.log("FirebaseClientProvider: Initialization complete (online mode).");
+        try {
+            await enableIndexedDbPersistence(firestore);
+            console.log("FirebaseClientProvider: Offline persistence enabled successfully.");
+        } catch (err: any) {
+            if (err.code === 'failed-precondition') {
+                console.warn("FirebaseClientProvider: Persistence failed (multiple tabs open). This is not a critical error. App will continue in online-only mode.");
+            } else if (err.code === 'unimplemented') {
+                console.warn("FirebaseClientProvider: The current browser does not support all of the features required to enable persistence. App will continue in online-only mode.");
+            } else {
+                 console.error("FirebaseClientProvider: An unknown error occurred while enabling persistence.", err);
+            }
+        }
         
+        console.log("FirebaseClientProvider: Initialization sequence complete.");
         return { app, auth, firestore };
       } catch (err) {
         console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
@@ -57,7 +66,7 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
         new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout")), CONNECTION_TIMEOUT))
       ])
       .then((services) => {
-        console.log("FirebaseClientProvider: Initialization complete. Setting state.");
+        console.log("FirebaseClientProvider: Initialization promise resolved. Setting state.");
         setFirebase(services as FirebaseServices);
       })
       .catch((err: any) => {
