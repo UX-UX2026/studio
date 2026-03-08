@@ -2,16 +2,22 @@
 
 import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
-import { app, auth, firestore } from '@/firebase/client';
+import { app, auth, firestore, firebaseConfig } from '@/firebase/client';
 import { enableIndexedDbPersistence } from 'firebase/firestore';
-import { Loader } from 'lucide-react';
+import { AlertTriangle, Loader } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [isFirebaseReady, setIsFirebaseReady] = useState(false);
   const { toast } = useToast();
 
+  const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
+
   useEffect(() => {
+    if (!isConfigValid) {
+      return;
+    }
+
     const initializeFirebase = async () => {
       try {
         // This enables Firestore's offline capabilities.
@@ -38,7 +44,21 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
     initializeFirebase();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isConfigValid]);
+
+  if (!isConfigValid) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-background p-8">
+        <div className="flex max-w-lg flex-col items-center gap-4 rounded-lg border border-destructive bg-destructive/5 p-6 text-center text-destructive">
+          <AlertTriangle className="h-10 w-10" />
+          <h1 className="text-xl font-bold">Firebase Not Configured</h1>
+          <p className="text-sm">
+            Your Firebase configuration is missing or incomplete. Please update your environment variables (the <code>.env</code> file for local development) with your project's configuration and restart the development server. For production, ensure these variables are set in your hosting provider's settings.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isFirebaseReady) {
     return (
