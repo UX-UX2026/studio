@@ -1,8 +1,7 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, getRedirectResult, GoogleAuthProvider } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
 import { usePathname, useRouter } from 'next/navigation';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, deleteDoc } from 'firebase/firestore';
@@ -50,106 +49,109 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     if (!firebaseAuth || !firestore) {
       setIsLoading(false);
       return;
-    };
-    
-    // This is the primary listener for authentication state changes.
-    const unsubscribeAuth = onAuthStateChanged(firebaseAuth, async (authUser) => {
-        setIsLoading(true);
-        if (authUser) {
-            // User is signed in. We must listen to their profile document.
-            const userRef = doc(firestore, 'users', authUser.uid);
-            const unsubscribeProfile = onSnapshot(userRef, 
-              async (docSnap) => {
-                if (docSnap.exists()) {
-                    // Profile exists, set user and profile state, and stop loading.
-                    setUser(authUser);
-                    setProfile({ id: docSnap.id, ...docSnap.data() } as UserProfile);
-                    setIsLoading(false);
-                } else {
-                    // Profile does NOT exist for this UID. This is the user's first sign-in.
-                    // CHECK FOR AN INVITE FIRST.
-                    const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email), where('status', '==', 'Invited'));
-                    const invitesSnapshot = await getDocs(invitesQuery);
+    }
 
-                    if (!invitesSnapshot.empty) {
-                        // An invitation exists. Use it to create the profile.
-                        const inviteDoc = invitesSnapshot.docs[0];
-                        const invitedProfileData = inviteDoc.data();
-                        
-                        const newProfileData = {
-                            ...invitedProfileData,
-                            displayName: authUser.displayName || invitedProfileData.displayName,
-                            email: authUser.email!,
-                            photoURL: authUser.photoURL || invitedProfileData.photoURL,
-                            status: 'Active' as const,
-                        };
+    let unsubscribeProfile: (() => void) | undefined;
 
-                        try {
-                            // Create the new user doc with the correct UID
-                            await setDoc(userRef, newProfileData);
-                            
-                            // Delete the old invitation document
-                            await deleteDoc(inviteDoc.ref);
-                            
-                            // The onSnapshot listener on userRef will now fire with the new data, setting state and loading.
-                        } catch (e) {
-                            console.error("Fatal: Could not migrate invited user profile.", e);
-                            toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred while activating your account." });
-                            if(firebaseAuth) firebaseAuth.signOut();
-                            setIsLoading(false);
-                        }
+    const authStateObserver = onAuthStateChanged(firebaseAuth, async (authUser) => {
+      // Clean up previous profile listener if it exists
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+        unsubscribeProfile = undefined;
+      }
+      
+      if (!authUser) {
+        setUser(null);
+        setProfile(null);
+        setIsLoading(false);
+        return;
+      }
+      
+      setIsLoading(true);
+      const userRef = doc(firestore, 'users', authUser.uid);
+      let docSnap = await getDoc(userRef);
 
-                    } else {
-                        // No invitation found. Proceed with default first-time user creation.
-                        try {
-                            const metadataRef = doc(firestore, 'app', 'metadata');
-                            const metadataSnap = await getDoc(metadataRef);
-
-                            let userRole = 'Requester'; // Default role for new users
-                            if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
-                                userRole = 'Administrator';
-                                // Set the flag to true so subsequent users don't become admins.
-                                await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-                            }
-
-                            const newProfile: Omit<UserProfile, 'id'> = {
-                                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-                                email: authUser.email!,
-                                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                                role: userRole,
-                                department: userRole === 'Administrator' ? 'Executive' : 'Unassigned',
-                                status: 'Active' as const,
-                            };
-
-                            await setDoc(userRef, newProfile);
-                            // The onSnapshot listener will now fire with the new data,
-                            // which will then correctly set the profile and stop loading.
-                        } catch(e) {
-                            console.error("Fatal: Could not create user profile.", e);
-                            toast({ variant: "destructive", title: "Profile Creation Failed", description: "A critical error occurred." });
-                            if(firebaseAuth) firebaseAuth.signOut();
-                            setIsLoading(false);
-                        }
-                    }
-                }
-              },
-              (error) => {
-                  console.error("Fatal: Firestore listener for profile failed.", error);
-                  toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile." });
-                  if(firebaseAuth) firebaseAuth.signOut();
-                  setIsLoading(false);
-              }
-            );
-            return () => unsubscribeProfile();
-        } else {
-            // User is signed out.
-            setUser(null);
-            setProfile(null);
-            setIsLoading(false);
+      if (!docSnap.exists()) {
+        // Profile does not exist, so we must create it.
+        try {
+          // Check for an invitation first.
+          const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email), where('status', '==', 'Invited'));
+          const invitesSnapshot = await getDocs(invitesQuery);
+          
+          if (!invitesSnapshot.empty) {
+            // An invitation exists. Use it to create the profile.
+            const inviteDoc = invitesSnapshot.docs[0];
+            const invitedProfileData = inviteDoc.data();
+            
+            const newProfileData = {
+              ...invitedProfileData,
+              displayName: authUser.displayName || invitedProfileData.displayName,
+              email: authUser.email!,
+              photoURL: authUser.photoURL || invitedProfileData.photoURL,
+              status: 'Active' as const,
+            };
+            
+            await setDoc(userRef, newProfileData);
+            await deleteDoc(inviteDoc.ref);
+          } else {
+            // No invitation. This is a first-time sign-up.
+            const metadataRef = doc(firestore, 'app', 'metadata');
+            const metadataSnap = await getDoc(metadataRef);
+            
+            let userRole = 'Requester'; // Default role
+            if (!metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
+              userRole = 'Administrator';
+              await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
+            }
+            
+            const newProfile: Omit<UserProfile, 'id'> = {
+              displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+              email: authUser.email!,
+              photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+              role: userRole,
+              department: userRole === 'Administrator' ? 'Executive' : 'Unassigned',
+              status: 'Active' as const,
+            };
+            await setDoc(userRef, newProfile);
+          }
+          // After creation, re-fetch the document to ensure we have the latest state
+          docSnap = await getDoc(userRef);
+        } catch (error) {
+          console.error("Fatal: Could not create user profile.", error);
+          toast({ variant: "destructive", title: "Profile Creation Failed", description: (error as Error).message || "A critical error occurred." });
+          if(firebaseAuth) firebaseAuth.signOut();
+          setIsLoading(false);
+          return;
         }
+      }
+
+      // At this point, the document is guaranteed to exist.
+      // Set up the real-time listener.
+      unsubscribeProfile = onSnapshot(userRef, (profileSnap) => {
+        if (profileSnap.exists()) {
+          setUser(authUser);
+          setProfile({ id: profileSnap.id, ...profileSnap.data() } as UserProfile);
+        } else {
+          // This case should not happen if creation logic is correct, but as a safeguard:
+          setUser(null);
+          setProfile(null);
+          if(firebaseAuth) firebaseAuth.signOut(); // Log out user as their profile is gone
+        }
+        setIsLoading(false);
+      }, (error) => {
+        console.error("Fatal: Firestore listener for profile failed.", error);
+        toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile." });
+        if(firebaseAuth) firebaseAuth.signOut();
+        setIsLoading(false);
+      });
     });
 
-    return () => unsubscribeAuth();
+    return () => {
+      authStateObserver();
+      if (unsubscribeProfile) {
+        unsubscribeProfile();
+      }
+    };
   }, [firebaseAuth, firestore, toast]);
 
 
