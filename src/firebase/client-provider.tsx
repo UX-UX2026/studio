@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, enableIndexedDbPersistence, type Firestore } from 'firebase/firestore';
+import { getFirestore, type Firestore } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/client';
 import { AlertTriangle, Loader } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -36,37 +36,18 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
     const initialize = async () => {
       try {
-        console.log("FirebaseClientProvider: Initializing Firebase...");
+        console.log("FirebaseClientProvider: Initializing Firebase (online-only mode)...");
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         const firestore = getFirestore(app);
         
-        console.log("FirebaseClientProvider: Attempting to enable offline persistence...");
-        await enableIndexedDbPersistence(firestore);
-        console.log("FirebaseClientProvider: Offline persistence enabled successfully.");
+        // NOTE: Offline persistence has been temporarily disabled to diagnose the connection issue.
+        console.log("FirebaseClientProvider: Initialization complete (online mode).");
         
         return { app, auth, firestore };
-      } catch (err: any) {
-        if (err.code === 'failed-precondition' || err.code === 'unimplemented') {
-          if (err.code === 'failed-precondition') {
-            console.warn('FirebaseClientProvider: Persistence failed (multiple tabs). App will work online.');
-            toast({
-              title: "Offline Mode Disabled",
-              description: "You have the app open in multiple tabs, so offline capabilities are turned off.",
-              duration: 6000,
-            });
-          } else {
-             console.warn('FirebaseClientProvider: Persistence not available in this browser.');
-          }
-          
-          const app = getApp();
-          const auth = getAuth(app);
-          const firestore = getFirestore(app);
-          return { app, auth, firestore };
-        } else {
-          console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
-          throw err;
-        }
+      } catch (err) {
+        console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
+        throw err;
       }
     };
 
