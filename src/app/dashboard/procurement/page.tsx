@@ -1,12 +1,13 @@
+
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Globe, Trash2 } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -116,8 +117,26 @@ export default function ProcurementQuickSubmitPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
-    const requestsQuery = useMemo(() => collection(firestore, 'procurementRequests'), [firestore]);
-    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    const userDraftsQuery = useMemo(() => {
+        if (!firestore || !user) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('status', '==', 'Draft'),
+            where('submittedById', '==', user.uid),
+            orderBy('updatedAt', 'desc')
+        );
+    }, [firestore, user]);
+    const { data: userDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(userDraftsQuery);
+
+    const periodRequestsQuery = useMemo(() => {
+        if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('departmentId', '==', selectedDepartmentId),
+            where('period', '==', selectedPeriod)
+        );
+    }, [firestore, selectedDepartmentId, selectedPeriod]);
+    const { data: periodRequests, loading: periodRequestsLoading } = useCollection<ApprovalRequest>(periodRequestsQuery);
 
     const budgetsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
@@ -199,12 +218,12 @@ export default function ProcurementQuickSubmitPage() {
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.
     useEffect(() => {
-        if (requestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
+        if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
             if (!selectedPeriod) setDraftItems([]);
             return;
         };
 
-        const existingRequest = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
+        const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
 
         // Prepare a function to convert master recurring items to submission items
         const mapRecurringToSubmissionItem = (item: RecurringItem): Item => ({
@@ -242,13 +261,13 @@ export default function ProcurementQuickSubmitPage() {
                 .map(mapRecurringToSubmissionItem) || [];
             setDraftItems(initialItems);
         }
-    }, [selectedDepartmentId, selectedPeriod, allRequests, requestsLoading, recurringItems, recurringLoading]);
+    }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
 
     const isLockedByWorkflow = useMemo(() => {
         if (!selectedDepartmentId || !selectedPeriod) return false;
-        const periodStatusInfo = allRequests?.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
+        const periodStatusInfo = periodRequests?.find(req => !['Archived'].includes(req.status));
 
         if (!periodStatusInfo) return false;
 
@@ -265,7 +284,7 @@ export default function ProcurementQuickSubmitPage() {
         }
 
         return false;
-    }, [selectedDepartmentId, selectedPeriod, allRequests, role]);
+    }, [selectedDepartmentId, selectedPeriod, periodRequests, role]);
 
     const isLocked = isLockedByWorkflow || !selectedPeriod;
 
@@ -322,13 +341,6 @@ export default function ProcurementQuickSubmitPage() {
         return { lines, totals };
 
     }, [draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
-    
-    const userDrafts = useMemo(() => {
-        if (!allRequests || !user) return [];
-        return allRequests
-            .filter(req => req.status === 'Draft' && req.submittedById === user.uid)
-            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-    }, [allRequests, user]);
 
     const handleRequestEdit = () => {
         toast({
@@ -343,7 +355,7 @@ export default function ProcurementQuickSubmitPage() {
             return;
         }
 
-        const activePipelineRequest = allRequests?.find(req => 
+        const activePipelineRequest = periodRequests?.find(req => 
             req.departmentId === selectedDepartmentId && 
             req.period === selectedPeriod &&
             req.id !== editingRequestId &&
@@ -399,7 +411,7 @@ export default function ProcurementQuickSubmitPage() {
             submittedBy: user.displayName,
             submittedById: user.uid,
             timeline: timeline,
-            comments: editingRequestId ? allRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
+            comments: editingRequestId ? periodRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: draftItems,
             updatedAt: serverTimestamp(),
         };
@@ -467,7 +479,7 @@ export default function ProcurementQuickSubmitPage() {
             return;
         }
 
-        const draftToArchive = allRequests?.find(req => req.id === deletingRequestId);
+        const draftToArchive = userDrafts?.find(req => req.id === deletingRequestId);
         if (!draftToArchive) return;
 
         const action = 'request.draft_archive';
@@ -519,7 +531,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || requestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading;
+    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -582,10 +594,10 @@ export default function ProcurementQuickSubmitPage() {
                 </CardContent>
             </Card>
 
-            {userDrafts.length > 0 && (
+            {userDrafts && userDrafts.length > 0 && (
                 <Card>
                     <CardHeader>
-                        <CardTitle>Your Draft Submissions</CardTitle>
+                        <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary"/>Your Other Drafts</CardTitle>
                         <CardDescription>Resume editing or archive your saved drafts for other periods.</CardDescription>
                     </CardHeader>
                     <CardContent>

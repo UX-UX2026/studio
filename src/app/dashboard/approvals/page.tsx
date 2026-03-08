@@ -91,7 +91,9 @@ export default function ApprovalsPage() {
         const baseQuery = collection(firestore, 'procurementRequests');
 
         if (role === 'Administrator') {
-            return query(baseQuery); // All requests
+            // Exclude completed and archived requests to improve performance for admins.
+            // They can still be accessed via direct link/search if needed.
+            return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
         }
         if (role === 'Executive') {
             return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised']));
