@@ -79,45 +79,57 @@ The Firestore database is structured into several top-level collections.
 
 ## Getting Started
 
-To get the application running locally, follow these steps.
+To get the application running, follow these steps.
 
 ### Prerequisites
 
 *   Node.js (v18 or later)
 *   An active Firebase project.
 
-### Local Development
+### Environment Configuration
+
+This application uses environment variables to handle sensitive information like Firebase and email credentials securely.
+
+1.  **Create an Environment File:**
+    In the root of your project, create a new file named `.env` by copying the included placeholder variables.
+
+2.  **Add Your Credentials:**
+    Open your new `.env` file and replace the placeholder values with your actual credentials. You can find your Firebase configuration in your Firebase project settings.
+
+    ```
+    # Firebase Configuration
+    NEXT_PUBLIC_FIREBASE_API_KEY="YOUR_API_KEY"
+    NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN="YOUR_AUTH_DOMAIN"
+    NEXT_PUBLIC_FIREBASE_PROJECT_ID="YOUR_PROJECT_ID"
+    # ...and so on for the other Firebase variables.
+
+    # Email Configuration (for notifications)
+    EMAIL_HOST="your_smtp_host"
+    EMAIL_PORT=587
+    # ...etc.
+    ```
+    **Important:** The `.env` file should not be committed to your GitHub repository.
+
+### Running Locally
 
 1.  **Install Dependencies:**
     ```bash
     npm install
     ```
-
-2.  **Add Firebase Configuration:**
-    Open the file `src/firebase/client.ts` and replace the placeholder values in the `firebaseConfig` object with your actual Firebase project configuration. You can find this in your Firebase project settings.
-
-3.  **Run the Development Server:**
+2.  **Run the Development Server:**
     ```bash
     npm run dev
     ```
     The application will be available at `http://localhost:3000`.
 
-
 ### Publishing the Application
 
-This application is configured for deployment using **Firebase App Hosting**. App Hosting integrates with GitHub to automatically build and deploy your Next.js application when you push to your repository.
+This application is configured for deployment using **Firebase App Hosting**.
 
-#### IMPORTANT: Deployment Configuration
+For your live, deployed application to connect to Firebase and send emails, you **MUST** provide your credentials using **Environment Variables** in your hosting provider's settings dashboard.
 
-For your live, deployed application to connect to Firebase, you **MUST** hard-code your Firebase project configuration into the application.
+1.  Go to your hosting provider's dashboard (e.g., Firebase App Hosting, Vercel).
+2.  Navigate to the environment variable settings for your project.
+3.  Add all the variables from your `.env` file (both Firebase and Email variables) with their corresponding production values.
 
-**WARNING:** This method is **not recommended for production environments** as it exposes your project configuration in your source code. The secure, industry-standard method is to use your hosting provider's secret management tools, which may require a billing account. This method is provided as a way to deploy a functional demonstration without enabling billing.
-
-**How to Configure for Deployment:**
-
-1.  Open the file `src/firebase/client.ts` in your code editor.
-2.  Locate the `firebaseConfig` object.
-3.  Replace the placeholder values (`"YOUR_API_KEY_HERE"`, etc.) with the actual values from your Firebase project settings.
-4.  Save the file, commit it, and push it to your GitHub repository.
-
-Firebase App Hosting will now build your application with the correct configuration, and your deployed site will be able to connect to Firebase.
+Your hosting provider will now build your application with the correct configuration, and your deployed site will be able to connect to Firebase securely.

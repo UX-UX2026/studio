@@ -8,29 +8,22 @@ import { getFirestore, Firestore } from 'firebase/firestore';
 // =================================================================================
 // IMPORTANT - DEPLOYMENT CONFIGURATION
 // =================================================================================
-// For your deployed site to work, you MUST replace the placeholder values below
-// with your actual Firebase project configuration. This is not the recommended
-// secure practice for a production app, but it is necessary if you cannot use
-// your hosting provider's secret management features (which may require billing).
+// This app is configured to load your Firebase credentials from environment
+// variables. This is the secure, industry-standard method.
 //
-// 1. Go to your Firebase project settings.
-// 2. Under "Your apps", find your web app.
-// 3. Copy the `firebaseConfig` object.
-// 4. Paste it here, replacing the placeholder values.
+// For local development, create or update the .env file in the root of your
+// project and add the variables with your Firebase project config.
+//
+// For production, add these environment variables to your hosting provider's
+// settings (e.g., Firebase App Hosting, Vercel, Netlify).
 // =================================================================================
 export const firebaseConfig = {
- /* apiKey: "YOUR_API_KEY_HERE",
-  authDomain: "YOUR_AUTH_DOMAIN_HERE",
-  projectId: "YOUR_PROJECT_ID_HERE",
-  storageBucket: "YOUR_STORAGE_BUCKET_HERE",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID_HERE",
-  appId: "YOUR_APP_ID_HERE"*/
-  apiKey: "AIzaSyBkP1hVPRjxoeuY9mRa7XU-0lZH5jdWzQo",
-  authDomain: "studio-845965156-c3a3b.firebaseapp.com",
-  projectId: "studio-845965156-c3a3b",
-  storageBucket: "studio-845965156-c3a3b.firebasestorage.app",
-  messagingSenderId: "1014429404657",
-  appId: "1:1014429404657:web:fe6855f3d2ed43d89bc850"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
 
 
@@ -43,9 +36,10 @@ try {
   if (getApps().length) {
     app = getApp();
   } else {
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
-      console.error("Firebase configuration is missing or incomplete. Please update src/firebase/client.ts with your project's configuration.");
+    if (!firebaseConfig.apiKey || firebaseConfig.apiKey.includes("YOUR_")) {
+      console.error("Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) with your project's configuration.");
     }
+    // @ts-ignore
     app = initializeApp(firebaseConfig);
   }
   auth = getAuth(app);
