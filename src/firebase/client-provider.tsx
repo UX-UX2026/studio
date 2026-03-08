@@ -15,60 +15,81 @@ interface FirebaseServices {
   firestore: Firestore;
 }
 
+const CONNECTION_TIMEOUT = 10000; // 10 seconds
+
 export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [firebase, setFirebase] = useState<FirebaseServices | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
-    const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
+    console.log("FirebaseClientProvider: Mounting...");
 
+    const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
     if (!isConfigValid) {
-      setError("Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) and restart the server.");
+      const errorMessage = "Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) and restart the server.";
+      console.error("FirebaseClientProvider: " + errorMessage);
+      setError(errorMessage);
       return;
     }
+    console.log("FirebaseClientProvider: Config is valid.");
 
     const initialize = async () => {
       try {
+        console.log("FirebaseClientProvider: Initializing Firebase...");
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         const firestore = getFirestore(app);
         
+        console.log("FirebaseClientProvider: Attempting to enable offline persistence...");
         await enableIndexedDbPersistence(firestore);
+        console.log("FirebaseClientProvider: Offline persistence enabled successfully.");
         
-        setFirebase({ app, auth, firestore });
-
+        return { app, auth, firestore };
       } catch (err: any) {
-        // Gracefully handle persistence errors (e.g., multiple tabs open)
-        // by initializing the app anyway for online-only mode.
         if (err.code === 'failed-precondition' || err.code === 'unimplemented') {
           if (err.code === 'failed-precondition') {
-            console.warn('Firestore persistence failed: multiple tabs open. App will work, but without offline support.');
+            console.warn('FirebaseClientProvider: Persistence failed (multiple tabs). App will work online.');
             toast({
               title: "Offline Mode Disabled",
               description: "You have the app open in multiple tabs, so offline capabilities are turned off.",
               duration: 6000,
             });
           } else {
-             console.warn('Firestore persistence is not available in this browser.');
+             console.warn('FirebaseClientProvider: Persistence not available in this browser.');
           }
           
           const app = getApp();
           const auth = getAuth(app);
           const firestore = getFirestore(app);
-          setFirebase({ app, auth, firestore });
+          return { app, auth, firestore };
         } else {
-          console.error("Firebase initialization failed:", err);
-          setError(err.message || "An unexpected error occurred during Firebase setup.");
+          console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
+          throw err;
         }
       }
     };
 
-    if (!firebase) {
-      initialize();
+    if (!firebase && !error) {
+      Promise.race([
+        initialize(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("Connection timeout")), CONNECTION_TIMEOUT))
+      ])
+      .then((services) => {
+        console.log("FirebaseClientProvider: Initialization complete. Setting state.");
+        setFirebase(services as FirebaseServices);
+      })
+      .catch((err: any) => {
+        let errorMessage = err.message || "An unexpected error occurred during Firebase setup.";
+        if (err.message === "Connection timeout") {
+          errorMessage = "Could not connect to Firebase within the time limit. Please check your internet connection and ensure your Firebase project's domain is not blocked by a firewall. Also, double-check your environment variables are correct.";
+        }
+        console.error("FirebaseClientProvider: Final catch block error:", errorMessage);
+        setError(errorMessage);
+      });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // Run only once
 
   if (error) {
     return (
