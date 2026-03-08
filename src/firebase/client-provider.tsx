@@ -4,7 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { FirebaseProvider } from './provider';
 import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { firebaseConfig } from '@/firebase/client';
 import { AlertTriangle, Loader } from 'lucide-react';
 
@@ -19,7 +19,39 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log("FirebaseClientProvider: Mounting...");
+    const initialize = async () => {
+      console.log("FirebaseClientProvider: Initializing Firebase with persistence...");
+
+      try {
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        const auth = getAuth(app);
+        const firestore = getFirestore(app);
+        console.log("FirebaseClientProvider: Core services initialized.");
+
+        await enableIndexedDbPersistence(firestore);
+        console.log("FirebaseClientProvider: Firestore persistence enabled.");
+        
+        return { app, auth, firestore };
+      } catch (err: any) {
+        if (err.code === 'failed-precondition') {
+          console.warn("FirebaseClientProvider: Persistence failed (multiple tabs open). Falling back to online-only.");
+          // This is not a fatal error. We can still proceed.
+          const app = getApp();
+          const auth = getAuth(app);
+          const firestore = getFirestore(app);
+          return { app, auth, firestore };
+        } else if (err.code === 'unimplemented') {
+          console.warn("FirebaseClientProvider: Persistence is not available in this browser. Falling back to online-only.");
+          // Also not fatal.
+          const app = getApp();
+          const auth = getAuth(app);
+          const firestore = getFirestore(app);
+          return { app, auth, firestore };
+        }
+        console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
+        throw err; // Re-throw other errors
+      }
+    };
 
     const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
     if (!isConfigValid) {
@@ -30,33 +62,20 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
     }
     console.log("FirebaseClientProvider: Config is valid.");
 
-    const initialize = () => {
-      try {
-        console.log("FirebaseClientProvider: Initializing Firebase (simplified)...");
-        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-        const auth = getAuth(app);
-        const firestore = getFirestore(app);
-        console.log("FirebaseClientProvider: Core services initialized.");
-        return { app, auth, firestore };
-      } catch (err) {
-        console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
-        throw err;
-      }
-    };
-
     if (!firebase && !error) {
-      try {
-        const services = initialize();
-        console.log("FirebaseClientProvider: Initialization successful. Setting state.");
-        setFirebase(services);
-      } catch (err: any) {
-        const errorMessage = err.message || "An unexpected error occurred during Firebase setup.";
-        console.error("FirebaseClientProvider: Initialization catch block error:", errorMessage);
-        setError(errorMessage);
-      }
+      initialize()
+        .then(services => {
+          console.log("FirebaseClientProvider: Initialization successful. Setting state.");
+          setFirebase(services);
+        })
+        .catch(err => {
+          const errorMessage = err.message || "An unexpected error occurred during Firebase setup.";
+          console.error("FirebaseClientProvider: Initialization promise catch block error:", errorMessage);
+          setError(errorMessage);
+        });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run only once
+  }, []);
 
   if (error) {
     return (
