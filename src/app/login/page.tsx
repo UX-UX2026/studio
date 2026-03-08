@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Link from "next/link";
-import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import React, { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,14 +37,16 @@ export default function LoginPage() {
             prompt: 'select_account'
         });
         try {
-            await signInWithRedirect(auth, provider);
-            // On success, the user is redirected. The AuthenticationProvider
-            // will handle the result when they return to the app.
+            await signInWithPopup(auth, provider);
+            // On success, the AuthenticationProvider's onAuthStateChanged observer
+            // will handle the user state and navigation.
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
             let description = "An unexpected error occurred. Please try again.";
             if (error.code === 'auth/account-exists-with-different-credential') {
                 description = "An account already exists with the same email address but different sign-in credentials. Try signing in with the original method.";
+            } else if (error.code === 'auth/popup-closed-by-user') {
+                description = "The sign-in window was closed before completion.";
             }
             toast({
                 variant: "destructive",
@@ -52,7 +54,8 @@ export default function LoginPage() {
                 description: description,
                 duration: 9000,
             });
-            setIsSubmitting(false); // Only reaches here on error
+        } finally {
+            setIsSubmitting(false);
         }
     };
 

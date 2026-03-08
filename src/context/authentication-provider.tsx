@@ -47,33 +47,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
 
   useEffect(() => {
-    // This effect handles the result of a redirect sign-in when the page loads.
-    if (!firebaseAuth) return;
-
-    getRedirectResult(firebaseAuth)
-      .then((result) => {
-        if (result) {
-          // The onAuthStateChanged observer will handle the user state update.
-          // We can optionally toast a success message here.
-          toast({ title: "Signed In", description: `Welcome back, ${result.user.displayName || result.user.email}!` });
-        }
-      }).catch((error) => {
-        // Handle Errors here.
-        console.error("Sign-in redirect error:", error);
-        let description = error.message;
-        if (error.code === 'auth/account-exists-with-different-credential') {
-            description = "An account already exists with this email. Try signing in with the original method.";
-        }
-        toast({
-            variant: "destructive",
-            title: "Sign-In Failed",
-            description,
-        });
-      });
-  }, [firebaseAuth, toast]);
-
-
-  useEffect(() => {
     if (!firebaseAuth || !firestore) {
       setIsLoading(false);
       return;
