@@ -12,23 +12,23 @@ export type UserStatus = 'Active' | 'Invited' | null;
 
 /**
  * This hook is the definitive source for user and profile information.
- * It consumes the `useAuthentication` hook to get the auth state, and then
- * becomes responsible for fetching or creating the user's profile document from Firestore.
+ * It uses a realtime listener for the user's profile and creates it if it doesn't exist.
  */
 export function useUser() {
     const { user, isLoading: authIsLoading, firestore } = useAuthentication();
     const { toast } = useToast();
     
-    // Create a stable reference to the user's document
+    // Create a stable reference to the user's document to prevent re-renders in useDoc
     const userDocRef = useMemo(() => {
         if (!user || !firestore) return null;
         return doc(firestore, 'users', user.uid);
     }, [user, firestore]);
 
-    // Use the useDoc hook to listen for profile changes
+    // Use the realtime useDoc hook to listen for profile changes
     const { data: profile, loading: profileIsLoading, error: profileError } = useDoc<UserProfile>(userDocRef);
     
-    const [isCreatingProfile, setIsCreatingProfile] = useState(false);
+    // This state prevents the creation logic from running multiple times
+    const [creationAttempted, setCreationAttempted] = useState(false);
 
     useEffect(() => {
         if (profileError) {
@@ -41,15 +41,23 @@ export function useUser() {
     }, [profileError, toast]);
     
     useEffect(() => {
-        // This effect triggers when a user is authenticated, we've checked for a profile, and it doesn't exist.
-        if (!user || !firestore || authIsLoading || profileIsLoading || profile || isCreatingProfile) {
+        // Conditions to run the creation logic:
+        // 1. Auth must be finished.
+        // 2. Profile loading from useDoc must be finished.
+        // 3. There must be a user object and a firestore instance.
+        // 4. The profile must be definitively null (not just loading).
+        // 5. We haven't already tried to create a profile for this user session.
+        if (authIsLoading || profileIsLoading || !user || !firestore || profile || creationAttempted) {
             return;
         }
 
-        const createProfile = async () => {
-            setIsCreatingProfile(true);
+        // At this point, we know auth and profile loading are done, and there's no profile.
+        // Mark that we are going to attempt to create the profile.
+        setCreationAttempted(true);
 
-            // This is a first-time sign-in.
+        const createProfile = async () => {
+            console.log("No profile found for this user. Creating a new one...");
+            
             const newProfileData: Omit<UserProfile, 'id'> = {
                 displayName: user.displayName || user.email?.split('@')[0] || 'New User',
                 email: user.email!,
@@ -62,18 +70,19 @@ export function useUser() {
             // Special case for the designated administrator.
             if (user.email === 'heinrich@ubuntux.co.za') {
                 newProfileData.role = 'Administrator';
-                newProfileData.department = 'Executive'; // Or another appropriate default
+                newProfileData.department = 'Executive';
             }
             
             try {
-                // Use the stable doc ref from the outer scope
+                // The userDocRef is stable and memoized from the outer scope.
                 await setDoc(userDocRef!, newProfileData);
                 toast({
                     title: "Welcome!",
                     description: "Your user profile has been created.",
                 });
-                // The useDoc listener will automatically pick up the newly created document,
-                // which will update the `profile` state and turn off loading states.
+                // The `useDoc` hook's `onSnapshot` listener will automatically pick up
+                // the newly created document. This will update the `profile` state,
+                // trigger a re-render, and finally allow the user to proceed.
             } catch (error) {
                 console.error("Failed to create user profile:", error);
                 toast({
@@ -81,16 +90,15 @@ export function useUser() {
                     title: "Profile Creation Failed",
                     description: (error as Error).message || "An unexpected error occurred while creating your profile.",
                 });
-            } finally {
-                setIsCreatingProfile(false);
             }
         };
 
         createProfile();
         
-    }, [user, firestore, authIsLoading, profileIsLoading, profile, isCreatingProfile, toast, userDocRef]);
+    }, [user, firestore, authIsLoading, profileIsLoading, profile, creationAttempted, toast, userDocRef]);
     
-    const isLoading = authIsLoading || profileIsLoading || isCreatingProfile;
+    // The main loading state is true if either authentication or the initial profile fetch is in progress.
+    const isLoading = authIsLoading || profileIsLoading;
     
     return {
         user,
