@@ -2,7 +2,6 @@
 import type {Metadata} from 'next';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster"
-import { FirebaseClientProvider } from '@/firebase/client-provider';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthenticationProvider } from '@/context/authentication-provider';
 import { RolesProvider } from '@/lib/roles-provider';
@@ -31,15 +30,13 @@ export default function RootLayout({
           defaultTheme="light"
           themes={['light', 'dark', 'classic']}
         >
-          <FirebaseClientProvider>
-            <AuthenticationProvider>
-              <DebugLogProvider>
-                <RolesProvider>
-                  {children}
-                </RolesProvider>
-              </DebugLogProvider>
-            </AuthenticationProvider>
-          </FirebaseClientProvider>
+          <AuthenticationProvider>
+            <DebugLogProvider>
+              <RolesProvider>
+                {children}
+              </RolesProvider>
+            </DebugLogProvider>
+          </AuthenticationProvider>
           <Toaster />
         </ThemeProvider>
       </body>

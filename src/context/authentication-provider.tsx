@@ -1,12 +1,14 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
-import { useAuth as useFirebaseAuthInstance, useFirestore } from '@/firebase';
+import { User, onAuthStateChanged, type Auth, getAuth } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, writeBatch, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { type FirebaseApp, initializeApp, getApps, getApp } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
-import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
-import { Loader } from 'lucide-react';
+import { Loader, AlertTriangle } from 'lucide-react';
+import { firebaseConfig } from '@/firebase/client';
+
 
 // Define the UserProfile shape
 export type UserRole = string | null;
@@ -24,6 +26,12 @@ export interface UserProfile {
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
 }
 
+interface FirebaseServices {
+  app: FirebaseApp;
+  auth: Auth;
+  firestore: Firestore;
+}
+
 // Define the context shape
 interface AuthContextType {
   user: User | null;
@@ -31,30 +39,67 @@ interface AuthContextType {
   role: UserRole;
   department: string | null;
   isLoading: boolean;
+  // also provide the services
+  app: FirebaseApp | null;
+  auth: Auth | null;
+  firestore: Firestore | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
-  const firebaseAuth = useFirebaseAuthInstance();
-  const firestore = useFirestore();
+  // Combined state
+  const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [initError, setInitError] = useState<string | null>(null);
+
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
 
+  // 1. Initialize Firebase
   useEffect(() => {
-    if (!firebaseAuth || !firestore) {
-      setIsLoading(false);
+    const initialize = async () => {
+      const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
+      if (!isConfigValid) {
+        throw new Error("Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) and restart the server.");
+      }
+
+      const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+      const auth = getAuth(app);
+      const firestore = getFirestore(app);
+      
+      try {
+        await enableIndexedDbPersistence(firestore);
+      } catch (err: any) {
+        if (err.code === 'failed-precondition') {
+          console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
+        } else if (err.code === 'unimplemented') {
+          console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
+        }
+      }
+      
+      setFirebaseServices({ app, auth, firestore });
+    };
+
+    initialize().catch(err => {
+        console.error("Fatal: Firebase Initialization Error", err);
+        setInitError(err.message || "An unknown error occurred during Firebase setup.");
+    });
+  }, []);
+
+  // 2. Observe Auth State and User Profile
+  useEffect(() => {
+    if (!firebaseServices) {
       return;
     }
-
+    
+    const { auth, firestore } = firebaseServices;
     let unsubscribeProfile: (() => void) | undefined;
 
-    const authStateObserver = onAuthStateChanged(firebaseAuth, (authUser) => {
-      // Clean up previous profile listener if it exists
+    const authStateObserver = onAuthStateChanged(auth, (authUser) => {
       if (unsubscribeProfile) {
         unsubscribeProfile();
         unsubscribeProfile = undefined;
@@ -70,23 +115,17 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       const userRef = doc(firestore, 'users', authUser.uid);
 
-      // Replace initial getDoc with a reactive onSnapshot listener to avoid race conditions.
       unsubscribeProfile = onSnapshot(userRef, async (profileSnap) => {
         if (profileSnap.exists()) {
-          // Profile exists. Set user data and finish loading.
           setUser(authUser);
           setProfile({ id: profileSnap.id, ...profileSnap.data() } as UserProfile);
           setIsLoading(false);
         } else {
-          // Profile does not exist. This is the first-time sign-in path.
-          // The listener has confirmed the document is missing, so we can now safely perform write operations.
           try {
-            // Check for a pre-existing invitation for this user's email.
             const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email), where('status', '==', 'Invited'));
             const invitesSnapshot = await getDocs(invitesQuery);
             
             if (!invitesSnapshot.empty) {
-              // An invitation was found. Use its data to create the new user profile.
               const inviteDoc = invitesSnapshot.docs[0];
               const invitedProfileData = inviteDoc.data();
               
@@ -98,19 +137,15 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                 status: 'Active' as const,
               };
               
-              // Use a batch write to atomically create the new profile and delete the invitation.
               const batch = writeBatch(firestore);
               batch.set(userRef, newProfileData);
               batch.delete(inviteDoc.ref);
               await batch.commit();
-              // After the batch commits, the onSnapshot listener will automatically be triggered again with the new profile data.
             } else {
-              // No invitation found. This is a brand new user signing up.
               const metadataRef = doc(firestore, 'app', 'metadata');
               const metadataSnap = await getDoc(metadataRef);
               
-              let userRole = 'Requester'; // Default role for new users.
-              // Special case: Ensure a specific email is always admin, or set the first user as admin.
+              let userRole = 'Requester';
               if (authUser.email === 'heinrich@ubuntux.co.za' || !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
                 userRole = 'Administrator';
                 await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
@@ -125,20 +160,18 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
                 status: 'Active' as const,
               };
               await setDoc(userRef, newProfile);
-               // After this setDoc, the onSnapshot listener will be triggered again with the new profile.
             }
           } catch (error) {
             console.error("Fatal: Could not create user profile.", error);
             toast({ variant: "destructive", title: "Profile Creation Failed", description: (error as Error).message || "A critical error occurred." });
-            if(firebaseAuth) firebaseAuth.signOut();
-            setIsLoading(false); // Stop loading on error
+            if(auth) auth.signOut();
+            setIsLoading(false);
           }
         }
       }, (error) => {
-        // This is the error callback for the onSnapshot listener itself.
         console.error("Fatal: Firestore listener for profile failed.", error);
         toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile." });
-        if(firebaseAuth) firebaseAuth.signOut();
+        if(auth) auth.signOut();
         setIsLoading(false);
       });
     });
@@ -149,11 +182,11 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         unsubscribeProfile();
       }
     };
-  }, [firebaseAuth, firestore, toast, router]);
+  }, [firebaseServices, toast, router]);
 
-
+  // 3. Handle routing
   useEffect(() => {
-    if (isLoading) {
+    if (isLoading || !firebaseServices) {
       return; 
     }
 
@@ -168,9 +201,22 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         router.replace('/login');
       }
     }
-  }, [isLoading, user, profile, pathname, router]);
+  }, [isLoading, user, profile, pathname, router, firebaseServices]);
 
-  if (isLoading) {
+  // Render states
+  if (initError) {
+      return (
+          <div className="flex h-screen w-full items-center justify-center bg-background p-8">
+              <div className="flex max-w-lg flex-col items-center gap-4 rounded-lg border border-destructive bg-destructive/5 p-6 text-center text-destructive">
+                  <AlertTriangle className="h-10 w-10" />
+                  <h1 className="text-xl font-bold">Firebase Error</h1>
+                  <p className="text-sm">{initError}</p>
+              </div>
+          </div>
+      );
+  }
+
+  if (isLoading || !firebaseServices) {
     return (
         <div className="flex h-screen items-center justify-center">
             <Loader className="h-8 w-8 animate-spin" />
@@ -179,7 +225,16 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, role: profile?.role || null, department: profile?.department || null, isLoading }}>
+    <AuthContext.Provider value={{
+      user,
+      profile,
+      role: profile?.role || null,
+      department: profile?.department || null,
+      isLoading,
+      app: firebaseServices.app,
+      auth: firebaseServices.auth,
+      firestore: firebaseServices.firestore,
+    }}>
       {children}
     </AuthContext.Provider>
   );
