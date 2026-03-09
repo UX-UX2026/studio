@@ -3,8 +3,13 @@
 
 import * as React from "react";
 import { useTheme } from "next-themes";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme();
@@ -15,28 +20,18 @@ export function ThemeSwitcher() {
         <p className="text-sm text-muted-foreground">
             Select a theme for the application.
         </p>
-        <RadioGroup
-            value={theme}
-            onValueChange={setTheme}
-            className="flex items-center space-x-4 pt-2"
-        >
-            <div className="flex items-center space-x-2">
-                <RadioGroupItem value="light" id="light" />
-                <Label htmlFor="light">Ubuntu Light</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-                <RadioGroupItem value="dark" id="dark" />
-                <Label htmlFor="dark">Ubuntu Dark</Label>
-            </div>
-             <div className="flex items-center space-x-2">
-                <RadioGroupItem value="classic" id="classic" />
-                <Label htmlFor="classic">Classic Light</Label>
-            </div>
-            <div className="flex items-center space-x-2">
-                <RadioGroupItem value="system" id="system" />
-                <Label htmlFor="system">System</Label>
-            </div>
-        </RadioGroup>
+        <Select value={theme} onValueChange={setTheme}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Select theme" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="light">Ubuntu Light</SelectItem>
+            <SelectItem value="dark">Ubuntu Dark</SelectItem>
+            <SelectItem value="classic">Classic Light</SelectItem>
+            <SelectItem value="colorful">Colorful</SelectItem>
+            <SelectItem value="system">System</SelectItem>
+          </SelectContent>
+        </Select>
     </div>
   );
 }
