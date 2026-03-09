@@ -1,8 +1,9 @@
+
 'use client';
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
-type Font = 'inter' | 'lato' | 'roboto';
+type Font = 'inter' | 'poppins' | 'source-sans-pro';
 
 interface FontContextType {
     font: Font;
@@ -14,20 +15,21 @@ const FontContext = createContext<FontContextType | undefined>(undefined);
 const FONT_STORAGE_KEY = 'app-font';
 
 export function FontProvider({ children }: { children: ReactNode }) {
-    // Default to 'inter' and load from localStorage on the client
     const [font, setFontState] = useState<Font>('inter');
 
     useEffect(() => {
-        // This effect runs only on the client
         const storedFont = localStorage.getItem(FONT_STORAGE_KEY) as Font;
-        if (storedFont && ['inter', 'lato', 'roboto'].includes(storedFont)) {
+        if (storedFont && ['inter', 'poppins', 'source-sans-pro'].includes(storedFont)) {
             setFontState(storedFont);
+        } else {
+            // If the stored font is no longer valid (e.g., 'lato', 'roboto'), default to 'inter'
+            setFontState('inter');
+            localStorage.setItem(FONT_STORAGE_KEY, 'inter');
         }
     }, []);
     
     useEffect(() => {
-        // This effect also runs only on the client
-        document.body.classList.remove('font-inter', 'font-lato', 'font-roboto');
+        document.body.classList.remove('font-inter', 'font-poppins', 'font-source-sans-pro', 'font-lato', 'font-roboto');
         document.body.classList.add(`font-${font}`);
     }, [font]);
 

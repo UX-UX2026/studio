@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -24,12 +25,12 @@ export function FontSwitcher() {
                 <Label htmlFor="inter" className="font-inter">Inter</Label>
             </div>
             <div className="flex items-center space-x-2">
-                <RadioGroupItem value="lato" id="lato" />
-                <Label htmlFor="lato" className="font-lato">Lato</Label>
+                <RadioGroupItem value="poppins" id="poppins" />
+                <Label htmlFor="poppins" className="font-poppins">Poppins</Label>
             </div>
              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="roboto" id="roboto" />
-                <Label htmlFor="roboto" className="font-roboto">Roboto</Label>
+                <RadioGroupItem value="source-sans-pro" id="source-sans-pro" />
+                <Label htmlFor="source-sans-pro" className="font-source-sans-pro">Source Sans Pro</Label>
             </div>
         </RadioGroup>
     </div>

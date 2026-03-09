@@ -1,3 +1,4 @@
+
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -11,8 +12,8 @@ export default {
     extend: {
       fontFamily: {
         inter: ['Inter', 'sans-serif'],
-        lato: ['Lato', 'sans-serif'],
-        roboto: ['Roboto', 'sans-serif'],
+        poppins: ['Poppins', 'sans-serif'],
+        'source-sans-pro': ['"Source Sans Pro"', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
