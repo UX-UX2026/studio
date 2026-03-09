@@ -14,6 +14,8 @@ export default {
         inter: ['Inter', 'sans-serif'],
         poppins: ['Poppins', 'sans-serif'],
         'source-sans-pro': ['"Source Sans Pro"', 'sans-serif'],
+        roboto: ['Roboto', 'sans-serif'],
+        lato: ['Lato', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {

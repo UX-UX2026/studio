@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from "react";
@@ -30,6 +31,10 @@ export function ThemeSwitcher() {
              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="classic" id="classic" />
                 <Label htmlFor="classic">Classic Light</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+                <RadioGroupItem value="system" id="system" />
+                <Label htmlFor="system">System</Label>
             </div>
         </RadioGroup>
     </div>

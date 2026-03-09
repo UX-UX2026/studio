@@ -18,7 +18,7 @@ export function FontSwitcher() {
         <RadioGroup
             value={font}
             onValueChange={(value) => setFont(value as any)}
-            className="flex items-center space-x-4 pt-2"
+            className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-x-4 gap-y-2 pt-2"
         >
             <div className="flex items-center space-x-2">
                 <RadioGroupItem value="inter" id="inter" />
@@ -31,6 +31,14 @@ export function FontSwitcher() {
              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="source-sans-pro" id="source-sans-pro" />
                 <Label htmlFor="source-sans-pro" className="font-source-sans-pro">Source Sans Pro</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+                <RadioGroupItem value="roboto" id="roboto" />
+                <Label htmlFor="roboto" className="font-roboto">Roboto</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+                <RadioGroupItem value="lato" id="lato" />
+                <Label htmlFor="lato" className="font-lato">Lato</Label>
             </div>
         </RadioGroup>
     </div>

@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
-type Font = 'inter' | 'poppins' | 'source-sans-pro';
+type Font = 'inter' | 'poppins' | 'source-sans-pro' | 'roboto' | 'lato';
 
 interface FontContextType {
     font: Font;
@@ -14,22 +14,23 @@ const FontContext = createContext<FontContextType | undefined>(undefined);
 
 const FONT_STORAGE_KEY = 'app-font';
 
+const validFonts: Font[] = ['inter', 'poppins', 'source-sans-pro', 'roboto', 'lato'];
+
 export function FontProvider({ children }: { children: ReactNode }) {
     const [font, setFontState] = useState<Font>('inter');
 
     useEffect(() => {
         const storedFont = localStorage.getItem(FONT_STORAGE_KEY) as Font;
-        if (storedFont && ['inter', 'poppins', 'source-sans-pro'].includes(storedFont)) {
+        if (storedFont && validFonts.includes(storedFont)) {
             setFontState(storedFont);
         } else {
-            // If the stored font is no longer valid (e.g., 'lato', 'roboto'), default to 'inter'
             setFontState('inter');
             localStorage.setItem(FONT_STORAGE_KEY, 'inter');
         }
     }, []);
     
     useEffect(() => {
-        document.body.classList.remove('font-inter', 'font-poppins', 'font-source-sans-pro', 'font-lato', 'font-roboto');
+        document.body.classList.remove(...validFonts.map(f => `font-${f}`));
         document.body.classList.add(`font-${font}`);
     }, [font]);
 
