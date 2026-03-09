@@ -65,6 +65,21 @@ const getStatusBadge = (status: string) => {
     }
 }
 
+const getFulfillmentStatusBadge = (status: string) => {
+    switch (status) {
+      case "Sourcing":
+        return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+      case "Quoted":
+        return <Badge variant="outline" className="text-blue-500 border-blue-500">{status}</Badge>;
+      case "Ordered":
+        return <Badge variant="outline" className="text-purple-500 border-purple-500">{status}</Badge>;
+      case "Completed":
+        return <Badge variant="outline" className="text-green-500 border-green-500">{status}</Badge>;
+      default:
+        return <Badge variant="secondary">{status || 'Pending'}</Badge>;
+    }
+};
+
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
       style: "currency",
@@ -151,6 +166,11 @@ export default function ApprovalsPage() {
 
 
     const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+    
+    const showFulfillmentTab = useMemo(() => {
+        if (!activeRequest) return false;
+        return ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
+    }, [activeRequest]);
 
     const canApprove = useMemo(() => {
         if (!activeRequest || !role) return false;
@@ -702,9 +722,10 @@ export default function ApprovalsPage() {
                                 <AccordionContent>
                                     <CardContent className="pt-0">
                                     <Tabs defaultValue="items">
-                                            <TabsList className="grid w-full grid-cols-3">
+                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-4" : "grid-cols-3")}>
                                                 <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
                                                 <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
+                                                {showFulfillmentTab && <TabsTrigger value="fulfillment">Fulfillment Details</TabsTrigger>}
                                                 <TabsTrigger value="communication">Communication Log</TabsTrigger>
                                             </TabsList>
                                             <TabsContent value="workflow" className="pt-6">
@@ -781,6 +802,44 @@ export default function ApprovalsPage() {
                                                     </div>
                                                 </div>
                                             </TabsContent>
+                                            {showFulfillmentTab && (
+                                                <TabsContent value="fulfillment" className="pt-4">
+                                                    <div>
+                                                        <h3 className="text-lg font-semibold mb-2">Fulfillment Status</h3>
+                                                        <p className="text-sm text-muted-foreground mb-4">
+                                                            Track the fulfillment progress for each item in this request.
+                                                        </p>
+                                                        <div className="overflow-auto rounded-lg border">
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow className="bg-muted hover:bg-muted">
+                                                                        <TableHead>Item</TableHead>
+                                                                        <TableHead className="text-center">Total Qty</TableHead>
+                                                                        <TableHead className="text-center">Rcvd Qty</TableHead>
+                                                                        <TableHead className="text-center">Outstanding</TableHead>
+                                                                        <TableHead>Lead Time (days)</TableHead>
+                                                                        <TableHead>Status</TableHead>
+                                                                        <TableHead>Comments</TableHead>
+                                                                    </TableRow>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {activeRequest.items.map((item) => (
+                                                                        <TableRow key={item.id}>
+                                                                            <TableCell className="font-medium">{item.description}</TableCell>
+                                                                            <TableCell className="text-center">{item.qty}</TableCell>
+                                                                            <TableCell className="text-center">{item.receivedQty || 0}</TableCell>
+                                                                            <TableCell className="text-center font-bold">{(item.qty - (item.receivedQty || 0))}</TableCell>
+                                                                            <TableCell>{item.estimatedLeadTimeDays || 'N/A'}</TableCell>
+                                                                            <TableCell>{getFulfillmentStatusBadge(item.fulfillmentStatus)}</TableCell>
+                                                                            <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{(item.fulfillmentComments || []).join('; ')}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </div>
+                                                    </div>
+                                                </TabsContent>
+                                            )}
                                             <TabsContent value="communication" className="pt-6">
                                                 <div className="space-y-6">
                                                     <div className="space-y-4">
