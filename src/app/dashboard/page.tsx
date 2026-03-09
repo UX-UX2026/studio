@@ -73,10 +73,10 @@ const PipelineStage = ({ name, count, highlight }: { name: string, count: number
 
 
 const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
-    <div className={cn("px-2 text-muted-foreground/30", highlight && "text-primary/70")}>
-        <svg width="20" height="10" viewBox="0 0 20 10" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <path d="M0 5H20" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2"/>
-            <path d="M16 2L20 5L16 8" stroke="currentColor" strokeWidth="1"/>
+    <div className={cn("px-1 text-muted-foreground/30", highlight && "text-primary/70")}>
+        <svg width="16" height="10" viewBox="0 0 16 10" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <path d="M0 5H16" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2"/>
+            <path d="M12 2L16 5L12 8" stroke="currentColor" strokeWidth="1"/>
         </svg>
     </div>
 );
@@ -235,8 +235,8 @@ export default function DashboardPage() {
     
   return (
     <>
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -335,7 +335,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between">
               <div>
@@ -412,7 +412,7 @@ export default function DashboardPage() {
               </div>
             ) : (
             <div className="space-y-4">
-                <div className="flex items-center">
+                <div className="flex items-center justify-center">
                     <PipelineStage name="Manager" count={dashboardStats.pendingManager} highlight={dashboardStats.pendingManager > 0} />
                     <PipelineArrow highlight={dashboardStats.pendingManager > 0} />
                     <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
@@ -511,3 +511,4 @@ export default function DashboardPage() {
     
     
     
+

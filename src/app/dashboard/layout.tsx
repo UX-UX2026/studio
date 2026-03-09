@@ -121,7 +121,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </Sidebar>
       <SidebarInset>
         <AppHeader />
-        <main className="flex-1 overflow-auto p-4 md:p-8 bg-background">
+        <main className="flex-1 overflow-auto p-4 md:p-6 bg-background">
           <div className="mx-auto w-full max-w-7xl">
             {children}
           </div>

@@ -64,15 +64,15 @@ export default function SettingsPage() {
                         Manage application-wide settings, configurations, and user access.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-8">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <CardContent className="space-y-6">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                        <ThemeSwitcher />
                        <FontSwitcher />
                      </div>
                      
                      <Separator />
 
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {settingLinks.map(link => (
                             <Card key={link.href} className="flex flex-col">
                                 <CardHeader>

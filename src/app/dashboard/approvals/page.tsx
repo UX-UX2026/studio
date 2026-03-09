@@ -607,8 +607,8 @@ export default function ApprovalsPage() {
     
   return (
     <>
-        <div className="grid lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1 space-y-6">
+        <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-1 space-y-4">
                 <Card>
                     <CardHeader className="pb-2">
                         <CardTitle>Approvals Overview</CardTitle>
@@ -684,7 +684,7 @@ export default function ApprovalsPage() {
                     </Accordion>
                 </div>
             </div>
-            <div className="lg:col-span-2 space-y-6">
+            <div className="lg:col-span-2 space-y-4">
                 {activeRequest ? (
                     <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
                         <AccordionItem value="item-1" className="border-0">
