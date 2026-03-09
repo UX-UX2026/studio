@@ -3,11 +3,10 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
-import { useToast } from '@/hooks/use-toast';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/client';
 
@@ -34,14 +33,11 @@ interface FirebaseServices {
   firestore: Firestore;
 }
 
-// Define the context shape
+// The context now only provides the core Firebase services and the auth User object.
+// Profile data is handled by the useUser hook.
 interface AuthContextType {
   user: User | null;
-  profile: UserProfile | null;
-  role: UserRole;
-  department: string | null;
   isLoading: boolean;
-  // also provide the services
   app: FirebaseApp | null;
   auth: Auth | null;
   firestore: Firestore | null;
@@ -52,13 +48,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
 
   const router = useRouter();
   const pathname = usePathname();
-  const { toast } = useToast();
 
   useEffect(() => {
     const initialize = async () => {
@@ -73,6 +67,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       
       try {
         await enableIndexedDbPersistence(firestore);
+        console.log("Firestore offline persistence enabled.");
       } catch (err: any) {
         if (err.code === 'failed-precondition') {
           console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
@@ -91,73 +86,26 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!firebaseServices) {
-      return;
-    }
+    if (!firebaseServices) return;
     
-    const { auth, firestore } = firebaseServices;
+    const { auth } = firebaseServices;
 
-    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      if (!authUser) {
-        setUser(null);
-        setProfile(null);
-        setIsLoading(false);
-        return;
-      }
-      
-      setIsLoading(true);
-      const userRef = doc(firestore, 'users', authUser.uid);
-
-      try {
-        const profileSnap = await getDoc(userRef);
-
-        if (profileSnap.exists()) {
-          setUser(authUser);
-          setProfile({ id: profileSnap.id, ...profileSnap.data() } as UserProfile);
-        } else {
-          // Profile doesn't exist, create it.
-          const newProfile: Omit<UserProfile, 'id'> = {
-            displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-            email: authUser.email!,
-            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-            role: 'Requester',
-            department: 'Unassigned',
-            status: 'Active' as const,
-          };
-
-          if (authUser.email === 'heinrich@ubuntux.co.za') {
-            newProfile.role = 'Administrator';
-            newProfile.department = 'Executive';
-            const metadataRef = doc(firestore, 'app', 'metadata');
-            await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-          }
-          
-          await setDoc(userRef, newProfile);
-          
-          const createdProfile = { id: authUser.uid, ...newProfile };
-          setUser(authUser);
-          setProfile(createdProfile as UserProfile);
-        }
-      } catch (error) {
-        console.error("Fatal: Could not get or create user profile.", error);
-        toast({ variant: "destructive", title: "Authentication Error", description: (error as Error).message || "A critical error occurred while loading your profile." });
-        if (auth) auth.signOut();
-      } finally {
-        setIsLoading(false);
-      }
+    // This listener now ONLY handles the user's authentication state (logged in or out).
+    // It does not touch the database.
+    const unsubscribe = onAuthStateChanged(auth, (authUser) => {
+      setUser(authUser);
+      setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firebaseServices, toast, router]);
+  }, [firebaseServices]);
 
   useEffect(() => {
-    if (isLoading || !firebaseServices) {
-      return; 
-    }
+    if (isLoading) return; 
 
     const isAuthPage = pathname === '/login';
 
-    if (user && profile) { 
+    if (user) { 
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
@@ -166,7 +114,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         router.replace('/login');
       }
     }
-  }, [isLoading, user, profile, pathname, router, firebaseServices]);
+  }, [isLoading, user, pathname, router]);
 
   if (initError) {
       return (
@@ -179,9 +127,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           </div>
       );
   }
-
-  if (isLoading || !firebaseServices) {
-    return (
+  
+  if (isLoading || (pathname !== '/login' && !user)) {
+     return (
         <div className="flex h-screen items-center justify-center">
             <Loader className="h-8 w-8 animate-spin" />
         </div>
@@ -191,13 +139,10 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
-      profile,
-      role: profile?.role || null,
-      department: profile?.department || null,
       isLoading,
-      app: firebaseServices.app,
-      auth: firebaseServices.auth,
-      firestore: firebaseServices.firestore,
+      app: firebaseServices?.app || null,
+      auth: firebaseServices?.auth || null,
+      firestore: firebaseServices?.firestore || null,
     }}>
       {children}
     </AuthContext.Provider>
