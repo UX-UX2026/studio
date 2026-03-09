@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
+import { FontSwitcher } from "@/components/font-switcher";
+import { Separator } from "@/components/ui/separator";
 
 export default function SettingsPage() {
     const { user, role, loading } = useUser();
@@ -63,7 +65,12 @@ export default function SettingsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                     <ThemeSwitcher />
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                       <ThemeSwitcher />
+                       <FontSwitcher />
+                     </div>
+                     
+                     <Separator />
 
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {settingLinks.map(link => (
