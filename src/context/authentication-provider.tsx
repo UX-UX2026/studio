@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, writeBatch, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
@@ -50,7 +50,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
-  // Combined state
   const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -61,7 +60,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { toast } = useToast();
 
-  // 1. Initialize Firebase
   useEffect(() => {
     const initialize = async () => {
       const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
@@ -92,21 +90,14 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // 2. Observe Auth State and User Profile
   useEffect(() => {
     if (!firebaseServices) {
       return;
     }
     
     const { auth, firestore } = firebaseServices;
-    let unsubscribeProfile: (() => void) | undefined;
 
-    const authStateObserver = onAuthStateChanged(auth, (authUser) => {
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-        unsubscribeProfile = undefined;
-      }
-      
+    const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (!authUser) {
         setUser(null);
         setProfile(null);
@@ -117,61 +108,48 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       setIsLoading(true);
       const userRef = doc(firestore, 'users', authUser.uid);
 
-      unsubscribeProfile = onSnapshot(userRef, async (profileSnap) => {
+      try {
+        const profileSnap = await getDoc(userRef);
+
         if (profileSnap.exists()) {
           setUser(authUser);
           setProfile({ id: profileSnap.id, ...profileSnap.data() } as UserProfile);
-          setIsLoading(false);
         } else {
-          // This logic handles the very first sign-in for a user.
-          // It creates their profile document.
-          try {
-            const newProfile: Omit<UserProfile, 'id'> = {
-              displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-              email: authUser.email!,
-              photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-              role: 'Requester', // Default role for all new users
-              department: 'Unassigned',
-              status: 'Active' as const,
-            };
+          // Profile doesn't exist, create it.
+          const newProfile: Omit<UserProfile, 'id'> = {
+            displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+            email: authUser.email!,
+            photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+            role: 'Requester',
+            department: 'Unassigned',
+            status: 'Active' as const,
+          };
 
-            if (authUser.email === 'heinrich@ubuntux.co.za') {
-              newProfile.role = 'Administrator';
-              newProfile.department = 'Executive';
-              const metadataRef = doc(firestore, 'app', 'metadata');
-              await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-            }
-            
-            await setDoc(userRef, newProfile);
-            
-            // Explicitly set state after creating the profile to avoid infinite loading.
-            // This prevents relying on the onSnapshot listener to fire again immediately.
-            const createdProfile = { id: authUser.uid, ...newProfile };
-            setUser(authUser);
-            setProfile(createdProfile as UserProfile);
-            setIsLoading(false);
-
-          } catch (error) {
-            console.error("Fatal: Could not create user profile.", error);
-            toast({ variant: "destructive", title: "Profile Creation Failed", description: (error as Error).message || "A critical error occurred." });
-            if(auth) auth.signOut();
-            setIsLoading(false);
+          if (authUser.email === 'heinrich@ubuntux.co.za') {
+            newProfile.role = 'Administrator';
+            newProfile.department = 'Executive';
+            const metadataRef = doc(firestore, 'app', 'metadata');
+            await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
           }
+          
+          await setDoc(userRef, newProfile);
+          
+          const createdProfile = { id: authUser.uid, ...newProfile };
+          setUser(authUser);
+          setProfile(createdProfile as UserProfile);
         }
-      }, (error) => {
-        console.error("Fatal: Firestore listener for profile failed.", error);
-        toast({ variant: "destructive", title: "Profile Error", description: "Could not load your profile." });
-        if(auth) auth.signOut();
+      } catch (error) {
+        console.error("Fatal: Could not get or create user profile.", error);
+        toast({ variant: "destructive", title: "Authentication Error", description: (error as Error).message || "A critical error occurred while loading your profile." });
+        if (auth) auth.signOut();
+      } finally {
         setIsLoading(false);
-      });
+      }
     });
 
-    return () => {
-      // This is a placeholder for cleanup if needed in the future.
-    };
+    return () => unsubscribe();
   }, [firebaseServices, toast, router]);
 
-  // 3. Handle routing
   useEffect(() => {
     if (isLoading || !firebaseServices) {
       return; 
@@ -190,7 +168,6 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     }
   }, [isLoading, user, profile, pathname, router, firebaseServices]);
 
-  // Render states
   if (initError) {
       return (
           <div className="flex h-screen w-full items-center justify-center bg-background p-8">
