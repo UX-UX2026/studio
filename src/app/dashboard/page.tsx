@@ -73,10 +73,10 @@ const PipelineStage = ({ name, count, highlight }: { name: string, count: number
 
 
 const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
-    <div className={cn("flex-1 text-muted-foreground/30 -mx-1", highlight && "text-primary/70")}>
-        <svg width="100%" viewBox="0 0 24 12" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <path d="M0 6H24" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
-            <path d="M20 3L24 6L20 9" stroke="currentColor" strokeWidth="1.5"/>
+    <div className={cn("px-2 text-muted-foreground/30", highlight && "text-primary/70")}>
+        <svg width="20" height="10" viewBox="0 0 20 10" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+            <path d="M0 5H20" stroke="currentColor" strokeWidth="1" strokeDasharray="2 2"/>
+            <path d="M16 2L20 5L16 8" stroke="currentColor" strokeWidth="1"/>
         </svg>
     </div>
 );
