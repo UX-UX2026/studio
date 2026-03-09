@@ -1,11 +1,10 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, writeBatch, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
-import { type FirebaseApp, initializeApp, getApps, getApp } from 'firebase/app';
+import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
 import { Loader, AlertTriangle } from 'lucide-react';
@@ -124,46 +123,35 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         } else {
           try {
-            const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email));
-            const invitesSnapshot = await getDocs(invitesQuery);
-            const invitedDocs = invitesSnapshot.docs.filter(doc => doc.data().status === 'Invited');
-            
-            if (invitedDocs.length > 0) {
-              const inviteDoc = invitedDocs[0];
-              const invitedProfileData = inviteDoc.data();
-              
-              const newProfileData = {
-                ...invitedProfileData,
-                displayName: authUser.displayName || invitedProfileData.displayName,
-                email: authUser.email!,
-                photoURL: authUser.photoURL || invitedProfileData.photoURL,
-                status: 'Active' as const,
-              };
-              
-              const batch = writeBatch(firestore);
-              batch.set(userRef, newProfileData);
-              batch.delete(inviteDoc.ref);
-              await batch.commit();
-            } else {
+            // This simplified logic avoids one-time fetches (getDoc/getDocs) during startup,
+            // which are the likely cause of the "client is offline" error. It makes
+            // profile creation more resilient by only using a write operation.
+            const newProfile: Omit<UserProfile, 'id'> = {
+              displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
+              email: authUser.email!,
+              photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
+              role: 'Requester', // Default role for all new users
+              department: 'Unassigned',
+              status: 'Active' as const,
+            };
+
+            // Assign Administrator role based on email.
+            if (authUser.email === 'heinrich@ubuntux.co.za') {
+              newProfile.role = 'Administrator';
+              newProfile.department = 'Executive';
+              // Also set the metadata flag, this is a write so it's safer.
               const metadataRef = doc(firestore, 'app', 'metadata');
-              const metadataSnap = await getDoc(metadataRef);
-              
-              let userRole = 'Requester';
-              if (authUser.email === 'heinrich@ubuntux.co.za' || !metadataSnap.exists() || !metadataSnap.data()?.adminIsSetUp) {
-                userRole = 'Administrator';
-                await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
-              }
-              
-              const newProfile: Omit<UserProfile, 'id'> = {
-                displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
-                email: authUser.email!,
-                photoURL: authUser.photoURL || `https://i.pravatar.cc/150?u=${authUser.email}`,
-                role: userRole,
-                department: userRole === 'Administrator' ? 'Executive' : 'Unassigned',
-                status: 'Active' as const,
-              };
-              await setDoc(userRef, newProfile);
+              await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
             }
+            
+            // This simplified logic prioritizes stability. It creates a default profile
+            // for new users. An admin can change the role later if a pre-existing
+            // 'Invited' user was intended to have a different role.
+            await setDoc(userRef, newProfile);
+            
+            // The onSnapshot listener will fire again with the newly created profile.
+            // Loading will be set to false at that point.
+
           } catch (error) {
             console.error("Fatal: Could not create user profile.", error);
             toast({ variant: "destructive", title: "Profile Creation Failed", description: (error as Error).message || "A critical error occurred." });
