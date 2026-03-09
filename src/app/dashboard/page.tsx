@@ -85,7 +85,7 @@ const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
 export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user, role, department: userDepartment } = useUser();
   const { toast } = useToast();
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -105,12 +105,20 @@ export default function DashboardPage() {
   
   const { data: allOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
 
+  const userOpenRequests = useMemo(() => {
+    if (!allOpenRequests) return [];
+    if (role === 'Requester' && userDepartment) {
+        return allOpenRequests.filter(req => req.department === userDepartment);
+    }
+    return allOpenRequests;
+  }, [allOpenRequests, role, userDepartment]);
+
   // Memoize sorted open requests for the "Open Submissions" table
   const sortedOpenRequests = useMemo(() => {
-    if (!allOpenRequests) return [];
+    if (!userOpenRequests) return [];
     // Create a new array before sorting to avoid mutating the original
-    return [...allOpenRequests].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-  }, [allOpenRequests]);
+    return [...userOpenRequests].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+  }, [userOpenRequests]);
 
   // Query for all requests created in the current month for accurate spend calculation
   const monthlyRequestsQuery = useMemo(() => {
@@ -162,19 +170,20 @@ export default function DashboardPage() {
   }, {} as Record<string, number>), [allFulfillmentItems]);
 
     const dashboardStats = useMemo(() => {
-        // Spend is now correctly calculated from all requests this month.
-        const totalSpendCurrentMonth = monthlyRequests?.reduce((sum, req) => sum + req.total, 0) || 0;
+        const monthlyRequestsForUser = (role === 'Requester' && userDepartment)
+            ? monthlyRequests?.filter(req => req.department === userDepartment)
+            : monthlyRequests;
+        const totalSpendCurrentMonth = monthlyRequestsForUser?.reduce((sum, req) => sum + req.total, 0) || 0;
         
-        // Open request counts are now correct for ALL open requests.
-        const pendingManager = allOpenRequests?.filter(req => req.status === 'Pending Manager Approval').length || 0;
-        const pendingExecutive = allOpenRequests?.filter(req => req.status === 'Pending Executive').length || 0;
-        const queriesRaised = allOpenRequests?.filter(req => req.status === 'Queries Raised').length || 0;
+        const pendingManager = userOpenRequests?.filter(req => req.status === 'Pending Manager Approval').length || 0;
+        const pendingExecutive = userOpenRequests?.filter(req => req.status === 'Pending Executive').length || 0;
+        const queriesRaised = userOpenRequests?.filter(req => req.status === 'Queries Raised').length || 0;
 
         return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
-    }, [monthlyRequests, allOpenRequests]);
+    }, [monthlyRequests, userOpenRequests, role, userDepartment]);
 
-    const approvedCount = useMemo(() => allOpenRequests?.filter(req => req.status === 'Approved').length || 0, [allOpenRequests]);
-    const fulfillmentCount = useMemo(() => allOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [allOpenRequests]);
+    const approvedCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'Approved').length || 0, [userOpenRequests]);
+    const fulfillmentCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [userOpenRequests]);
 
     const requestsLoading = openRequestsLoading || monthlyRequestsLoading;
 
@@ -296,7 +305,7 @@ export default function DashboardPage() {
                 </div>
             ) : (
                 <>
-                <div className="text-2xl font-bold">{allOpenRequests?.length || 0} Open Requests</div>
+                <div className="text-2xl font-bold">{userOpenRequests?.length || 0} Open Requests</div>
                  <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <div>Manager Review</div>
                     <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
@@ -518,3 +527,6 @@ export default function DashboardPage() {
     
 
 
+
+
+    

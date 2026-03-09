@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -36,7 +37,7 @@ export default function FulfillmentPage() {
 
     const fulfillmentQuery = useMemo(() => {
         if (!firestore) return null;
-        return query(collection(firestore, 'procurementRequests'), where('status', '==', 'In Fulfillment'));
+        return query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
     }, [firestore]);
 
     const { data: fulfillmentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
@@ -103,7 +104,7 @@ export default function FulfillmentPage() {
     const departmentOrder = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
     
     const departmentsForUser = useMemo(() => {
-        if (role === 'Manager' && department) {
+        if ((role === 'Manager' || role === 'Requester') && department) {
             return departmentOrder.filter(d => d === department);
         }
         return departmentOrder;
@@ -155,3 +156,5 @@ export default function FulfillmentPage() {
     </Card>
   );
 }
+
+    

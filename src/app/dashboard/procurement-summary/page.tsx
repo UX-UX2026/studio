@@ -70,7 +70,7 @@ export default function ProcurementSummaryPage() {
     // Set default department based on user role and data
     useEffect(() => {
         if (deptsLoading || !departments) return;
-        if (role === 'Manager' && userDepartment) {
+        if ((role === 'Manager' || role === 'Requester') && userDepartment) {
             const userDept = departments.find(d => d.name === userDepartment);
             if (userDept) {
                 setSelectedDepartmentId(userDept.id);
@@ -141,7 +141,7 @@ export default function ProcurementSummaryPage() {
     }, [selectedDepartmentId, selectedPeriod, allRequests, budgetItems, departments, selectedDate]);
     
     useEffect(() => {
-      const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive'];
+      const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
       if (userLoading) return;
       if (!user) {
         router.push('/dashboard');
@@ -155,7 +155,7 @@ export default function ProcurementSummaryPage() {
     const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
     const monthForHeader = selectedPeriod.split(' ')[0];
 
-    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive'], []);
+    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
     if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -176,7 +176,7 @@ export default function ProcurementSummaryPage() {
             <div className="flex flex-wrap items-end gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
                 <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
                     <Label htmlFor="department">Department</Label>
-                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role === 'Manager' && !!userDepartment)}>
+                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || ((role === 'Manager' || role === 'Requester') && !!userDepartment)}>
                         <SelectTrigger id="department">
                             <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                         </SelectTrigger>
@@ -270,3 +270,5 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
+
+    
