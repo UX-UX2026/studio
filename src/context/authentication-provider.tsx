@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -87,7 +88,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
 
     initialize().catch(err => {
         console.error("Fatal: Firebase Initialization Error", err);
-        setInitError(err.message || "An unknown error occurred during Firebase setup.");
+        setInitError((err as Error).message || "An unknown error occurred during Firebase setup.");
     });
   }, []);
 
@@ -122,10 +123,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           setProfile({ id: profileSnap.id, ...profileSnap.data() } as UserProfile);
           setIsLoading(false);
         } else {
+          // This logic handles the very first sign-in for a user.
+          // It creates their profile document.
           try {
-            // This simplified logic avoids one-time fetches (getDoc/getDocs) during startup,
-            // which are the likely cause of the "client is offline" error. It makes
-            // profile creation more resilient by only using a write operation.
             const newProfile: Omit<UserProfile, 'id'> = {
               displayName: authUser.displayName || authUser.email?.split('@')[0] || 'New User',
               email: authUser.email!,
@@ -135,22 +135,21 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
               status: 'Active' as const,
             };
 
-            // Assign Administrator role based on email.
             if (authUser.email === 'heinrich@ubuntux.co.za') {
               newProfile.role = 'Administrator';
               newProfile.department = 'Executive';
-              // Also set the metadata flag, this is a write so it's safer.
               const metadataRef = doc(firestore, 'app', 'metadata');
               await setDoc(metadataRef, { adminIsSetUp: true }, { merge: true });
             }
             
-            // This simplified logic prioritizes stability. It creates a default profile
-            // for new users. An admin can change the role later if a pre-existing
-            // 'Invited' user was intended to have a different role.
             await setDoc(userRef, newProfile);
             
-            // The onSnapshot listener will fire again with the newly created profile.
-            // Loading will be set to false at that point.
+            // Explicitly set state after creating the profile to avoid infinite loading.
+            // This prevents relying on the onSnapshot listener to fire again immediately.
+            const createdProfile = { id: authUser.uid, ...newProfile };
+            setUser(authUser);
+            setProfile(createdProfile as UserProfile);
+            setIsLoading(false);
 
           } catch (error) {
             console.error("Fatal: Could not create user profile.", error);
@@ -168,10 +167,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     });
 
     return () => {
-      authStateObserver();
-      if (unsubscribeProfile) {
-        unsubscribeProfile();
-      }
+      // This is a placeholder for cleanup if needed in the future.
     };
   }, [firebaseServices, toast, router]);
 
