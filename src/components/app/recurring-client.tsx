@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { LayoutGrid, List, Plus, Trash2, Upload, Download, Loader } from "lucide-react";
 import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useCollection, useUser } from "@/firebase";
+import { useFirestore, useCollection, useUser, type UserRole } from "@/firebase";
 import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -32,7 +32,7 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-export function RecurringClient() {
+export function RecurringClient({ role }: { role: UserRole }) {
     const firestore = useFirestore();
     const { user } = useUser();
     const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), orderBy('name')), [firestore]);
@@ -41,6 +41,8 @@ export function RecurringClient() {
     const [view, setView] = useState<'grid' | 'list'>('list');
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    
+    const canManage = role === 'Administrator' || role === 'Procurement Officer';
 
     const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
         if (!user || !firestore) return;
@@ -242,11 +244,11 @@ export function RecurringClient() {
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv" onChange={handleFileChange} />
             <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
-                    <Button onClick={handleAddItem} className="shadow-lg shadow-primary/20">
+                    <Button onClick={handleAddItem} className="shadow-lg shadow-primary/20" disabled={!canManage}>
                         <Plus className="h-4 w-4 mr-2"/>
                         New Recurring Item
                     </Button>
-                     <Button variant="outline" onClick={handleImportClick}>
+                     <Button variant="outline" onClick={handleImportClick} disabled={!canManage}>
                         <Upload className="h-4 w-4 mr-2" /> Import
                     </Button>
                     <Button variant="outline" onClick={handleExport}>
@@ -276,7 +278,7 @@ export function RecurringClient() {
                         <Card key={item.id} className="flex flex-col justify-between hover:shadow-lg transition-shadow">
                             <CardHeader>
                                 <div className="flex justify-between items-start gap-2">
-                                     <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)}>
+                                     <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
                                         <SelectTrigger className="text-sm font-medium uppercase text-primary tracking-wider bg-transparent border-0 border-b rounded-none focus-visible:ring-0 p-0 h-auto">
                                             <SelectValue placeholder="Category"/>
                                         </SelectTrigger>
@@ -284,13 +286,14 @@ export function RecurringClient() {
                                             {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <Switch id={`switch-grid-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status"/>
+                                    <Switch id={`switch-grid-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status" disabled={!canManage}/>
                                 </div>
                                 <Input 
                                     defaultValue={item.name} 
                                     onBlur={e => handleItemChange(item.id, 'name', e.target.value)} 
                                     className="!mt-2 text-base font-semibold text-foreground bg-transparent border-0 border-b rounded-none focus-visible:ring-0 px-0 h-auto"
                                     placeholder="Item Name"
+                                    readOnly={!canManage}
                                 />
                             </CardHeader>
                             <CardContent>
@@ -300,6 +303,7 @@ export function RecurringClient() {
                                     onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)}
                                     className="text-3xl font-black h-auto p-0 bg-transparent border-0 border-b rounded-none focus-visible:ring-0" 
                                     placeholder="Amount"
+                                    readOnly={!canManage}
                                 />
                                 <div className="flex justify-between items-end mt-2">
                                     <div className="space-y-1">
@@ -308,15 +312,17 @@ export function RecurringClient() {
                                             onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)}
                                             className="text-xs text-muted-foreground bg-transparent border-0 border-b rounded-none h-auto p-0 focus-visible:ring-0" 
                                             placeholder="Next Load Date"
+                                            readOnly={!canManage}
                                         />
                                         <Input
                                             defaultValue={item.frequency}
                                             onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)}
                                             className="text-xs font-semibold text-primary bg-transparent border-0 border-b rounded-none h-auto p-0 focus-visible:ring-0" 
                                             placeholder="Frequency"
+                                            readOnly={!canManage}
                                         />
                                     </div>
-                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)} disabled={!canManage}>
                                         <Trash2 className="h-4 w-4 text-destructive"/>
                                     </Button>
                                 </div>
@@ -342,10 +348,10 @@ export function RecurringClient() {
                             {items && items.map(item => (
                                 <TableRow key={item.id}>
                                     <TableCell>
-                                        <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" />
+                                        <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" readOnly={!canManage}/>
                                     </TableCell>
                                     <TableCell>
-                                         <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)}>
+                                         <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
                                             <SelectTrigger className="bg-transparent border-0">
                                                 <SelectValue placeholder="Select Category" />
                                             </SelectTrigger>
@@ -355,19 +361,19 @@ export function RecurringClient() {
                                         </Select>
                                     </TableCell>
                                     <TableCell>
-                                        <Input defaultValue={item.frequency} onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" />
+                                        <Input defaultValue={item.frequency} onBlur={e => handleItemChange(item.id, 'frequency', e.target.value)} className="bg-transparent border-0" readOnly={!canManage}/>
                                     </TableCell>
                                     <TableCell>
-                                        <Input defaultValue={item.nextLoad} onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" />
+                                        <Input defaultValue={item.nextLoad} onBlur={e => handleItemChange(item.id, 'nextLoad', e.target.value)} className="bg-transparent border-0" readOnly={!canManage}/>
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        <Input type="number" defaultValue={item.amount} onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" />
+                                        <Input type="number" defaultValue={item.amount} onBlur={e => handleItemChange(item.id, 'amount', parseFloat(e.target.value) || 0)} className="w-24 text-right bg-transparent border-0 font-mono" readOnly={!canManage}/>
                                     </TableCell>
                                     <TableCell className="flex justify-center">
-                                        <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status"/>
+                                        <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status" disabled={!canManage}/>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                                        <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)} disabled={!canManage}>
                                             <Trash2 className="h-4 w-4 text-destructive"/>
                                         </Button>
                                     </TableCell>

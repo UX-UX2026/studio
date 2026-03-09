@@ -13,7 +13,7 @@ export default function RecurringItemsPage() {
     const router = useRouter();
 
     useEffect(() => {
-      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive'];
+      const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Requester'];
       if (loading) return;
       if (!user) {
         router.push('/dashboard');
@@ -24,7 +24,7 @@ export default function RecurringItemsPage() {
       }
     }, [user, role, loading, router]);
     
-    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator', 'Manager', 'Executive'], []);
+    const allowedRoles = useMemo(() => ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Requester'], []);
     if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -48,7 +48,7 @@ export default function RecurringItemsPage() {
           </div>
         </CardHeader>
         <CardContent>
-            <RecurringClient />
+            <RecurringClient role={role}/>
         </CardContent>
        </Card>
     </div>

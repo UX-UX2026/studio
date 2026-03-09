@@ -1,10 +1,9 @@
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
@@ -31,6 +30,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { RecurringClient } from "@/components/app/recurring-client";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -594,6 +595,28 @@ export default function ProcurementQuickSubmitPage() {
                     </CardContent>
                 </Card>
             )}
+
+            <Card>
+                <Collapsible>
+                    <CollapsibleTrigger className="w-full p-5 flex flex-row items-center justify-between cursor-pointer rounded-t-lg hover:bg-muted/50">
+                        <div>
+                            <CardTitle className="flex items-center gap-2 text-primary">
+                                <History className="h-6 w-6" />
+                                Monthly Recurring Master List
+                            </CardTitle>
+                            <CardDescription>
+                                Items defined here are automatically added to every period submission. Expand to manage items and their recurrence.
+                            </CardDescription>
+                        </div>
+                        <ChevronDown className="h-5 w-5 transition-transform data-[state=open]:rotate-180" />
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                        <CardContent className="border-t pt-5">
+                            <RecurringClient role={role} />
+                        </CardContent>
+                    </CollapsibleContent>
+                </Collapsible>
+            </Card>
 
             <Card>
                 <Tabs defaultValue="submission" className="w-full">
