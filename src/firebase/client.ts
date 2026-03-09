@@ -1,11 +1,6 @@
 
 'use client';
 
-import { initializeApp, getApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
-
-
 // =================================================================================
 // IMPORTANT - DEPLOYMENT CONFIGURATION
 // =================================================================================
@@ -32,36 +27,3 @@ export const firebaseConfig = {
   messagingSenderId: "1014429404657",
   appId: "1:1014429404657:web:fe6855f3d2ed43d89bc850"
 };
-
-
-let app: FirebaseApp;
-let auth: Auth;
-let firestore: Firestore;
-
-// This pattern ensures that we only initialize Firebase once.
-try {
-  if (getApps().length) {
-    app = getApp();
-  } else {
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY_HERE") {
-      console.error("Firebase configuration is missing or incomplete. Please update src/firebase/client.ts with your project's configuration.");
-    }
-    app = initializeApp(firebaseConfig);
-  }
-  auth = getAuth(app);
-  firestore = getFirestore(app);
-} catch (error) {
-  console.error("Firebase initialization error:", error);
-  // To prevent the app from crashing, we'll assign dummy objects.
-  // The app will not function correctly with Firebase, but it won't crash.
-  // @ts-ignore
-  app = app || {};
-  // @ts-ignore
-  auth = auth || {};
-  // @ts-ignore
-  firestore = firestore || {};
-}
-
-
-// Export the initialized services as singletons.
-export { app, auth, firestore };
