@@ -1,8 +1,10 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged, type Auth, getAuth } from 'firebase/auth';
+import { User, onAuthStateChanged } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, collection, query, where, getDocs, writeBatch, type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApps, getApp } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { useToast } from '@/hooks/use-toast';
@@ -122,11 +124,12 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           setIsLoading(false);
         } else {
           try {
-            const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email), where('status', '==', 'Invited'));
+            const invitesQuery = query(collection(firestore, 'users'), where('email', '==', authUser.email));
             const invitesSnapshot = await getDocs(invitesQuery);
+            const invitedDocs = invitesSnapshot.docs.filter(doc => doc.data().status === 'Invited');
             
-            if (!invitesSnapshot.empty) {
-              const inviteDoc = invitesSnapshot.docs[0];
+            if (invitedDocs.length > 0) {
+              const inviteDoc = invitedDocs[0];
               const invitedProfileData = inviteDoc.data();
               
               const newProfileData = {
