@@ -72,11 +72,11 @@ const PipelineStage = ({ name, count, highlight }: { name: string, count: number
 );
 
 
-const PipelineArrow = () => (
-    <div className="flex-1 text-muted-foreground/50 -mx-1">
+const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
+    <div className={cn("flex-1 text-muted-foreground/30 -mx-1", highlight && "text-primary/70")}>
         <svg width="100%" viewBox="0 0 24 12" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-            <path d="M0 6H24" stroke="currentColor" strokeWidth="1.5" strokeDasharray="3 3"/>
-            <path d="M19 2L24 6L19 10" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M0 6H24" stroke="currentColor" strokeWidth="1.5" strokeDasharray="2 2"/>
+            <path d="M20 3L24 6L20 9" stroke="currentColor" strokeWidth="1.5"/>
         </svg>
     </div>
 );
@@ -414,9 +414,9 @@ export default function DashboardPage() {
             <div className="space-y-4">
                 <div className="flex items-center">
                     <PipelineStage name="Manager" count={dashboardStats.pendingManager} highlight={dashboardStats.pendingManager > 0} />
-                    <PipelineArrow />
+                    <PipelineArrow highlight={dashboardStats.pendingManager > 0} />
                     <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
-                    <PipelineArrow />
+                    <PipelineArrow highlight={dashboardStats.pendingExecutive > 0} />
                     <PipelineStage name="Procurement" count={approvedCount} highlight={approvedCount > 0}/>
                 </div>
                 
@@ -508,5 +508,6 @@ export default function DashboardPage() {
   );
 }
 
+    
     
     
