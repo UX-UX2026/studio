@@ -105,6 +105,10 @@ export default function ApprovalsPage() {
         if (role === 'Procurement Officer') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
+        if (role === 'Requester') {
+            if (!userDepartment) return null; // Requester must have a department
+            return query(baseQuery, where('department', '==', userDepartment));
+        }
 
         return null; // No requests for other roles on this page
     }, [firestore, role, userDepartment]);
