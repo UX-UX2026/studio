@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
@@ -108,7 +108,8 @@ export default function ProcurementQuickSubmitPage() {
     
     const [draftItems, setDraftItems] = useState<Item[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
+    const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
@@ -371,7 +372,8 @@ export default function ProcurementQuickSubmitPage() {
             return;
         }
 
-        setIsSaving(true);
+        setLastAction(isDraft ? 'draft' : 'submit');
+        setSaveStatus('saving');
         const newStatus = isDraft ? 'Draft' : 'Pending Manager Approval';
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         
@@ -418,11 +420,6 @@ export default function ProcurementQuickSubmitPage() {
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
         
-        toast({ 
-            title: isDraft ? "Saving Draft..." : "Submitting Request...",
-            description: "Please wait.",
-        });
-
         try {
             let docId: string;
             if (editingRequestId) {
@@ -440,10 +437,16 @@ export default function ProcurementQuickSubmitPage() {
             if (!editingRequestId && docId) {
                 setEditingRequestId(docId); // Start tracking the new draft's ID
             }
+            setSaveStatus('saved');
             toast({ 
                 title: isDraft ? "Draft Saved" : "Request Submitted", 
                 description: `Your procurement request for ${selectedPeriod} has been successfully ${isDraft ? 'saved' : 'submitted'}.` 
             });
+
+            setTimeout(() => {
+                setSaveStatus('idle');
+                setLastAction(null);
+            }, 3000);
 
             const auditLogData = {
                 userId: user.uid,
@@ -456,6 +459,8 @@ export default function ProcurementQuickSubmitPage() {
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
         } catch (error: any) {
             console.error("Save Request Error:", error);
+            setSaveStatus('idle');
+            setLastAction(null);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
@@ -468,8 +473,6 @@ export default function ProcurementQuickSubmitPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
-        } finally {
-            setIsSaving(false);
         }
     };
     
@@ -737,13 +740,21 @@ export default function ProcurementQuickSubmitPage() {
                             <Button onClick={handleRequestEdit}>Request Edit</Button>
                         ) : (
                             <>
-                                <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={isSaving || isLocked}>
-                                    {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                    Save as Draft
+                                <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>
+                                    {saveStatus === 'saving' && lastAction === 'draft' ? (
+                                        <Loader className="mr-2 h-4 w-4 animate-spin"/>
+                                    ) : saveStatus === 'saved' && lastAction === 'draft' ? (
+                                        <Check className="mr-2 h-4 w-4" />
+                                    ) : null}
+                                    {saveStatus === 'saving' && lastAction === 'draft' ? 'Saving...' : saveStatus === 'saved' && lastAction === 'draft' ? 'Saved' : 'Save as Draft'}
                                 </Button>
-                                <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={isSaving || isLocked}>
-                                    {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
-                                    Submit For Approval
+                                <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
+                                    {saveStatus === 'saving' && lastAction === 'submit' ? (
+                                        <Loader className="mr-2 h-4 w-4 animate-spin"/>
+                                    ) : saveStatus === 'saved' && lastAction === 'submit' ? (
+                                        <Check className="mr-2 h-4 w-4" />
+                                    ) : null}
+                                    {saveStatus === 'saving' && lastAction === 'submit' ? 'Submitting...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
                                 </Button>
                             </>
                         )}
