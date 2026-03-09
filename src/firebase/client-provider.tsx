@@ -1,3 +1,4 @@
+
 'use client';
 
 import { ReactNode, useEffect, useState } from 'react';
@@ -20,37 +21,27 @@ export function FirebaseClientProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initialize = async () => {
-      console.log("FirebaseClientProvider: Initializing Firebase with persistence...");
-
+      console.log("FirebaseClientProvider: Initializing Firebase...");
+      
+      const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+      const auth = getAuth(app);
+      const firestore = getFirestore(app);
+      console.log("FirebaseClientProvider: Core services initialized.");
+      
       try {
-        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-        const auth = getAuth(app);
-        const firestore = getFirestore(app);
-        console.log("FirebaseClientProvider: Core services initialized.");
-
         await enableIndexedDbPersistence(firestore);
         console.log("FirebaseClientProvider: Firestore persistence enabled.");
-        
-        return { app, auth, firestore };
       } catch (err: any) {
         if (err.code === 'failed-precondition') {
-          console.warn("FirebaseClientProvider: Persistence failed (multiple tabs open). Falling back to online-only.");
-          // This is not a fatal error. We can still proceed.
-          const app = getApp();
-          const auth = getAuth(app);
-          const firestore = getFirestore(app);
-          return { app, auth, firestore };
+          console.warn("FirebaseClientProvider: Persistence failed (likely multiple tabs open). Continuing in online-only mode.");
         } else if (err.code === 'unimplemented') {
-          console.warn("FirebaseClientProvider: Persistence is not available in this browser. Falling back to online-only.");
-          // Also not fatal.
-          const app = getApp();
-          const auth = getAuth(app);
-          const firestore = getFirestore(app);
-          return { app, auth, firestore };
+          console.warn("FirebaseClientProvider: Persistence is not available in this browser. Continuing in online-only mode.");
+        } else {
+            console.error("FirebaseClientProvider: An unexpected error occurred during persistence setup.", err);
         }
-        console.error("FirebaseClientProvider: Initialization failed with an unexpected error.", err);
-        throw err; // Re-throw other errors
       }
+      
+      return { app, auth, firestore };
     };
 
     const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
