@@ -118,16 +118,22 @@ export default function ProcurementQuickSubmitPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
-    const userDraftsQuery = useMemo(() => {
-        if (!firestore || !user) return null;
+    const allDraftsQuery = useMemo(() => {
+        if (!firestore) return null;
         return query(
             collection(firestore, 'procurementRequests'),
-            where('status', '==', 'Draft'),
-            where('submittedById', '==', user.uid),
-            orderBy('updatedAt', 'desc')
+            where('status', '==', 'Draft')
         );
-    }, [firestore, user]);
-    const { data: userDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(userDraftsQuery);
+    }, [firestore]);
+    const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
+
+    const userDrafts = useMemo(() => {
+        if (!user || !allDrafts) return [];
+        // We filter out the currently active draft from the "other drafts" list
+        return allDrafts
+            .filter(draft => draft.submittedById === user.uid && draft.id !== editingRequestId)
+            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+    }, [user, allDrafts, editingRequestId]);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;

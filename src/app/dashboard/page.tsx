@@ -132,18 +132,23 @@ export default function DashboardPage() {
 
   const { data: fulfillmentRequests, loading: fulfillmentLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
 
-  const draftsQuery = useMemo(() => {
-    if (!firestore || !user) return null;
+  const allDraftsQuery = useMemo(() => {
+    if (!firestore) return null;
     return query(
         collection(firestore, 'procurementRequests'),
-        where('status', '==', 'Draft'),
-        where('submittedById', '==', user.uid),
-        orderBy('updatedAt', 'desc'),
-        limit(5)
+        where('status', '==', 'Draft')
     );
-  }, [firestore, user]);
+  }, [firestore]);
 
-  const { data: userDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(draftsQuery);
+  const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
+
+  const userDrafts = useMemo(() => {
+    if (!user || !allDrafts) return [];
+    return allDrafts
+        .filter(draft => draft.submittedById === user.uid)
+        .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
+        .slice(0, 5);
+  }, [user, allDrafts]);
 
 
   const allFulfillmentItems = useMemo(() => {
@@ -511,4 +516,5 @@ export default function DashboardPage() {
     
     
     
+
 
