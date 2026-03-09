@@ -167,7 +167,7 @@ export default function UsersPage() {
                 
                 setIsDialogOpen(false);
             } catch(error: any) {
-                logErrorToFirestore({ userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
+                logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
                 toast({ variant: 'destructive', title: 'Invitation Failed', description: error.message });
             } finally {
                 setIsSaving(false);
@@ -212,7 +212,7 @@ export default function UsersPage() {
                 title: 'Save Failed',
                 description: error.message || 'Could not save the user profile.',
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: adminUser?.uid,
                 userName: adminUser?.displayName,
                 action,
@@ -257,7 +257,7 @@ export default function UsersPage() {
                 title: 'Delete Failed',
                 description: error.message || 'Could not delete the user.',
             });
-             await logErrorToFirestore({
+             await logErrorToFirestore(firestore, {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action,
@@ -302,7 +302,7 @@ export default function UsersPage() {
                 title: 'Update Failed',
                 description: error.message || `Could not update the user's ${String(field)}.`,
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action,

@@ -185,7 +185,7 @@ export default function SubmissionPage() {
                 title: "Submission Failed",
                 description: error.message || "Could not submit the request. You may not have permissions.",
             });
-            await logErrorToFirestore({
+            await logErrorToFirestore(firestore, {
                 userId: user.uid,
                 userName: user.displayName,
                 action,
