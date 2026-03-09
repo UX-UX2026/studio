@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { format } from "date-fns";
+import { useBudgetSummary } from "@/hooks/use-budget-summary";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -84,61 +85,13 @@ export default function ProcurementSummaryPage() {
     }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
 
 
-    const summaryData = useMemo(() => {
-        if (!selectedDepartmentId || !selectedPeriod || !allRequests || !budgetItems || !departments) {
-            return { lines: [], totals: { procurement: 0, forecast: 0, variance: 0 } };
-        }
-
+    const procurementItemsForSummary = useMemo(() => {
+        if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
         const selectedRequest = allRequests.find(req => req.departmentId === selectedDepartmentId && req.period === selectedPeriod);
-        const selectedDept = departments.find(d => d.id === selectedDepartmentId);
-        const procurementYear = new Date(selectedDate).getFullYear();
+        return selectedRequest ? selectedRequest.items : [];
+    }, [allRequests, selectedDepartmentId, selectedPeriod]);
 
-        const procurementItems = selectedRequest ? selectedRequest.items : [];
-        
-        const monthName = selectedPeriod.split(' ')[0];
-        const monthIndex = (selectedDept?.budgetYear === procurementYear)
-            ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
-            : -1;
-
-        const allCategories = new Set([
-            ...procurementItems.map(item => item.category),
-            ...budgetItems.map(item => item.category)
-        ]);
-
-        const lines = Array.from(allCategories).map(category => {
-            if (!category) return null;
-
-            const procurementTotal = procurementItems
-                .filter(item => item.category === category)
-                .reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
-
-            const budgetItem = budgetItems.find(item => item.category === category);
-            const forecastTotal = (budgetItem && monthIndex !== -1 && budgetItem.forecasts.length > monthIndex)
-                ? budgetItem.forecasts[monthIndex]
-                : 0;
-
-            const variance = procurementTotal - forecastTotal;
-            const isOverBudget = forecastTotal > 0 && procurementTotal > forecastTotal;
-
-            const comments = procurementItems
-                .filter(item => item.category === category && item.comments)
-                .map(item => item.comments)
-                .join('; ');
-
-            return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments };
-        }).filter(Boolean);
-        
-        const totals = lines.reduce((acc, line) => {
-            if (!line) return acc;
-            acc.procurement += line.procurementTotal;
-            acc.forecast += line.forecastTotal;
-            acc.variance += line.variance;
-            return acc;
-        }, { procurement: 0, forecast: 0, variance: 0 });
-
-        return { lines, totals };
-
-    }, [selectedDepartmentId, selectedPeriod, allRequests, budgetItems, departments, selectedDate]);
+    const summaryData = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
     
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
@@ -236,15 +189,15 @@ export default function ProcurementSummaryPage() {
                         </TableHeader>
                         <TableBody>
                             {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                <TableRow key={item!.category} className={cn(item!.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                    <TableCell className="font-medium">{item!.category}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item!.procurementTotal)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(item!.forecastTotal)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono font-semibold", item!.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                        {item!.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                        {formatCurrency(item!.variance)}
+                                <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                    <TableCell className="font-medium">{item.category}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                        {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                        {formatCurrency(item.variance)}
                                     </TableCell>
-                                    <TableCell className="text-xs text-muted-foreground">{item!.comments}</TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
                                 </TableRow>
                             )) : (
                                 <TableRow>
@@ -270,5 +223,3 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
-
-    
