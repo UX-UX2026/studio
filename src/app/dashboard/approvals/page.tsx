@@ -184,6 +184,26 @@ export default function ApprovalsPage() {
         return false;
     }, [activeRequest, role]);
 
+    const canRejectOrQuery = useMemo(() => {
+        if (!activeRequest || !role) return false;
+        const { status } = activeRequest;
+        
+        if (role === 'Administrator') {
+            // Admins can reject/query as long as it's not fully completed or archived.
+            return !['Completed', 'Archived', 'In Fulfillment'].includes(status);
+        }
+        if (role === 'Manager') {
+            return status === 'Pending Manager Approval' || status === 'Queries Raised';
+        }
+        if (role === 'Executive') {
+            // An exec can also act on a request waiting for a manager.
+            return status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised';
+        }
+        
+        // Requesters and Procurement Officers cannot reject or raise queries through these buttons.
+        return false;
+    }, [activeRequest, role]);
+
 
     const approvalSummary = useMemo(() => {
         const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved' || req.status === 'Queries Raised');
@@ -874,8 +894,8 @@ export default function ApprovalsPage() {
                                     </CardContent>
                                     {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
                                         <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction}><X className="mr-2 h-4 w-4" />Reject</Button>
+                                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
                                             <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
                                                 {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
                                                 <Check className="mr-2 h-4 w-4" />
