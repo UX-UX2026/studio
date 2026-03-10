@@ -64,7 +64,7 @@ export function useBudgetSummary(
                 : 0;
 
             const variance = procurementTotal - forecastTotal;
-            const isOverBudget = forecastTotal > 0 && procurementTotal > forecastTotal;
+            const isOverBudget = procurementTotal > forecastTotal;
 
             const comments = procurementItems
                 .filter(item => item.category === category && item.comments)
