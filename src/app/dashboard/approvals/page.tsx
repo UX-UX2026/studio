@@ -30,11 +30,12 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
+import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate } from '@/lib/email-templates';
 
 
 type WorkflowStage = {
@@ -385,48 +386,37 @@ export default function ApprovalsPage() {
                     const workflowStageConfig = department.workflow.find(wfStage => wfStage.name === nextStage.stage);
                     
                     if (workflowStageConfig) {
-                        // Log simulated notification
-                        let notificationDetails = `System triggered notification for stage '${nextStage.stage}' to role '${workflowStageConfig.role}'.`;
-                        if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
-                            if (workflowStageConfig.sendToBoth) {
-                                notificationDetails += ` Recipient: Primary and Alternate (${workflowStageConfig.alternateEmail}).`;
-                            } else {
-                                notificationDetails = `System triggered notification for stage '${nextStage.stage}' to alternate email: ${workflowStageConfig.alternateEmail}.`;
-                            }
-                        }
-                        const notificationLogData = {
-                            userId: user.uid,
-                            userName: 'System',
-                            action: 'notification.sent',
-                            details: notificationDetails,
-                            entity: { type: 'procurementRequest', id: selectedRequestId },
-                            timestamp: serverTimestamp()
-                        };
-                        await addDoc(collection(firestore, 'auditLogs'), notificationLogData);
-
-                        // Real Email Sending Logic
                         const usersCollectionRef = collection(firestore, 'users');
                         const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
                         const querySnapshot = await getDocs(q);
                         
-                        const recipients: string[] = [];
+                        const primaryRecipients: string[] = [];
                         querySnapshot.forEach(doc => {
                             const userProfile = doc.data();
-                            if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
-                                if (workflowStageConfig.sendToBoth) {
-                                    recipients.push(userProfile.email);
-                                    recipients.push(workflowStageConfig.alternateEmail);
-                                } else {
-                                    recipients.push(workflowStageConfig.alternateEmail);
-                                }
-                            } else {
-                                 recipients.push(userProfile.email);
-                            }
+                            if (userProfile.email) primaryRecipients.push(userProfile.email);
                         });
+
+                        let finalRecipients: string[] = [];
+                        if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
+                            if (workflowStageConfig.sendToBoth) {
+                                finalRecipients = [...primaryRecipients, workflowStageConfig.alternateEmail];
+                            } else {
+                                finalRecipients = [workflowStageConfig.alternateEmail];
+                            }
+                        } else {
+                            finalRecipients = primaryRecipients;
+                        }
                         
-                        const uniqueRecipients = [...new Set(recipients)];
+                        const uniqueRecipients = [...new Set(finalRecipients)];
                 
                         if (uniqueRecipients.length > 0) {
+                            const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                            const emailHtml = requestActionRequiredTemplate(
+                                { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                                nextStage.stage,
+                                link
+                            );
+
                             try {
                                 const response = await fetch('/api/send-email', {
                                     method: 'POST',
@@ -434,13 +424,21 @@ export default function ApprovalsPage() {
                                     body: JSON.stringify({
                                         to: uniqueRecipients.join(','),
                                         subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
-                                        html: `<p>A procurement request for department <strong>${activeRequest.department}</strong> requires your attention.</p><p>Request ID: ${activeRequest.id}</p><p>Total: ${formatCurrency(activeRequest.total)}</p><p>Please log in to the portal to review the request.</p>`
+                                        html: emailHtml,
                                     })
                                 });
                                 const responseData = await response.json();
                                 if (!response.ok) {
                                   throw new Error(responseData.error || 'Failed to send email');
                                 }
+                                await addDoc(collection(firestore, 'auditLogs'), {
+                                    userId: user.uid,
+                                    userName: 'System',
+                                    action: 'notification.sent',
+                                    details: `Notification sent for stage '${nextStage.stage}' to: ${uniqueRecipients.join(', ')}`,
+                                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                                    timestamp: serverTimestamp()
+                                });
                             } catch (emailError) {
                                 console.error("Email API call failed:", emailError);
                                 await logErrorToFirestore(firestore, {
@@ -531,9 +529,7 @@ export default function ApprovalsPage() {
                 title: "Request Rejected",
                 description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
             });
-            setNewComment('');
-            setIsRejectDialogOpen(false);
-
+            
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
@@ -543,6 +539,25 @@ export default function ApprovalsPage() {
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+
+            // Notify submitter
+            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const submitterProfile = userDocSnap.data();
+                if (submitterProfile.email) {
+                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                    const emailHtml = requestRejectedTemplate(activeRequest, commentData, link);
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                    });
+                }
+            }
+
+            setNewComment('');
+            setIsRejectDialogOpen(false);
         } catch(error: any) {
             console.error("Reject Error:", error);
             toast({
@@ -600,8 +615,6 @@ export default function ApprovalsPage() {
                 title: "Query Raised",
                 description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
             });
-            setNewComment("");
-            setIsQueryDialogOpen(false);
             
             const auditLogData = {
                 userId: user.uid,
@@ -612,6 +625,25 @@ export default function ApprovalsPage() {
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+            
+            // Notify submitter
+            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const submitterProfile = userDocSnap.data();
+                if (submitterProfile.email) {
+                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                    const emailHtml = queryRaisedTemplate(activeRequest, commentData, link);
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                    });
+                }
+            }
+
+            setNewComment("");
+            setIsQueryDialogOpen(false);
         } catch (error: any) {
             console.error("Raise Query Error:", error);
             toast({
@@ -883,12 +915,12 @@ export default function ApprovalsPage() {
                                                             </TableHeader>
                                                             <TableBody>
                                                                 {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                                                    <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                                    <TableRow key={item.category} className={cn((item.procurementTotal > item.forecastTotal) && "bg-red-50 dark:bg-red-900/20")}>
                                                                         <TableCell className="font-medium">{item.category}</TableCell>
                                                                         <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                                         <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                        <TableCell className={cn("text-right font-mono font-semibold", (item.procurementTotal > item.forecastTotal) && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                            {(item.procurementTotal > item.forecastTotal) && <AlertTriangle className="h-4 w-4" />}
                                                                             {formatCurrency(item.variance)}
                                                                         </TableCell>
                                                                     </TableRow>
