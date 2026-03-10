@@ -84,3 +84,5 @@ export function useBudgetSummary(
         return { lines, totals };
     }, [procurementItems, selectedDepartmentId, selectedPeriod, budgetItems, departments]);
 }
+
+    
