@@ -49,7 +49,7 @@ export default function ProcurementSummaryPage() {
     const firestore = useFirestore();
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date(new Date().getFullYear() + 2, 1, 1));
+    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
 
     // Data fetching

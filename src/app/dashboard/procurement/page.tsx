@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -470,7 +471,7 @@ export default function ProcurementQuickSubmitPage() {
                 userName: user.displayName,
                 action,
                 errorMessage: error.message,
-                errorStack: error.stack
+                errorStack: error.stack,
             });
         } finally {
             setDeletingRequestId(null);

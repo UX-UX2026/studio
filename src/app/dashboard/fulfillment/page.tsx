@@ -37,8 +37,12 @@ export default function FulfillmentPage() {
 
     const fulfillmentQuery = useMemo(() => {
         if (!firestore) return null;
-        return query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
-    }, [firestore]);
+        const statuses = ['In Fulfillment', 'Completed'];
+        if (role === 'Requester' || role === 'Manager') {
+            return query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses), where('department', '==', department));
+        }
+        return query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses));
+    }, [firestore, role, department]);
 
     const { data: fulfillmentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
 
@@ -156,5 +160,3 @@ export default function FulfillmentPage() {
     </Card>
   );
 }
-
-    

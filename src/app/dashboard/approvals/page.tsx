@@ -111,7 +111,7 @@ export default function ApprovalsPage() {
             return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
         }
         if (role === 'Executive') {
-            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised']));
+            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Manager') {
             if (!userDepartment) return null; // Manager must have a department
