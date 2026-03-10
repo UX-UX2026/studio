@@ -10,6 +10,53 @@ import { Label } from "@/components/ui/label";
 import { useAuth as useFirebaseAuthInstance } from "@/firebase";
 import { Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+
+const AppLogo = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 258 104"
+    xmlns="http://www.w3.org/2000/svg"
+    className={cn("text-foreground", className)}
+    aria-label="Ubuntu Pathways Logo"
+    {...props}
+  >
+    <g fill="currentColor">
+      <path d="M84.55 31.84h6.7l-12.03-18.49h-6.7l12.03 18.49zM60.11 31.84L78.6 0h6.7L66.81 31.84h-6.7zM197.89 31.84l-18.49-31.84h-6.7l18.49 31.84h6.7zM173.45 31.84h-6.7l12.03-18.49h6.7l-12.03 18.49z" />
+      <path d="M96.61 13.35l7.74 11.97 7.74-11.97h6.7l-11.59 18.49h-6.7l-11.59-18.49h7.7zM121.2 13.35h6.6v18.49h-6.6zM135.5 13.35h6.6v18.49h-6.6zM149.8 13.35h6.6v18.49h-6.6z" />
+      <path d="M164.1 13.35h6.7v18.49h-6.7z" />
+    </g>
+    <text
+      style={{
+        lineHeight: "100%",
+        fontFamily: "Poppins, sans-serif",
+        fontWeight: 700,
+        letterSpacing: "0.05em",
+        fontSize: "36px",
+      }}
+      x="129"
+      y="65"
+      textAnchor="middle"
+      fill="currentColor"
+    >
+      UBUNTU
+    </text>
+    <text
+      style={{
+        lineHeight: "100%",
+        fontFamily: "Poppins, sans-serif",
+        fontWeight: 400,
+        letterSpacing: "0.4em",
+        fontSize: "20px",
+      }}
+      x="129"
+      y="95"
+      textAnchor="middle"
+      fill="currentColor"
+    >
+      PATHWAYS
+    </text>
+  </svg>
+);
 
 const GoogleIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="24px" height="24px" {...props}>
@@ -92,13 +139,11 @@ export default function LoginPage() {
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="text-center">
-                    <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary">
-                        <span className="text-4xl font-bold text-primary-foreground">U</span>
+                    <div className="mx-auto mb-4">
+                        <AppLogo className="h-20 w-auto" />
                     </div>
-                    <p className="text-sm font-medium uppercase text-primary">ProcurePortal</p>
-                    <h1 className="text-3xl font-bold tracking-tight text-foreground">UBUNTU PATHWAYS</h1>
-                    <CardTitle className="text-2xl !mt-6">Welcome</CardTitle>
-                    <CardDescription>Sign in to access your procurement dashboard.</CardDescription>
+                    <CardTitle className="text-2xl">Welcome to ProcurePortal</CardTitle>
+                    <CardDescription>Sign in to access your dashboard.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">

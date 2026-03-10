@@ -26,6 +26,54 @@ import {
 import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+
+
+const AppLogo = ({ className, ...props }: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 258 104"
+    xmlns="http://www.w3.org/2000/svg"
+    className={cn("text-foreground", className)}
+    aria-label="Ubuntu Pathways Logo"
+    {...props}
+  >
+    <g fill="currentColor">
+      <path d="M84.55 31.84h6.7l-12.03-18.49h-6.7l12.03 18.49zM60.11 31.84L78.6 0h6.7L66.81 31.84h-6.7zM197.89 31.84l-18.49-31.84h-6.7l18.49 31.84h6.7zM173.45 31.84h-6.7l12.03-18.49h6.7l-12.03 18.49z" />
+      <path d="M96.61 13.35l7.74 11.97 7.74-11.97h6.7l-11.59 18.49h-6.7l-11.59-18.49h7.7zM121.2 13.35h6.6v18.49h-6.6zM135.5 13.35h6.6v18.49h-6.6zM149.8 13.35h6.6v18.49h-6.6z" />
+      <path d="M164.1 13.35h6.7v18.49h-6.7z" />
+    </g>
+    <text
+      style={{
+        lineHeight: "100%",
+        fontFamily: "Poppins, sans-serif",
+        fontWeight: 700,
+        letterSpacing: "0.05em",
+        fontSize: "36px",
+      }}
+      x="129"
+      y="65"
+      textAnchor="middle"
+      fill="currentColor"
+    >
+      UBUNTU
+    </text>
+    <text
+      style={{
+        lineHeight: "100%",
+        fontFamily: "Poppins, sans-serif",
+        fontWeight: 400,
+        letterSpacing: "0.4em",
+        fontSize: "20px",
+      }}
+      x="129"
+      y="95"
+      textAnchor="middle"
+      fill="currentColor"
+    >
+      PATHWAYS
+    </text>
+  </svg>
+);
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -70,7 +118,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground">
         <SidebarHeader className="h-16 border-b border-sidebar-border p-2 flex items-center justify-between">
             <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden font-bold tracking-tight text-sidebar-foreground p-2">
-                <span className="text-xl group-data-[collapsible=icon]:hidden">UBUNTU PATHWAYS</span>
+                <AppLogo className="h-9 w-auto text-sidebar-foreground group-data-[collapsible=icon]:hidden" />
             </Link>
             <SidebarTrigger className="hidden md:flex" />
         </SidebarHeader>
