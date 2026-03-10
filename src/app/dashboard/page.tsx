@@ -61,6 +61,22 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 
+
+type Department = {
+    id: string;
+    name: string;
+    budgetHeaders?: string[];
+    budgetYear?: number;
+};
+
+type BudgetItem = {
+    id: string;
+    departmentId: string;
+    category: string;
+    forecasts: number[];
+    yearTotal: number;
+};
+
 const stageToStatusMap: { [key: string]: string } = {
     "Manager": "Pending Manager Approval",
     "Executive": "Pending Executive",
@@ -160,6 +176,12 @@ export default function DashboardPage() {
   }, [firestore]);
 
   const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
+  
+  const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+  const { data: allDepartments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+  const budgetsQuery = useMemo(() => collection(firestore, 'budgets'), [firestore]);
+  const { data: allBudgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
 
   const userDrafts = useMemo(() => {
     if (!user || !allDrafts) return [];
@@ -196,7 +218,7 @@ export default function DashboardPage() {
     const approvedCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'Approved').length || 0, [userOpenRequests]);
     const fulfillmentCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [userOpenRequests]);
 
-    const requestsLoading = openRequestsLoading || monthlyRequestsLoading;
+    const requestsLoading = openRequestsLoading || monthlyRequestsLoading || deptsLoading || budgetsLoading;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -218,6 +240,54 @@ export default function DashboardPage() {
     }
     
     const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+        const summaryData = (() => {
+            const budgetItemsForRequest = allBudgetItems?.filter(b => b.departmentId === request.departmentId) || [];
+            if (!allDepartments || !request) {
+                return { lines: [], totals: { procurement: 0, forecast: 0, variance: 0 } };
+            }
+    
+            const procurementItems = request.items;
+            const selectedDepartmentId = request.departmentId;
+            const selectedPeriod = request.period;
+    
+            const selectedDept = allDepartments.find(d => d.id === selectedDepartmentId);
+            const procurementYear = new Date(selectedPeriod).getFullYear();
+            
+            const monthName = selectedPeriod.split(' ')[0];
+            const monthIndex = (selectedDept?.budgetYear === procurementYear)
+                ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
+                : -1;
+    
+            const allCategories = new Set([
+                ...procurementItems.map(item => item.category),
+                ...budgetItemsForRequest.map(item => item.category)
+            ]);
+    
+            const lines = Array.from(allCategories).map(category => {
+                if (!category) return null;
+    
+                const itemsForCategory = procurementItems.filter(item => item.category === category);
+                const procurementTotal = itemsForCategory.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+                const budgetItem = budgetItemsForRequest.find(item => item.category === category);
+                const forecastTotal = (budgetItem && monthIndex !== -1 && budgetItem.forecasts.length > monthIndex)
+                    ? budgetItem.forecasts[monthIndex]
+                    : 0;
+                const variance = procurementTotal - forecastTotal;
+                const isOverBudget = procurementTotal > forecastTotal;
+                const comments = itemsForCategory.filter(item => item.comments).map(item => item.comments).join('; ');
+                return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments, items: itemsForCategory };
+            }).filter(Boolean) as any[];
+            
+            const totals = lines.reduce((acc, line) => {
+                acc.procurement += line.procurementTotal;
+                acc.forecast += line.forecastTotal;
+                acc.variance += line.variance;
+                return acc;
+            }, { procurement: 0, forecast: 0, variance: 0 });
+    
+            return { lines, totals };
+        })();
+        
         if (format === 'pdf') {
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
@@ -256,6 +326,27 @@ export default function DashboardPage() {
                 head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
                 body: itemsData,
                 headStyles: { fillColor: [201, 115, 83] },
+            });
+
+            const summaryTableData = summaryData.lines.map((line: any) => [
+                line.category,
+                formatCurrency(line.procurementTotal),
+                formatCurrency(line.forecastTotal),
+                formatCurrency(line.variance),
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                body: summaryTableData,
+                foot: [[
+                    'Total',
+                    formatCurrency(summaryData.totals.procurement),
+                    formatCurrency(summaryData.totals.forecast),
+                    formatCurrency(summaryData.totals.variance)
+                ]],
+                theme: 'grid',
+                headStyles: { fillColor: [201, 115, 83] },
+                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
             });
             
             const timelineData = request.timeline.map(step => [
@@ -297,6 +388,20 @@ export default function DashboardPage() {
         }));
         const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
 
+        const summaryDataForSheet = summaryData.lines.map((line: any) => ({
+            'Category': line.category,
+            'Request Total': line.procurementTotal,
+            'Forecast Total': line.forecastTotal,
+            'Variance': line.variance,
+        }));
+        summaryDataForSheet.push({
+            'Category': 'GRAND TOTAL',
+            'Request Total': summaryData.totals.procurement,
+            'Forecast Total': summaryData.totals.forecast,
+            'Variance': summaryData.totals.variance,
+        });
+        const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
+
         const timelineData = request.timeline.map(step => ({
             'Stage': step.stage,
             'Actor': step.actor,
@@ -308,6 +413,7 @@ export default function DashboardPage() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
         XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+        XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
         XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
 
         XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
@@ -648,5 +754,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
