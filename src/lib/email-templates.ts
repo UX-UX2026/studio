@@ -1,5 +1,3 @@
-'use server';
-
 interface RequestDetails {
     id: string;
     department: string;
