@@ -725,7 +725,7 @@ export default function ProcurementQuickSubmitPage() {
                                     ) : saveStatus === 'saved' && lastAction === 'draft' ? (
                                         <Check className="mr-2 h-4 w-4" />
                                     ) : null}
-                                    {saveStatus === 'saving' && lastAction === 'draft' ? 'Saving...' : saveStatus === 'saved' && lastAction === 'draft' ? 'Saved' : 'Save as Draft'}
+                                    {saveStatus === 'saving' && lastAction === 'draft' ? 'Saving Draft...' : saveStatus === 'saved' && lastAction === 'draft' ? 'Saved' : 'Save as Draft'}
                                 </Button>
                                 <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
                                     {saveStatus === 'saving' && lastAction === 'submit' ? (
@@ -733,7 +733,7 @@ export default function ProcurementQuickSubmitPage() {
                                     ) : saveStatus === 'saved' && lastAction === 'submit' ? (
                                         <Check className="mr-2 h-4 w-4" />
                                     ) : null}
-                                    {saveStatus === 'saving' && lastAction === 'submit' ? 'Submitting...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
+                                    {saveStatus === 'saving' && lastAction === 'submit' ? 'Saving Submission...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
                                 </Button>
                             </>
                         )}
@@ -759,4 +759,3 @@ export default function ProcurementQuickSubmitPage() {
     );
 }
 
-    
