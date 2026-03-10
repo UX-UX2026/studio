@@ -59,6 +59,7 @@ import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 const stageToStatusMap: { [key: string]: string } = {
     "Manager": "Pending Manager Approval",
@@ -219,8 +220,12 @@ export default function DashboardPage() {
     const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
         if (format === 'pdf') {
             const doc = new jsPDF();
+            const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
+            if (logo) {
+                doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+            }
             doc.setFontSize(18);
-            doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 22);
+            doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
 
             const detailsData = [
                 ["Request ID", request.id],
@@ -231,11 +236,11 @@ export default function DashboardPage() {
                 ["Status", request.status],
             ];
             autoTable(doc, {
-                startY: 30,
+                startY: 42,
                 head: [['Request Details', '']],
                 body: detailsData,
                 theme: 'striped',
-                headStyles: { fillColor: [22, 102, 87] },
+                headStyles: { fillColor: [201, 115, 83] },
             });
 
             const itemsData = request.items.map(item => [
@@ -250,7 +255,7 @@ export default function DashboardPage() {
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
                 body: itemsData,
-                headStyles: { fillColor: [22, 102, 87] },
+                headStyles: { fillColor: [201, 115, 83] },
             });
             
             const timelineData = request.timeline.map(step => [
@@ -263,7 +268,7 @@ export default function DashboardPage() {
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Stage', 'Actor', 'Status', 'Date']],
                 body: timelineData,
-                headStyles: { fillColor: [22, 102, 87] },
+                headStyles: { fillColor: [201, 115, 83] },
             });
 
             doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);

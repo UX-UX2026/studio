@@ -45,6 +45,7 @@ import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemp
 import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 
 type WorkflowStage = {
@@ -82,11 +83,16 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf') => {
     if (format === 'pdf') {
         const doc = new jsPDF();
+        const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
+        if (logo) {
+            doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+        }
+
         doc.setFontSize(18);
-        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 22);
+        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
 
         const detailsData = [
             ["Request ID", request.id],
@@ -97,11 +103,11 @@ const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf'
             ["Status", request.status],
         ];
         autoTable(doc, {
-            startY: 30,
+            startY: 42,
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
-            headStyles: { fillColor: [22, 102, 87] },
+            headStyles: { fillColor: [201, 115, 83] },
         });
 
         const itemsData = request.items.map(item => [
@@ -116,7 +122,28 @@ const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf'
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
-            headStyles: { fillColor: [22, 102, 87] },
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+        
+        const summaryTableData = summaryData.lines.map(line => [
+            line.category,
+            formatCurrency(line.procurementTotal),
+            formatCurrency(line.forecastTotal),
+            formatCurrency(line.variance),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+            body: summaryTableData,
+            foot: [[
+                'Total',
+                formatCurrency(summaryData.totals.procurement),
+                formatCurrency(summaryData.totals.forecast),
+                formatCurrency(summaryData.totals.variance)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [201, 115, 83] },
+            footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
         });
         
         const timelineData = request.timeline.map(step => [
@@ -129,7 +156,7 @@ const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf'
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
-            headStyles: { fillColor: [22, 102, 87] },
+            headStyles: { fillColor: [201, 115, 83] },
         });
 
         doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
@@ -160,7 +187,22 @@ const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf'
     }));
     const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
 
-    // 3. Approval History
+    // 3. Budget Summary
+    const summaryDataForSheet = summaryData.lines.map(line => ({
+        'Category': line.category,
+        'Request Total': line.procurementTotal,
+        'Forecast Total': line.forecastTotal,
+        'Variance': line.variance,
+    }));
+    summaryDataForSheet.push({
+        'Category': 'GRAND TOTAL',
+        'Request Total': summaryData.totals.procurement,
+        'Forecast Total': summaryData.totals.forecast,
+        'Variance': summaryData.totals.variance,
+    });
+    const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
+
+    // 4. Approval History
     const timelineData = request.timeline.map(step => ({
         'Stage': step.stage,
         'Actor': step.actor,
@@ -173,6 +215,7 @@ const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf'
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
     XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
     XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
 
     // Download the file
@@ -480,7 +523,7 @@ export default function ApprovalsPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, 'xlsx');
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx');
             }
 
             const auditLogData = {
@@ -1181,10 +1224,10 @@ export default function ApprovalsPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, 'xlsx')}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx')}>
                                                             Export as Excel (.xlsx)
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, 'pdf')}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf')}>
                                                             Export as PDF (.pdf)
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -1279,4 +1322,5 @@ export default function ApprovalsPage() {
 
 
     
+
 
