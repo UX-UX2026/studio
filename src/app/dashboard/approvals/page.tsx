@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, ChevronRight } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import {
   Accordion,
   AccordionContent,
@@ -27,12 +27,14 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { useBudgetSummary } from "@/hooks/use-budget-summary";
 
 
 type WorkflowStage = {
@@ -49,6 +51,16 @@ type Department = {
   id: string;
   name: string;
   workflow?: WorkflowStage[];
+  budgetHeaders?: string[];
+  budgetYear?: number;
+};
+
+type BudgetItem = {
+    id: string;
+    departmentId: string;
+    category: string;
+    forecasts: number[];
+    yearTotal: number;
 };
 
 
@@ -139,7 +151,23 @@ export default function ApprovalsPage() {
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading;
+    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+    
+    const budgetsQuery = useMemo(() => {
+        if (!firestore || !activeRequest?.departmentId) return null;
+        return query(collection(firestore, 'budgets'), where('departmentId', '==', activeRequest.departmentId));
+    }, [firestore, activeRequest]);
+    const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
+    
+    const summaryData = useBudgetSummary(
+        activeRequest?.items || [],
+        activeRequest?.departmentId || '',
+        activeRequest?.period || '',
+        budgetItems,
+        departments
+    );
+
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || (!!activeRequest && budgetsLoading);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -164,8 +192,6 @@ export default function ApprovalsPage() {
         }
     }, [filteredRequests, selectedRequestId]);
 
-
-    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
     
     const showFulfillmentTab = useMemo(() => {
         if (!activeRequest) return false;
@@ -236,6 +262,12 @@ export default function ApprovalsPage() {
 
     const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
 
+    const budgetProgress = useMemo(() => {
+        const { procurement, forecast } = summaryData.totals;
+        if (forecast === 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
+    }, [summaryData]);
+
 
     useEffect(() => {
       if (loading) return;
@@ -264,6 +296,7 @@ export default function ApprovalsPage() {
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
+        const actorName = user.displayName || role || 'System';
 
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -272,7 +305,7 @@ export default function ApprovalsPage() {
                 newStatus = 'Pending Executive';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
                 newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
+                    if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                     if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
                     return step;
                 });
@@ -280,8 +313,8 @@ export default function ApprovalsPage() {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
                 newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
-                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
+                    if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                     if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
                     return step;
                 });
@@ -289,7 +322,7 @@ export default function ApprovalsPage() {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
                 newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
+                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                     return step;
                 });
             }
@@ -297,7 +330,7 @@ export default function ApprovalsPage() {
             newStatus = 'Pending Executive';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Manager' };
+                if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
                 return step;
             });
@@ -305,8 +338,8 @@ export default function ApprovalsPage() {
             newStatus = 'Approved';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
-                if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
+                if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
                 return step;
             });
@@ -314,7 +347,7 @@ export default function ApprovalsPage() {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Procurement Officer' };
+                if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 return step;
             });
         }
@@ -742,9 +775,10 @@ export default function ApprovalsPage() {
                                 <AccordionContent>
                                     <CardContent className="pt-0">
                                     <Tabs defaultValue="items">
-                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-4" : "grid-cols-3")}>
+                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-5" : "grid-cols-4")}>
                                                 <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
                                                 <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
+                                                <TabsTrigger value="summary">Budget Summary</TabsTrigger>
                                                 {showFulfillmentTab && <TabsTrigger value="fulfillment">Fulfillment Details</TabsTrigger>}
                                                 <TabsTrigger value="communication">Communication Log</TabsTrigger>
                                             </TabsList>
@@ -818,6 +852,62 @@ export default function ApprovalsPage() {
                                                                     </TableRow>
                                                                 ))}
                                                             </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                            <TabsContent value="summary" className="pt-4">
+                                                <div className="space-y-4">
+                                                    <div className="p-4 border rounded-lg bg-muted/50">
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <h3 className="font-semibold text-lg">Budget vs. Actuals: {activeRequest.period}</h3>
+                                                                <p className="text-sm text-muted-foreground">Live comparison of this request against the forecast.</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-2xl font-bold">{formatCurrency(summaryData.totals.procurement)}</p>
+                                                                <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(summaryData.totals.forecast)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <Progress value={budgetProgress} className="mt-4" />
+                                                    </div>
+                                                    <div className="overflow-auto rounded-lg border">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted hover:bg-muted">
+                                                                    <TableHead className="font-bold">Category</TableHead>
+                                                                    <TableHead className="text-right font-bold">Request Total</TableHead>
+                                                                    <TableHead className="text-right font-bold">Forecast Total</TableHead>
+                                                                    <TableHead className="text-right font-bold">Variance</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
+                                                                    <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                                        <TableCell className="font-medium">{item.category}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                            {formatCurrency(item.variance)}
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )) : (
+                                                                    <TableRow>
+                                                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                                                            No budget or request data available for this summary.
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )}
+                                                            </TableBody>
+                                                            <TableFooter>
+                                                                <TableRow className="bg-muted hover:bg-muted font-bold">
+                                                                    <TableCell>Subtotal</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                                                                </TableRow>
+                                                            </TableFooter>
                                                         </Table>
                                                     </div>
                                                 </div>
@@ -910,7 +1000,7 @@ export default function ApprovalsPage() {
                 ) : (
                     <Card>
                         <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">
-                            <p className="text-muted-foreground">Select a request to view its details.</p>
+                            {loading ? <Loader className="h-8 w-8 animate-spin" /> : <p className="text-muted-foreground">Select a request to view its details.</p>}
                         </CardContent>
                     </Card>
                 )}
@@ -971,5 +1061,7 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
+    
 
     
