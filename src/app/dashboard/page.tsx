@@ -26,7 +26,8 @@ import {
   TrendingUp,
   AlertCircle,
   Trash2,
-  Workflow
+  Workflow,
+  Download
 } from "lucide-react";
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -49,6 +50,7 @@ import { useToast } from '@/hooks/use-toast';
 import { logErrorToFirestore } from '@/lib/error-logger';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 const stageToStatusMap: { [key: string]: string } = {
     "Manager": "Pending Manager Approval",
@@ -205,6 +207,49 @@ export default function DashboardPage() {
             default: return <Badge variant="secondary">{status}</Badge>
         }
     }
+    
+    const generateApprovalReport = (request: ApprovalRequest) => {
+        // 1. Request Details
+        const detailsData = [
+            { Key: "Request ID", Value: request.id },
+            { Key: "Department", Value: request.department },
+            { Key: "Period", Value: request.period },
+            { Key: "Submitted By", Value: request.submittedBy },
+            { Key: "Total", Value: formatCurrency(request.total) },
+            { Key: "Status", Value: request.status },
+        ];
+        const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+
+        // 2. Line Items
+        const itemsData = request.items.map(item => ({
+            'Type': item.type,
+            'Description': item.description,
+            'Category': item.category,
+            'Brand': item.brand,
+            'Quantity': item.qty,
+            'Unit Price': item.unitPrice,
+            'Total': item.qty * item.unitPrice,
+        }));
+        const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
+
+        // 3. Approval History
+        const timelineData = request.timeline.map(step => ({
+            'Stage': step.stage,
+            'Actor': step.actor,
+            'Status': step.status,
+            'Date': step.date || 'N/A',
+        }));
+        const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
+        
+        // Create workbook and add sheets
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
+        XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+        XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
+
+        // Download the file
+        XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
+    };
 
     const handleDeleteDraft = async () => {
         if (!deletingRequestId || !user || !firestore) {
@@ -375,12 +420,13 @@ export default function DashboardPage() {
                     <TableHead>Submitted By</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Value</TableHead>
+                    <TableHead className="text-right w-16">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {requestsLoading ? (
                       <TableRow>
-                          <TableCell colSpan={5} className="text-center h-24">
+                          <TableCell colSpan={6} className="text-center h-24">
                               <Loader className="h-6 w-6 animate-spin mx-auto" />
                           </TableCell>
                       </TableRow>
@@ -396,11 +442,18 @@ export default function DashboardPage() {
                         <TableCell className="text-right font-mono">
                           {formatCurrency(req.total)}
                         </TableCell>
+                        <TableCell className="text-right">
+                          {['Approved', 'In Fulfillment', 'Completed'].includes(req.status) && (
+                              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); generateApprovalReport(req); }}>
+                                  <Download className="h-4 w-4" />
+                              </Button>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))
                   ) : (
                       <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground h-24">
+                          <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
                               No open submissions found.
                           </TableCell>
                       </TableRow>

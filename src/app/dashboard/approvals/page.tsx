@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -766,6 +766,9 @@ export default function ApprovalsPage() {
             setIsSubmittingAction(false);
         }
     };
+
+    const showFooterActions = activeRequest && (activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised');
+    const showExportAction = activeRequest && ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
     
   return (
     <>
@@ -1105,15 +1108,25 @@ export default function ApprovalsPage() {
                                             </TabsContent>
                                     </Tabs>
                                     </CardContent>
-                                    {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
+                                    {(showFooterActions || showExportAction) && (
                                         <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                            <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
-                                                {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
-                                                <Check className="mr-2 h-4 w-4" />
-                                                {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
-                                            </Button>
+                                            {showExportAction && (
+                                                <Button variant="outline" className="mr-auto" onClick={() => generateApprovalReport(activeRequest)}>
+                                                    <Download className="mr-2 h-4 w-4"/>
+                                                    Export Report
+                                                </Button>
+                                            )}
+                                            {showFooterActions && (
+                                                <>
+                                                    <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                                                    <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
+                                                    <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
+                                                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                                        <Check className="mr-2 h-4 w-4" />
+                                                        {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
+                                                    </Button>
+                                                </>
+                                            )}
                                         </CardFooter>
                                     )}
                                 </AccordionContent>
