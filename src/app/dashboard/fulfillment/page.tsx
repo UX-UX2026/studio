@@ -49,12 +49,14 @@ export default function FulfillmentPage() {
     const allFulfillmentItems = useMemo(() => {
         if (!fulfillmentRequests) return [];
         return fulfillmentRequests.flatMap(req => 
-            req.items.map(item => ({
+            req.items
+            .filter(item => item.fulfillmentStatus !== 'Completed')
+            .map(item => ({
                 ...item,
                 procurementRequestId: req.id,
                 department: req.department,
                 item: item.description,
-                approvedOn: req.timeline.find(t => t.stage === 'Executive Review')?.date || new Date().toISOString(),
+                approvedOn: req.timeline.find(t => t.stage === 'Executive Approval')?.date || new Date().toISOString(),
                  request: {
                     itemName: item.description,
                     itemDescription: item.description,
@@ -160,5 +162,7 @@ export default function FulfillmentPage() {
     </Card>
   );
 }
+
+    
 
     

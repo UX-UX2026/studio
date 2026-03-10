@@ -36,6 +36,7 @@ import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate } from '@/lib/email-templates';
+import * as XLSX from 'xlsx';
 
 
 type WorkflowStage = {
@@ -62,6 +63,58 @@ type BudgetItem = {
     category: string;
     forecasts: number[];
     yearTotal: number;
+};
+
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-ZA", {
+      style: "currency",
+      currency: "ZAR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+};
+
+const generateApprovalReport = (request: ApprovalRequest) => {
+    // 1. Request Details
+    const detailsData = [
+        { Key: "Request ID", Value: request.id },
+        { Key: "Department", Value: request.department },
+        { Key: "Period", Value: request.period },
+        { Key: "Submitted By", Value: request.submittedBy },
+        { Key: "Total", Value: formatCurrency(request.total) },
+        { Key: "Status", Value: request.status },
+    ];
+    const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+
+    // 2. Line Items
+    const itemsData = request.items.map(item => ({
+        'Type': item.type,
+        'Description': item.description,
+        'Category': item.category,
+        'Brand': item.brand,
+        'Quantity': item.qty,
+        'Unit Price': item.unitPrice,
+        'Total': item.qty * item.unitPrice,
+    }));
+    const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
+
+    // 3. Approval History
+    const timelineData = request.timeline.map(step => ({
+        'Stage': step.stage,
+        'Actor': step.actor,
+        'Status': step.status,
+        'Date': step.date || 'N/A',
+    }));
+    const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
+    
+    // Create workbook and add sheets
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
+    XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+    XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
+
+    // Download the file
+    XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
 };
 
 
@@ -91,15 +144,6 @@ const getFulfillmentStatusBadge = (status: string) => {
       default:
         return <Badge variant="secondary">{status || 'Pending'}</Badge>;
     }
-};
-
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-ZA", {
-      style: "currency",
-      currency: "ZAR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
 };
 
 export default function ApprovalsPage() {
@@ -266,7 +310,7 @@ export default function ApprovalsPage() {
 
     const budgetProgress = useMemo(() => {
         const { procurement, forecast } = summaryData.totals;
-        if (forecast === 0) return procurement > 0 ? 100 : 0;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [summaryData]);
 
@@ -308,23 +352,23 @@ export default function ApprovalsPage() {
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
                 newTimeline = newTimeline.map(step => {
                     if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
+                    if (step.stage === 'Executive Approval') return { ...step, status: 'pending' as const };
                     return step;
                 });
             } else if (activeRequest.status === 'Pending Executive') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
                 newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                    if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                     if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
+                    if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
                     return step;
                 });
             } else if (activeRequest.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
                 newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                    if (step.stage === 'Procurement Processing') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                     return step;
                 });
             }
@@ -333,23 +377,23 @@ export default function ApprovalsPage() {
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(step => {
                 if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
+                if (step.stage === 'Executive Approval') return { ...step, status: 'pending' as const };
                 return step;
             });
         } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Approved';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
+                if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
                 return step;
             });
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
             newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                if (step.stage === 'Procurement Processing') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 return step;
             });
         }
@@ -368,6 +412,14 @@ export default function ApprovalsPage() {
         try {
             await updateDoc(requestRef, updateData);
             toast(finalToastMessage);
+
+            if (role === 'Executive' || (role === 'Administrator' && newStatus === 'Approved')) {
+                const reportDataForGeneration: ApprovalRequest = {
+                    ...activeRequest,
+                    ...updateData,
+                };
+                generateApprovalReport(reportDataForGeneration);
+            }
 
             const auditLogData = {
                 userId: user.uid,
@@ -918,7 +970,7 @@ export default function ApprovalsPage() {
                                                                 {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
                                                                     <React.Fragment key={item.category}>
                                                                         <TableRow 
-                                                                            className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                                                            className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
                                                                             onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
                                                                         >
                                                                             <TableCell className="font-medium flex items-center gap-2">
@@ -927,8 +979,8 @@ export default function ApprovalsPage() {
                                                                             </TableCell>
                                                                             <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                                             <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                                {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                            <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                                {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
                                                                                 {formatCurrency(item.variance)}
                                                                             </TableCell>
                                                                         </TableRow>
@@ -1137,3 +1189,6 @@ export default function ApprovalsPage() {
 
     
 
+
+
+    

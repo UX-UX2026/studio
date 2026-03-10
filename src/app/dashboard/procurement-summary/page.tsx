@@ -194,7 +194,7 @@ export default function ProcurementSummaryPage() {
                                 <Fragment key={item.category}>
                                     <TableRow 
                                         onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
-                                        className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                        className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
                                     >
                                         <TableCell className="font-medium flex items-center gap-2">
                                             <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
@@ -202,8 +202,8 @@ export default function ProcurementSummaryPage() {
                                         </TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                        <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                            {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
                                             {formatCurrency(item.variance)}
                                         </TableCell>
                                         <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
@@ -263,5 +263,8 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
+
+    
+
 
     

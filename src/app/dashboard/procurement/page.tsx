@@ -341,8 +341,8 @@ export default function ProcurementQuickSubmitPage() {
         const defaultTimeline = [
             { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
             { stage: "Manager Review", actor: "Manager", date: null, status: newStatus === 'Draft' ? 'waiting' : ('pending' as const) },
-            { stage: "Executive Review", actor: "Executive", date: null, status: 'waiting' as const },
-            { stage: "Procurement Ack.", actor: "Procurement", date: null, status: 'waiting' as const },
+            { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
+            { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
         ];
         
         const timeline = departmentWorkflow && departmentWorkflow.length > 0
@@ -498,7 +498,7 @@ export default function ProcurementQuickSubmitPage() {
 
     const budgetProgress = useMemo(() => {
         const { procurement, forecast } = summaryData.totals;
-        if (forecast === 0) return procurement > 0 ? 100 : 0;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [summaryData]);
 
@@ -675,7 +675,7 @@ export default function ProcurementQuickSubmitPage() {
                                                 <Fragment key={item.category}>
                                                     <TableRow
                                                         onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
-                                                        className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                                        className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
                                                     >
                                                         <TableCell className="font-medium flex items-center gap-2">
                                                             <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
@@ -683,8 +683,8 @@ export default function ProcurementQuickSubmitPage() {
                                                         </TableCell>
                                                         <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                         <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                                            {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
                                                             {formatCurrency(item.variance)}
                                                         </TableCell>
                                                         <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
@@ -799,3 +799,6 @@ export default function ProcurementQuickSubmitPage() {
     );
 }
 
+
+
+    
