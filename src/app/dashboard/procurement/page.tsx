@@ -3,8 +3,8 @@
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState, Fragment } from "react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
@@ -33,6 +33,7 @@ import {
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RecurringClient } from "@/components/app/recurring-client";
+import { Badge } from "@/components/ui/badge";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -116,6 +117,7 @@ export default function ProcurementQuickSubmitPage() {
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
+    const [openCategory, setOpenCategory] = useState<string | null>(null);
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -670,16 +672,54 @@ export default function ProcurementQuickSubmitPage() {
                                         </TableHeader>
                                         <TableBody>
                                             {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                                <TableRow key={item.category} className={cn(item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                                    <TableCell className="font-medium">{item.category}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                    <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                        {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                        {formatCurrency(item.variance)}
-                                                    </TableCell>
-                                                    <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
-                                                </TableRow>
+                                                <Fragment key={item.category}>
+                                                    <TableRow
+                                                        onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
+                                                        className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                                    >
+                                                        <TableCell className="font-medium flex items-center gap-2">
+                                                            <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
+                                                            {item.category}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                            {formatCurrency(item.variance)}
+                                                        </TableCell>
+                                                        <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                                                    </TableRow>
+                                                    {openCategory === item.category && (
+                                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                            <TableCell colSpan={5} className="p-2">
+                                                                <div className="p-2 bg-background rounded-md border">
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                                <TableHead>Item</TableHead>
+                                                                                <TableHead>Type</TableHead>
+                                                                                <TableHead className="text-center">Qty</TableHead>
+                                                                                <TableHead className="text-right">Unit Price</TableHead>
+                                                                                <TableHead className="text-right">Total</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {item.items.map((subItem) => (
+                                                                                <TableRow key={subItem.id}>
+                                                                                    <TableCell>{subItem.description}</TableCell>
+                                                                                    <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                    <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
+                                                            </TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </Fragment>
                                             )) : (
                                                 <TableRow>
                                                     <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">

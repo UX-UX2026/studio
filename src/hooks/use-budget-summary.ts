@@ -3,8 +3,11 @@
 
 import { useMemo } from 'react';
 
-// Using a simplified Item type that only includes what's needed for the summary
+// Using a more complete Item type that includes what's needed for the drilldown
 type Item = {
+    id: number | string;
+    type: "Recurring" | "One-Off";
+    description: string;
     qty: number;
     category: string;
     unitPrice: number;
@@ -54,8 +57,9 @@ export function useBudgetSummary(
         const lines = Array.from(allCategories).map(category => {
             if (!category) return null;
 
-            const procurementTotal = procurementItems
-                .filter(item => item.category === category)
+            const itemsForCategory = procurementItems.filter(item => item.category === category);
+
+            const procurementTotal = itemsForCategory
                 .reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
 
             const budgetItem = budgetItems.find(item => item.category === category);
@@ -66,13 +70,13 @@ export function useBudgetSummary(
             const variance = procurementTotal - forecastTotal;
             const isOverBudget = procurementTotal > forecastTotal;
 
-            const comments = procurementItems
-                .filter(item => item.category === category && item.comments)
+            const comments = itemsForCategory
+                .filter(item => item.comments)
                 .map(item => item.comments)
                 .join('; ');
 
-            return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments };
-        }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; }[];
+            return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments, items: itemsForCategory };
+        }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; items: Item[] }[];
         
         const totals = lines.reduce((acc, line) => {
             acc.procurement += line.procurementTotal;
