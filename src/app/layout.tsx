@@ -30,7 +30,7 @@ export default function RootLayout({
           attribute="class"
           defaultTheme="light"
           enableSystem
-          themes={['light', 'dark', 'classic', 'colorful', 'glass', 'system']}
+          themes={['light', 'dark', 'classic', 'colorful', 'glass', 'hybrid', 'system']}
         >
           <AuthenticationProvider>
             <DebugLogProvider>
