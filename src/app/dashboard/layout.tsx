@@ -72,8 +72,9 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     <SidebarProvider>
       <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground">
         <SidebarHeader className="h-16 border-b border-sidebar-border p-2 flex items-center justify-between">
+            <div className="w-7"/>
             <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden font-bold tracking-tight text-sidebar-foreground p-2">
-                <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+                <div className="flex flex-col text-center group-data-[collapsible=icon]:hidden">
                     <span className="text-sm font-bold">UBUNTU</span>
                     <span className="text-xs tracking-[0.2em]">PATHWAYS</span>
                 </div>

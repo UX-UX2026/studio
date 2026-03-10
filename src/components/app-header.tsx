@@ -21,7 +21,7 @@ export function AppHeader() {
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between gap-4 border-b bg-card px-4 md:px-8">
       <div className="flex items-center gap-4">
         <SidebarTrigger className="md:hidden" />
-        <h1 className="text-lg font-semibold text-foreground">Ubuntu Procured</h1>
+        <h1 className="text-lg font-semibold text-foreground">Ubuntu Procure</h1>
       </div>
 
       <div className="flex items-center space-x-4">

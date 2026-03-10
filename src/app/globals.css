@@ -162,6 +162,29 @@
     --chart-5: 340 75% 55%;
   }
 
+  .glass {
+    --background: 180 100% 94%; /* Very light cyan */
+    --foreground: 222.2 47.4% 11.2%;
+    --card: 180 60% 98%;
+    --card-foreground: 222.2 47.4% 11.2%;
+    --popover: 180 60% 98%;
+    --popover-foreground: 222.2 47.4% 11.2%;
+    --primary: 195 100% 50%; /* Deep sky blue */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 180 50% 90%;
+    --secondary-foreground: 210 40% 9%;
+    --muted: 180 50% 90%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 150 100% 50%; /* Spring Green */
+    --accent-foreground: 0 0% 0%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 180 40% 85%;
+    --input: 180 40% 85%;
+    --ring: 195 100% 50%;
+    --radius: 0.5rem;
+  }
+
   * {
     @apply border-border;
   }
