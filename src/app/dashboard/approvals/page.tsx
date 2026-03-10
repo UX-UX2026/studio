@@ -107,7 +107,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: [22, 66, 57] },
         });
 
         const itemsData = request.items.map(item => [
@@ -122,7 +122,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: [22, 66, 57] },
         });
         
         const summaryTableData = summaryData.lines.map(line => [
@@ -142,7 +142,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
                 formatCurrency(summaryData.totals.variance)
             ]],
             theme: 'grid',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: [22, 66, 57] },
             footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
         });
         
@@ -156,7 +156,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: [22, 66, 57] },
         });
 
         doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
@@ -1322,5 +1322,4 @@ export default function ApprovalsPage() {
 
 
     
-
 
