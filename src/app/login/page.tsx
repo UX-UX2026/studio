@@ -32,7 +32,6 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showEmailLogin, setShowEmailLogin] = useState(false);
-    const appLogo = PlaceHolderImages.find((img) => img.id === "app-logo");
 
     const handleGoogleSignIn = async () => {
         if (!auth) return;
@@ -98,21 +97,10 @@ export default function LoginPage() {
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        {appLogo ? (
-                            <Image
-                                src={appLogo.imageUrl}
-                                alt={appLogo.description}
-                                width={198}
-                                height={80}
-                                data-ai-hint={appLogo.imageHint}
-                                priority
-                            />
-                        ) : (
-                            <div className="h-20 w-auto flex flex-col items-center justify-center">
-                                <span className="text-3xl font-bold">UBUNTU</span>
-                                <span className="text-lg tracking-[0.4em]">PATHWAYS</span>
-                            </div>
-                        )}
+                        <div className="h-20 w-auto flex flex-col items-center justify-center">
+                            <span className="text-3xl font-bold">UBUNTU</span>
+                            <span className="text-lg tracking-[0.4em]">PATHWAYS</span>
+                        </div>
                     </div>
                     <CardTitle className="text-2xl">Welcome to ProcurePortal</CardTitle>
                     <CardDescription>Sign in to access your dashboard.</CardDescription>

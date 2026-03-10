@@ -33,7 +33,6 @@ import { cn } from "@/lib/utils";
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
-  const appLogo = PlaceHolderImages.find((img) => img.id === "app-logo");
   // The useUser hook now gets its data from the robust AuthenticationProvider
   const { user, profile, loading, role } = useUser();
   const auth = useAuth();
@@ -74,22 +73,10 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       <Sidebar collapsible="icon" className="bg-sidebar text-sidebar-foreground">
         <SidebarHeader className="h-16 border-b border-sidebar-border p-2 flex items-center justify-between">
             <Link href="/dashboard" className="flex items-center gap-2 overflow-hidden font-bold tracking-tight text-sidebar-foreground p-2">
-                {appLogo ? (
-                    <Image
-                        src={appLogo.imageUrl}
-                        alt={appLogo.description}
-                        width={89}
-                        height={36}
-                        data-ai-hint={appLogo.imageHint}
-                        className="group-data-[collapsible=icon]:hidden"
-                        priority
-                    />
-                ) : (
-                    <div className="flex flex-col group-data-[collapsible=icon]:hidden">
-                        <span className="text-sm font-bold">UBUNTU</span>
-                        <span className="text-xs tracking-[0.2em]">PATHWAYS</span>
-                    </div>
-                )}
+                <div className="flex flex-col group-data-[collapsible=icon]:hidden">
+                    <span className="text-sm font-bold">UBUNTU</span>
+                    <span className="text-xs tracking-[0.2em]">PATHWAYS</span>
+                </div>
             </Link>
             <SidebarTrigger className="hidden md:flex" />
         </SidebarHeader>
