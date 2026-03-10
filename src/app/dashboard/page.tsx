@@ -46,11 +46,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from '@/hooks/use-toast';
 import { logErrorToFirestore } from '@/lib/error-logger';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 const stageToStatusMap: { [key: string]: string } = {
     "Manager": "Pending Manager Approval",
@@ -208,8 +216,61 @@ export default function DashboardPage() {
         }
     }
     
-    const generateApprovalReport = (request: ApprovalRequest) => {
-        // 1. Request Details
+    const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+        if (format === 'pdf') {
+            const doc = new jsPDF();
+            doc.setFontSize(18);
+            doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 22);
+
+            const detailsData = [
+                ["Request ID", request.id],
+                ["Department", request.department],
+                ["Period", request.period],
+                ["Submitted By", request.submittedBy],
+                ["Total", formatCurrency(request.total)],
+                ["Status", request.status],
+            ];
+            autoTable(doc, {
+                startY: 30,
+                head: [['Request Details', '']],
+                body: detailsData,
+                theme: 'striped',
+                headStyles: { fillColor: [22, 102, 87] },
+            });
+
+            const itemsData = request.items.map(item => [
+                item.type,
+                item.description,
+                item.category,
+                item.qty,
+                formatCurrency(item.unitPrice),
+                formatCurrency(item.qty * item.unitPrice),
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                body: itemsData,
+                headStyles: { fillColor: [22, 102, 87] },
+            });
+            
+            const timelineData = request.timeline.map(step => [
+                step.stage,
+                step.actor,
+                step.status,
+                step.date || 'N/A',
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Stage', 'Actor', 'Status', 'Date']],
+                body: timelineData,
+                headStyles: { fillColor: [22, 102, 87] },
+            });
+
+            doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+            return;
+        }
+
+        // XLSX Logic
         const detailsData = [
             { Key: "Request ID", Value: request.id },
             { Key: "Department", Value: request.department },
@@ -220,7 +281,6 @@ export default function DashboardPage() {
         ];
         const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
 
-        // 2. Line Items
         const itemsData = request.items.map(item => ({
             'Type': item.type,
             'Description': item.description,
@@ -232,7 +292,6 @@ export default function DashboardPage() {
         }));
         const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
 
-        // 3. Approval History
         const timelineData = request.timeline.map(step => ({
             'Stage': step.stage,
             'Actor': step.actor,
@@ -241,13 +300,11 @@ export default function DashboardPage() {
         }));
         const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
         
-        // Create workbook and add sheets
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
         XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
         XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
 
-        // Download the file
         XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
     };
 
@@ -444,9 +501,21 @@ export default function DashboardPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           {['Approved', 'In Fulfillment', 'Completed'].includes(req.status) && (
-                              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); generateApprovalReport(req); }}>
-                                  <Download className="h-4 w-4" />
-                              </Button>
+                              <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); }}>
+                                          <Download className="h-4 w-4" />
+                                      </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
+                                      <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx')}>
+                                          Export as Excel (.xlsx)
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf')}>
+                                          Export as PDF (.pdf)
+                                      </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                              </DropdownMenu>
                           )}
                         </TableCell>
                       </TableRow>

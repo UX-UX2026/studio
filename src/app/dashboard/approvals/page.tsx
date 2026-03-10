@@ -27,6 +27,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
@@ -37,6 +43,8 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate } from '@/lib/email-templates';
 import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 
 type WorkflowStage = {
@@ -74,7 +82,61 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const generateApprovalReport = (request: ApprovalRequest) => {
+const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+    if (format === 'pdf') {
+        const doc = new jsPDF();
+        doc.setFontSize(18);
+        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 22);
+
+        const detailsData = [
+            ["Request ID", request.id],
+            ["Department", request.department],
+            ["Period", request.period],
+            ["Submitted By", request.submittedBy],
+            ["Total", formatCurrency(request.total)],
+            ["Status", request.status],
+        ];
+        autoTable(doc, {
+            startY: 30,
+            head: [['Request Details', '']],
+            body: detailsData,
+            theme: 'striped',
+            headStyles: { fillColor: [22, 102, 87] },
+        });
+
+        const itemsData = request.items.map(item => [
+            item.type,
+            item.description,
+            item.category,
+            item.qty,
+            formatCurrency(item.unitPrice),
+            formatCurrency(item.qty * item.unitPrice),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+            body: itemsData,
+            headStyles: { fillColor: [22, 102, 87] },
+        });
+        
+        const timelineData = request.timeline.map(step => [
+            step.stage,
+            step.actor,
+            step.status,
+            step.date || 'N/A',
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Stage', 'Actor', 'Status', 'Date']],
+            body: timelineData,
+            headStyles: { fillColor: [22, 102, 87] },
+        });
+
+        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+        return;
+    }
+
+    // XLSX logic
     // 1. Request Details
     const detailsData = [
         { Key: "Request ID", Value: request.id },
@@ -418,7 +480,7 @@ export default function ApprovalsPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration);
+                generateApprovalReport(reportDataForGeneration, 'xlsx');
             }
 
             const auditLogData = {
@@ -1111,10 +1173,22 @@ export default function ApprovalsPage() {
                                     {(showFooterActions || showExportAction) && (
                                         <CardFooter className="flex justify-end gap-2 border-t pt-6">
                                             {showExportAction && (
-                                                <Button variant="outline" className="mr-auto" onClick={() => generateApprovalReport(activeRequest)}>
-                                                    <Download className="mr-2 h-4 w-4"/>
-                                                    Export Report
-                                                </Button>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="outline" className="mr-auto">
+                                                            <Download className="mr-2 h-4 w-4"/>
+                                                            Export Report
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, 'xlsx')}>
+                                                            Export as Excel (.xlsx)
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, 'pdf')}>
+                                                            Export as PDF (.pdf)
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             )}
                                             {showFooterActions && (
                                                 <>
@@ -1205,3 +1279,4 @@ export default function ApprovalsPage() {
 
 
     
+
