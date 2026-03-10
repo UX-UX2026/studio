@@ -14,16 +14,10 @@
 // settings (e.g., Firebase App Hosting, Vercel, Netlify).
 // =================================================================================
 export const firebaseConfig = {
- /* apiKey: "YOUR_API_KEY_HERE",
-  authDomain: "YOUR_AUTH_DOMAIN_HERE",
-  projectId: "YOUR_PROJECT_ID_HERE",
-  storageBucket: "YOUR_STORAGE_BUCKET_HERE",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID_HERE",
-  appId: "YOUR_APP_ID_HERE"*/
-  apiKey: "AIzaSyBkP1hVPRjxoeuY9mRa7XU-0lZH5jdWzQo",
-  authDomain: "studio-845965156-c3a3b.firebaseapp.com",
-  projectId: "studio-845965156-c3a3b",
-  storageBucket: "studio-845965156-c3a3b.firebasestorage.app",
-  messagingSenderId: "1014429404657",
-  appId: "1:1014429404657:web:fe6855f3d2ed43d89bc850"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
 };
