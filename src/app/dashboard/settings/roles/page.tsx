@@ -50,6 +50,7 @@ const allPermissions = [
     { id: 'settings:workflow', label: 'Manage Approval Workflows' },
     { id: 'settings:procurement-periods', label: 'Manage Procurement Periods'},
     { id: 'settings:integrations', label: 'Manage Integrations' },
+    { id: 'settings:email', label: 'Manage Email & Notifications' },
     { id: 'settings:auditlog', label: 'View Audit Log' },
     { id: 'settings:errorlog', label: 'View Error Log' },
 ];
