@@ -97,20 +97,19 @@ export default function UsersPage() {
 
     const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
     
+    const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
     useEffect(() => {
-      if (userLoading) {
-        return;
-      }
-      if (!adminUser) {
-        router.push('/dashboard');
-        return;
-      }
-      if (adminRole && adminRole !== 'Administrator') {
-        router.push('/dashboard');
-      }
-    }, [adminUser, adminRole, userLoading, router]);
+        if (userLoading) return;
+        if (!adminUser) {
+          router.push('/dashboard');
+          return;
+        }
+        if (adminRole && !allowedRoles.includes(adminRole)) {
+          router.push('/dashboard');
+        }
+    }, [adminUser, adminRole, userLoading, router, allowedRoles]);
     
-    if (loading || !adminUser || !adminRole || adminRole !== 'Administrator') {
+    if (loading || !adminUser || !adminRole || !allowedRoles.includes(adminRole)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -314,6 +313,50 @@ export default function UsersPage() {
         }
     };
     
+    const handleUpdateDelegate = async (executiveUserId: string, delegateId: string) => {
+        if (!adminUser || !firestore || !users) return;
+    
+        const delegateUser = users.find(u => u.id === delegateId);
+        const delegateName = delegateUser ? delegateUser.displayName : '';
+        const executiveUser = users.find(u => u.id === executiveUserId);
+    
+        const action = 'user.update.delegation';
+        
+        try {
+            const userRef = doc(firestore, 'users', executiveUserId);
+            await setDoc(userRef, { delegatedToId: delegateId, delegatedToName: delegateName }, { merge: true });
+            
+            toast({
+                title: "Delegate Updated",
+                description: `${executiveUser?.displayName}'s approvals have been delegated to ${delegateName || 'no one'}.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                details: `Updated delegate for ${executiveUser?.displayName} to ${delegateName || 'none'}`,
+                entity: { type: 'user', id: executiveUserId },
+                timestamp: serverTimestamp()
+            });
+    
+        } catch (error: any) {
+            console.error("Delegate Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update delegate.`,
+            });
+             await logErrorToFirestore(firestore, {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        }
+    };
+
     return (
         <div className="space-y-6">
             <Card>
@@ -324,7 +367,7 @@ export default function UsersPage() {
                             User & Permission Management
                         </CardTitle>
                         <CardDescription>
-                            Manage roles and departments for existing users. New users are automatically assigned a 'Requester' role upon their first sign-in.
+                            Manage roles, departments, and delegation for all users in the system.
                         </CardDescription>
                     </div>
                     <Button onClick={openAddDialog}>
@@ -338,9 +381,9 @@ export default function UsersPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>User</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead className="w-[200px]">Role</TableHead>
-                                    <TableHead className="w-[200px]">Department</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead>Department</TableHead>
+                                    <TableHead>Delegated To</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -353,12 +396,14 @@ export default function UsersPage() {
                                                 <AvatarImage src={u.photoURL} />
                                                 <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
-                                            {u.displayName || u.email}
+                                            <div>
+                                                <div>{u.displayName || u.email}</div>
+                                                <div className="text-xs text-muted-foreground">{u.email}</div>
+                                            </div>
                                         </TableCell>
-                                        <TableCell>{u.email}</TableCell>
                                         <TableCell>
                                             <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="w-[180px]">
                                                     <SelectValue placeholder="Assign role" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -368,7 +413,7 @@ export default function UsersPage() {
                                         </TableCell>
                                         <TableCell>
                                             <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
-                                                <SelectTrigger>
+                                                <SelectTrigger className="w-[180px]">
                                                     <SelectValue placeholder="Assign department" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -376,6 +421,34 @@ export default function UsersPage() {
                                                     {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            {u.role === 'Executive' ? (
+                                                <Select
+                                                    value={u.delegatedToId || 'none'}
+                                                    onValueChange={(newDelegateId) => handleUpdateDelegate(u.id, newDelegateId === 'none' ? '' : newDelegateId)}
+                                                >
+                                                    <SelectTrigger className="w-[220px]">
+                                                        <SelectValue placeholder="Delegate approvals..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">None (Delegation Off)</SelectItem>
+                                                        {users.filter(delegate => delegate.id !== u.id).map(delegate => (
+                                                            <SelectItem key={delegate.id} value={delegate.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Avatar className="h-6 w-6">
+                                                                        <AvatarImage src={delegate.photoURL} />
+                                                                        <AvatarFallback>{delegate.displayName?.charAt(0)}</AvatarFallback>
+                                                                    </Avatar>
+                                                                    {delegate.displayName}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <span className="text-muted-foreground ml-3">N/A</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
