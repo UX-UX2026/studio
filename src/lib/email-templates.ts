@@ -208,3 +208,47 @@ export const workflowTestTemplate = (stageName: string, recipients: string[]): s
         </html>
     `;
 };
+
+
+export const reminderTemplate = (request: RequestDetails, stageName: string, link: string): string => {
+    const totalFormatted = formatCurrency(request.total);
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>REMINDER: Procurement Request Awaiting Your Approval</title>
+            ${emailStyles}
+        </head>
+        <body>
+            <div class="wrapper">
+                <div class="container">
+                    <div class="header">
+                        <h2 style="color: #17a2b8;">Reminder: Action Required</h2>
+                    </div>
+                     <div class="content">
+                        <p>Hello,</p>
+                        <p>This is a reminder that a procurement request for the <strong>${request.department}</strong> department is awaiting your approval at the '<strong>${stageName}</strong>' stage.</p>
+                        
+                        <h3>Request Details:</h3>
+                        <ul>
+                            <li><strong>Request ID:</strong> ${request.id.substring(0,8)}...</li>
+                            <li><strong>Submitted By:</strong> ${request.submittedBy}</li>
+                            <li><strong>Total Value:</strong> ${totalFormatted}</li>
+                        </ul>
+
+                        <p>Your timely review is appreciated. Please review the request by clicking the button below:</p>
+                        <div class="button-container">
+                            <a href="${link}" class="button" style="background-color: #17a2b8;">View Request in ProcureEase</a>
+                        </div>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated notification from the ProcureEase system.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+};

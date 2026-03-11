@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
 import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download } from "lucide-react";
@@ -107,7 +107,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
-            headStyles: { fillColor: [22, 66, 57] },
+            headStyles: { fillColor: [201, 115, 83] },
         });
 
         const itemsData = request.items.map(item => [
@@ -122,7 +122,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
-            headStyles: { fillColor: [22, 66, 57] },
+            headStyles: { fillColor: [201, 115, 83] },
         });
         
         const summaryTableData = summaryData.lines.map(line => [
@@ -142,13 +142,13 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
                 formatCurrency(summaryData.totals.variance)
             ]],
             theme: 'grid',
-            headStyles: { fillColor: [22, 66, 57] },
+            headStyles: { fillColor: [201, 115, 83] },
             footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
         });
         
         const timelineData = request.timeline.map(step => [
             step.stage,
-            step.actor,
+            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
             step.status,
             step.date || 'N/A',
         ]);
@@ -156,7 +156,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
-            headStyles: { fillColor: [22, 66, 57] },
+            headStyles: { fillColor: [201, 115, 83] },
         });
 
         doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
@@ -205,7 +205,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
     // 4. Approval History
     const timelineData = request.timeline.map(step => ({
         'Stage': step.stage,
-        'Actor': step.actor,
+        'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
         'Status': step.status,
         'Date': step.date || 'N/A',
     }));
@@ -294,6 +294,9 @@ export default function ApprovalsPage() {
     
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
     
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
@@ -318,7 +321,7 @@ export default function ApprovalsPage() {
         departments
     );
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || (!!activeRequest && budgetsLoading);
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || (!!activeRequest && budgetsLoading);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -350,19 +353,28 @@ export default function ApprovalsPage() {
     }, [activeRequest]);
 
     const canApprove = useMemo(() => {
-        if (!activeRequest || !role) return false;
+        if (!activeRequest || !role || !user || !allUsers) return false;
         const { status } = activeRequest;
         
         if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
         if (role === 'Manager' && (status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
-        if (role === 'Executive' && (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
+        
+        // Executive approval check
+        if (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised') {
+            // Direct executive can approve
+            if (role === 'Executive') return true;
+            // Delegate can approve
+            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (isDelegateForExecutive) return true;
+        }
+
         if (role === 'Procurement Officer' && status === 'Approved') return true;
         
         return false;
-    }, [activeRequest, role]);
+    }, [activeRequest, role, user, allUsers]);
 
     const canRejectOrQuery = useMemo(() => {
-        if (!activeRequest || !role) return false;
+        if (!activeRequest || !role || !user || !allUsers) return false;
         const { status } = activeRequest;
         
         if (role === 'Administrator') {
@@ -372,14 +384,17 @@ export default function ApprovalsPage() {
         if (role === 'Manager') {
             return status === 'Pending Manager Approval' || status === 'Queries Raised';
         }
-        if (role === 'Executive') {
-            // An exec can also act on a request waiting for a manager.
-            return status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised';
+        if (status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised') {
+            // Direct executive can reject/query
+            if (role === 'Executive') return true;
+            // Delegate can reject/query
+            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (isDelegateForExecutive) return true;
         }
         
         // Requesters and Procurement Officers cannot reject or raise queries through these buttons.
         return false;
-    }, [activeRequest, role]);
+    }, [activeRequest, role, user, allUsers]);
 
 
     const approvalSummary = useMemo(() => {
@@ -441,25 +456,41 @@ export default function ApprovalsPage() {
     }
     
     const handleApprove = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers) return;
 
         setIsSubmittingAction(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
         const actorName = user.displayName || role || 'System';
-
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
+        const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+
+        if (isDelegateForExecutive && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+            const executive = allUsers.find(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (executive) {
+                delegationInfo = { delegatedById: executive.id, delegatedByName: executive.displayName };
+            }
+        }
+
+        const timelineUpdater = (stepName: string, status: 'completed' | 'pending') => {
+            return (step: ApprovalRequest['timeline'][0]) => {
+                if (step.stage === stepName) {
+                    const completedStep = { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
+                    return completedStep;
+                }
+                if (step.stage === status) return { ...step, status: 'pending' as const };
+                return step;
+            };
+        };
 
         if (role === 'Administrator') {
             if (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Pending Executive';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Executive Approval') return { ...step, status: 'pending' as const };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
             } else if (activeRequest.status === 'Pending Executive') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
@@ -472,35 +503,27 @@ export default function ApprovalsPage() {
             } else if (activeRequest.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Procurement Processing') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
             }
         } else if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                if (step.stage === 'Executive Approval') return { ...step, status: 'pending' as const };
-                return step;
-            });
-        } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
-            newStatus = 'Approved';
-            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
-                return step;
-            });
+            newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
+        } else if (role === 'Executive' || isDelegateForExecutive) {
+            if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+                newStatus = 'Approved';
+                toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+                newTimeline = newTimeline.map(step => {
+                    if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
+                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                    if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
+                    return step;
+                });
+            }
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Procurement Processing') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                return step;
-            });
+            newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
         }
 
         if (!toastMessage) {
@@ -518,7 +541,7 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast(finalToastMessage);
 
-            if (role === 'Executive' || (role === 'Administrator' && newStatus === 'Approved')) {
+            if (newStatus === 'Approved') {
                 const reportDataForGeneration: ApprovalRequest = {
                     ...activeRequest,
                     ...updateData,
@@ -526,11 +549,16 @@ export default function ApprovalsPage() {
                 generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx');
             }
 
+            let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
+            if (delegationInfo.delegatedByName) {
+                auditDetails = `Approved request ${activeRequest.id.substring(0,8)}... on behalf of ${delegationInfo.delegatedByName}, new status "${newStatus}"`;
+            }
+
             const auditLogData = {
                 userId: user.uid,
                 userName: user.displayName || 'System',
                 action,
-                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
+                details: auditDetails,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
@@ -997,7 +1025,7 @@ export default function ApprovalsPage() {
                                                                     </CardHeader>
                                                                     <CardContent className="p-3 pt-0">
                                                                         <div className="text-xs text-muted-foreground">
-                                                                            <p><span className="font-semibold">Actor:</span> {step.actor}</p>
+                                                                            <p><span className="font-semibold">Actor:</span> {step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor}</p>
                                                                             <p><span className="font-semibold">Status:</span> {step.status}</p>
                                                                             <p><span className="font-semibold">Date:</span> {step.date || '...'}</p>
                                                                         </div>
@@ -1322,4 +1350,5 @@ export default function ApprovalsPage() {
 
 
     
+
 

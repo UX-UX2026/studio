@@ -1,19 +1,24 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Mail, Brush } from "lucide-react";
+import { Loader, Mail, Brush, BellRing } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
-import { useFirestore } from "@/firebase";
+import { useFirestore, useDoc, useCollection } from "@/firebase";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate, workflowTestTemplate } from "@/lib/email-templates";
+import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate, workflowTestTemplate, reminderTemplate } from "@/lib/email-templates";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { doc, setDoc, serverTimestamp, addDoc, collection, query, where, getDocs } from "firebase/firestore";
+import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import { formatDistanceToNow } from "date-fns";
 
 function MailflowTest() {
     const { user } = useUser();
@@ -115,10 +120,149 @@ const mockLink = '#';
 
 const templates = [
     { name: "Action Required", description: "Sent when a request moves to a new stage requiring approval.", template: requestActionRequiredTemplate(mockRequest, 'Executive Approval', mockLink) },
+    { name: "Reminder", description: "Sent as a reminder for requests awaiting approval.", template: reminderTemplate(mockRequest, 'Executive Approval', mockLink) },
     { name: "Query Raised", description: "Sent to the submitter when an approver raises a query.", template: queryRaisedTemplate(mockRequest, mockComment, mockLink) },
     { name: "Request Rejected", description: "Sent to the submitter when their request is rejected.", template: requestRejectedTemplate(mockRequest, { ...mockComment, text: "REJECTED: Budget exceeded." }, mockLink) },
     { name: "Workflow Test", description: "Used when testing workflow notifications from the settings page.", template: workflowTestTemplate('Manager Review', ['manager@example.com', 'admin@example.com']) }
 ];
+
+type AppMetadata = {
+    id: string;
+    reminderSettings?: {
+        frequency: 'daily' | 'weekly' | 'off';
+        lastSent?: { seconds: number, nanoseconds: number };
+    };
+};
+
+function RemindersSettings() {
+    const { user } = useUser();
+    const firestore = useFirestore();
+    const { toast } = useToast();
+    const [isSaving, setIsSaving] = useState(false);
+    const [isSending, setIsSending] = useState(false);
+
+    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
+    const requestsQuery = useMemo(() => query(collection(firestore, 'procurementRequests'), where('status', 'in', ['Pending Manager Approval', 'Pending Executive'])), [firestore]);
+    const { data: pendingRequests } = useCollection<ApprovalRequest>(requestsQuery);
+
+    const [frequency, setFrequency] = useState<'daily' | 'weekly' | 'off'>('daily');
+
+    useEffect(() => {
+        if (appMetadata?.reminderSettings) {
+            setFrequency(appMetadata.reminderSettings.frequency);
+        }
+    }, [appMetadata]);
+
+    const handleSaveSettings = async () => {
+        if (!user || !firestore) return;
+        setIsSaving(true);
+        const action = 'settings.reminders_update';
+        try {
+            await setDoc(appMetadataRef, { reminderSettings: { frequency } }, { merge: true });
+            toast({ title: 'Reminder settings saved' });
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid, userName: user.displayName, action,
+                details: `Updated reminder frequency to ${frequency}`,
+                timestamp: serverTimestamp()
+            });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Save failed', description: error.message });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleSendReminders = async () => {
+        if (!user || !firestore || !pendingRequests) {
+            toast({variant: 'destructive', title: 'Cannot send', description: 'Missing required data.'});
+            return;
+        }
+        setIsSending(true);
+        const action = 'reminders.manual_send';
+        let sentCount = 0;
+        try {
+            for (const req of pendingRequests) {
+                const pendingStage = req.timeline.find(t => t.status === 'pending');
+                if (!pendingStage) continue;
+                
+                const q = query(collection(firestore, 'users'), where('role', '==', pendingStage.actor));
+                const snapshot = await getDocs(q);
+                const recipients = snapshot.docs.map(d => d.data().email).filter(Boolean);
+
+                if (recipients.length > 0) {
+                     await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            to: recipients.join(','),
+                            subject: `REMINDER: Request ${req.id.substring(0,8)}... is Awaiting Approval`,
+                            html: reminderTemplate(req, pendingStage.stage, `${window.location.origin}/dashboard/approvals?id=${req.id}`)
+                        })
+                    });
+                    sentCount++;
+                }
+            }
+
+            await setDoc(appMetadataRef, { reminderSettings: { frequency, lastSent: new Date() } }, { merge: true });
+            
+            toast({ title: 'Reminders Sent', description: `Sent ${sentCount} reminder emails.` });
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid, userName: user.displayName, action,
+                details: `Manually triggered and sent ${sentCount} reminders.`,
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+             toast({ variant: 'destructive', title: 'Send failed', description: error.message });
+             await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+        } finally {
+            setIsSending(false);
+        }
+    };
+
+    return (
+        <div className="space-y-8">
+            <div className="space-y-4">
+                 <h3 className="text-lg font-semibold">Reminder Frequency</h3>
+                 <p className="text-sm text-muted-foreground">
+                    Set how often reminders should be sent for pending approvals. This is a placeholder; actual automated sending requires a backend cron job.
+                 </p>
+                <div className="flex items-end gap-4">
+                    <div className="grid w-full max-w-xs items-center gap-1.5">
+                        <Label htmlFor="frequency">Frequency</Label>
+                         <Select value={frequency} onValueChange={(v: any) => setFrequency(v)}>
+                            <SelectTrigger id="frequency">
+                                <SelectValue placeholder="Select frequency..."/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="daily">Daily</SelectItem>
+                                <SelectItem value="weekly">Weekly</SelectItem>
+                                <SelectItem value="off">Off</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                     <Button onClick={handleSaveSettings} disabled={isSaving}>
+                        {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                        Save Settings
+                    </Button>
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                 <h3 className="text-lg font-semibold">Manual Trigger</h3>
+                 <p className="text-sm text-muted-foreground">
+                    Manually send reminder emails for all requests currently awaiting approval. Last sent: {appMetadata?.reminderSettings?.lastSent ? formatDistanceToNow(new Date(appMetadata.reminderSettings.lastSent.seconds * 1000), { addSuffix: true }) : 'never'}.
+                 </p>
+                <Button onClick={handleSendReminders} disabled={isSending}>
+                    {isSending ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <BellRing className="mr-2 h-4 w-4"/>}
+                    Send Reminders Now
+                </Button>
+            </div>
+        </div>
+    );
+}
 
 export default function EmailSettingsPage() {
     const { user, role, loading: userLoading } = useUser();
@@ -147,13 +291,14 @@ export default function EmailSettingsPage() {
                     Email & Notification Settings
                 </CardTitle>
                 <CardDescription>
-                    Preview email templates and test your email sending configuration.
+                    Preview email templates, test your email sending configuration, and manage approval reminders.
                 </CardDescription>
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="templates">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="templates">Email Templates</TabsTrigger>
+                        <TabsTrigger value="reminders">Reminders</TabsTrigger>
                         <TabsTrigger value="test">Mailflow Test</TabsTrigger>
                     </TabsList>
                     <TabsContent value="templates" className="pt-6">
@@ -176,6 +321,9 @@ export default function EmailSettingsPage() {
                                 </Card>
                             ))}
                         </div>
+                    </TabsContent>
+                    <TabsContent value="reminders" className="pt-6">
+                        <RemindersSettings />
                     </TabsContent>
                     <TabsContent value="test" className="pt-6">
                         <MailflowTest />

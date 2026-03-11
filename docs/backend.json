@@ -78,6 +78,14 @@
                   "pending",
                   "waiting"
                 ]
+              },
+              "delegatedById": {
+                "type": "string",
+                "description": "If approved by a delegate, the UID of the user who delegated the authority."
+              },
+              "delegatedByName": {
+                  "type": "string",
+                  "description": "If approved by a delegate, the name of the user who delegated the authority."
               }
             }
           }
@@ -226,6 +234,14 @@
             "Both"
           ],
           "description": "Determines where to send email notifications."
+        },
+        "delegatedToId": {
+          "type": "string",
+          "description": "The UID of the user this user has delegated approval authority to."
+        },
+        "delegatedToName": {
+          "type": "string",
+          "description": "The display name of the user this user has delegated approval authority to."
         }
       },
       "required": [
@@ -366,7 +382,9 @@
               "settings:auditlog",
               "settings:errorlog",
               "settings:procurement-periods",
-              "settings:data"
+              "settings:data",
+              "settings:notifications",
+              "settings:email"
             ]
           }
         }
@@ -465,6 +483,24 @@
         "limitToOneSubmissionPerPeriod": {
           "type": "boolean",
           "description": "If true, allows only one active procurement request per department per period."
+        },
+        "reminderSettings": {
+          "type": "object",
+          "description": "Settings for automated approval reminders. Default frequency is daily.",
+          "properties": {
+            "frequency": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "off"
+              ]
+            },
+            "lastSent": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
         }
       }
     },

@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Edit, Plus } from "lucide-react";
+import { Loader, Shield, Trash2, Edit, Plus, UserCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -39,6 +39,8 @@ type UserProfile = {
     status: 'Active' | 'Invited';
     alternateEmail?: string;
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
+    delegatedToId?: string;
+    delegatedToName?: string;
 };
 
 type Department = {
@@ -48,7 +50,7 @@ type Department = {
 
 
 export default function UsersPage() {
-    const { user: adminUser, role: adminRole, loading: userLoading } = useUser();
+    const { user: adminUser, profile: adminProfile, role: adminRole, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
 
@@ -311,9 +313,89 @@ export default function UsersPage() {
             });
         }
     };
+    
+    const handleUpdateDelegate = async (delegateId: string) => {
+        if (!adminUser || !firestore || !users) return;
+
+        const delegateUser = users.find(u => u.id === delegateId);
+        const delegateName = delegateUser ? delegateUser.displayName : '';
+
+        const action = 'user.update.delegation';
+        
+        try {
+            const userRef = doc(firestore, 'users', adminUser.uid);
+            await setDoc(userRef, { delegatedToId: delegateId, delegatedToName: delegateName }, { merge: true });
+            
+            toast({
+                title: "Delegate Updated",
+                description: `You have delegated your approval authority to ${delegateName || 'no one'}.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                details: `Updated delegate to ${delegateName || 'none'}`,
+                entity: { type: 'user', id: adminUser.uid },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Delegate Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update delegate.`,
+            });
+             await logErrorToFirestore(firestore, {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        }
+    };
 
     return (
-        <>
+        <div className="space-y-6">
+            {adminRole === 'Executive' && (
+                 <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                           <UserCheck className="h-6 w-6 text-primary"/>
+                           My Delegation Settings
+                        </CardTitle>
+                        <CardDescription>
+                            As an Executive, you can delegate your approval authority to another user. They will be able to approve on your behalf.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid w-full max-w-sm items-center gap-1.5">
+                            <Label htmlFor="delegate">Delegate Approvals To</Label>
+                            <Select value={adminProfile?.delegatedToId || 'none'} onValueChange={handleUpdateDelegate}>
+                                <SelectTrigger id="delegate">
+                                    <SelectValue placeholder="Select a user to delegate to..."/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">None (Delegation Off)</SelectItem>
+                                    {users && users.filter(u => u.id !== adminUser.uid).map(u => (
+                                        <SelectItem key={u.id} value={u.id}>
+                                            <div className="flex items-center gap-2">
+                                                <Avatar className="h-6 w-6">
+                                                    <AvatarImage src={u.photoURL}/>
+                                                    <AvatarFallback>{u.displayName?.charAt(0)}</AvatarFallback>
+                                                </Avatar>
+                                                <span>{u.displayName} ({u.role})</span>
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardContent>
+                 </Card>
+            )}
             <Card>
                 <CardHeader className="flex flex-row items-start justify-between">
                     <div>
@@ -476,6 +558,6 @@ export default function UsersPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-        </>
+        </div>
     );
 }
