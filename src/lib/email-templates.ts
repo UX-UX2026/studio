@@ -1,3 +1,4 @@
+
 interface RequestDetails {
     id: string;
     department: string;
@@ -170,3 +171,40 @@ export const requestRejectedTemplate = (request: RequestDetails, comment: { acto
         </html>
     `;
 }
+
+export const workflowTestTemplate = (stageName: string, recipients: string[]): string => {
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>TEST: ProcureEase Notification</title>
+            ${emailStyles}
+        </head>
+        <body>
+            <div class="wrapper">
+                <div class="container">
+                    <div class="header">
+                        <h2 style="color: #6c757d;">TEST Notification</h2>
+                    </div>
+                    <div class="content">
+                        <p>This is a test email to verify the notification settings for the '<strong>${stageName}</strong>' workflow stage.</p>
+                        <p>If you are receiving this email, the configuration is working correctly.</p>
+                        
+                        <h3>Intended Recipients:</h3>
+                        <ul>
+                            ${recipients.map(r => `<li>${r}</li>`).join('')}
+                        </ul>
+
+                        <p>This is a test only. No action is required.</p>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated notification from the ProcureEase system.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+};
