@@ -4,7 +4,7 @@
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download, UserCheck } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
@@ -46,6 +46,8 @@ import * as XLSX from 'xlsx';
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 type WorkflowStage = {
@@ -455,6 +457,49 @@ export default function ApprovalsPage() {
         );
     }
     
+    const handleUpdateDelegate = async (delegateId: string) => {
+        if (!user || !firestore || !allUsers) return;
+
+        const delegateUser = allUsers.find(u => u.id === delegateId);
+        const delegateName = delegateUser ? delegateUser.displayName : '';
+
+        const action = 'user.update.delegation';
+        
+        try {
+            const userRef = doc(firestore, 'users', user.uid);
+            await setDoc(userRef, { delegatedToId: delegateId, delegatedToName: delegateName }, { merge: true });
+            
+            toast({
+                title: "Delegate Updated",
+                description: `You have delegated your approval authority to ${delegateName || 'no one'}.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Updated delegate to ${delegateName || 'none'}`,
+                entity: { type: 'user', id: user.uid },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Delegate Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update delegate.`,
+            });
+             await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        }
+    };
+
     const handleApprove = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers) return;
 
@@ -941,6 +986,44 @@ export default function ApprovalsPage() {
                     </CardContent>
                 </Card>
 
+                {role === 'Executive' && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                               <UserCheck className="h-6 w-6 text-primary"/>
+                               My Delegation Settings
+                            </CardTitle>
+                            <CardDescription>
+                                As an Executive, you can delegate your approval authority to another user. They will be able to approve on your behalf.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid w-full items-center gap-1.5">
+                                <Label htmlFor="delegate">Delegate Approvals To</Label>
+                                <Select value={profile?.delegatedToId || 'none'} onValueChange={handleUpdateDelegate}>
+                                    <SelectTrigger id="delegate">
+                                        <SelectValue placeholder="Select a user to delegate to..."/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None (Delegation Off)</SelectItem>
+                                        {allUsers && allUsers.filter(u => u.id !== user.uid).map(u => (
+                                            <SelectItem key={u.id} value={u.id}>
+                                                <div className="flex items-center gap-2">
+                                                    <Avatar className="h-6 w-6">
+                                                        <AvatarImage src={u.photoURL}/>
+                                                        <AvatarFallback>{u.displayName?.charAt(0)}</AvatarFallback>
+                                                    </Avatar>
+                                                    <span>{u.displayName} ({u.role})</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
                 <div className="space-y-4">
                     <h3 className="text-lg font-semibold">All Requests</h3>
                     <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
@@ -1350,5 +1433,3 @@ export default function ApprovalsPage() {
 
 
     
-
-
