@@ -35,7 +35,7 @@ import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
 import { useFirestore, useCollection, useUser } from '@/firebase';
 import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -242,23 +242,53 @@ export default function DashboardPage() {
     const requestsLoading = openRequestsLoading || monthlyRequestsLoading || deptsLoading || budgetsLoading;
     
     // Chart data
-    const spendByDeptData = useMemo(() => {
-        if (!monthlyRequests) return [];
-        const deptSpend = monthlyRequests.reduce((acc, req) => {
-            if (!acc[req.department]) {
-                acc[req.department] = 0;
-            }
-            acc[req.department] += req.total;
-            return acc;
-        }, {} as Record<string, number>);
+    const spendByDeptVsBudgetData = useMemo(() => {
+        if (!monthlyRequests || !allDepartments || !allBudgetItems) return [];
+        
+        const now = new Date();
+        const currentMonthName = format(now, "MMMM");
 
-        return Object.entries(deptSpend).map(([name, total]) => ({ name, total }));
-    }, [monthlyRequests]);
+        const dataByDept = allDepartments.map(dept => {
+            const deptSpend = monthlyRequests
+                .filter(req => req.departmentId === dept.id)
+                .reduce((sum, req) => sum + req.total, 0);
+
+            const budgetYear = dept.budgetYear;
+            const procurementYear = now.getFullYear();
+            
+            const monthIndex = (budgetYear === procurementYear)
+                ? dept.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(currentMonthName.toLowerCase().substring(0,3))) ?? -1
+                : -1;
+
+            const deptBudget = allBudgetItems
+                .filter(item => item.departmentId === dept.id)
+                .reduce((sum, item) => {
+                    const forecast = (monthIndex !== -1 && item.forecasts.length > monthIndex)
+                        ? item.forecasts[monthIndex]
+                        : 0;
+                    return sum + forecast;
+                }, 0);
+            
+            return {
+                name: dept.name,
+                spend: deptSpend,
+                budget: deptBudget
+            };
+        });
+        
+        // Filter out departments with no spend and no budget to keep the chart clean
+        return dataByDept.filter(d => d.spend > 0 || d.budget > 0);
+
+    }, [monthlyRequests, allDepartments, allBudgetItems]);
 
     const spendByDeptChartConfig = {
-        total: {
+        spend: {
           label: "Spend",
           color: "hsl(var(--chart-1))",
+        },
+        budget: {
+          label: "Budget",
+          color: "hsl(var(--chart-2))",
         },
     } satisfies ChartConfig;
 
@@ -839,19 +869,21 @@ export default function DashboardPage() {
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
                 <Card>
                     <CardHeader>
-                        <CardTitle>Spend by Department (Current Month)</CardTitle>
-                        <CardDescription>Total value of requests created this month per department.</CardDescription>
+                        <CardTitle>Spend vs. Budget by Department (Current Month)</CardTitle>
+                        <CardDescription>Comparison of total spend against the forecasted budget for each department.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <ChartContainer config={spendByDeptChartConfig} className="h-[300px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                {spendByDeptData.length > 0 ? (
-                                <BarChart data={spendByDeptData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+                                {spendByDeptVsBudgetData.length > 0 ? (
+                                <BarChart data={spendByDeptVsBudgetData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
                                     <CartesianGrid vertical={false} />
                                     <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} interval={0} />
                                     <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} />
                                     <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                                    <Bar dataKey="total" fill="var(--color-total)" radius={4} />
+                                    <Legend content={<ChartLegendContent />} />
+                                    <Bar dataKey="budget" fill="var(--color-budget)" radius={4} />
+                                    <Bar dataKey="spend" fill="var(--color-spend)" radius={4} />
                                 </BarChart>
                                 ) : (
                                     <div className="flex items-center justify-center h-full text-muted-foreground">No data for this month.</div>
