@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -97,19 +96,18 @@ export default function UsersPage() {
 
     const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
     
-    const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
     useEffect(() => {
         if (userLoading) return;
         if (!adminUser) {
           router.push('/dashboard');
           return;
         }
-        if (adminRole && !allowedRoles.includes(adminRole)) {
-          router.push('/dashboard');
+        if (adminRole && adminRole !== 'Administrator') {
+            router.push('/dashboard');
         }
-    }, [adminUser, adminRole, userLoading, router, allowedRoles]);
+    }, [adminUser, adminRole, userLoading, router]);
     
-    if (loading || !adminUser || !adminRole || !allowedRoles.includes(adminRole)) {
+    if (loading || !adminUser || !adminRole || adminRole !== 'Administrator') {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
