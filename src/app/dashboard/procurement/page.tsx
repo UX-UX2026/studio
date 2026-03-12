@@ -34,6 +34,8 @@ import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RecurringClient } from "@/components/app/recurring-client";
 import { Badge } from "@/components/ui/badge";
+import { Dialog } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -91,6 +93,8 @@ type Item = {
   receivedQty: number;
   fulfillmentComments: string[];
   comments?: string;
+  addedById?: string;
+  addedByName?: string;
 };
 
 type WorkflowStage = {
@@ -118,6 +122,10 @@ export default function ProcurementQuickSubmitPage() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
     const [openCategory, setOpenCategory] = useState<string | null>(null);
+
+    // State for the edit request dialog
+    const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
+    const [editRequestReason, setEditRequestReason] = useState('');
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -302,11 +310,47 @@ export default function ProcurementQuickSubmitPage() {
 
     const summaryData = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
-    const handleRequestEdit = () => {
-        toast({
-          title: "Edit Request Sent",
-          description: "Your manager has been notified of your request to edit this submission. This is a placeholder action.",
-        });
+    const handleRequestEdit = async () => {
+        if (!user || !firestore || !editingRequestId) return;
+        if (!editRequestReason.trim()) {
+            toast({
+                variant: "destructive",
+                title: "Reason Required",
+                description: "Please provide a reason for your edit request.",
+            });
+            return;
+        }
+        const action = 'request.edit_request';
+        try {
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                details: `User requested to edit locked submission with reason: "${editRequestReason}"`,
+                entity: { type: 'procurementRequest', id: editingRequestId },
+                timestamp: serverTimestamp()
+            });
+            toast({
+              title: "Edit Request Sent",
+              description: "Your manager has been notified of your request to edit this submission.",
+            });
+            setIsRequestEditDialogOpen(false);
+            setEditRequestReason('');
+        } catch (error: any) {
+            console.error("Request Edit Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Request Failed',
+                description: error.message || 'Could not send the edit request.',
+            });
+            await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        }
     };
 
     const handleSaveRequest = async (isDraft: boolean) => {
@@ -636,6 +680,7 @@ export default function ProcurementQuickSubmitPage() {
                     <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
+                                user={user}
                                 userRole={role} 
                                 items={draftItems}
                                 setItems={setDraftItems}
@@ -756,7 +801,7 @@ export default function ProcurementQuickSubmitPage() {
                     )}
                     <div className="flex gap-3">
                         {isLockedByWorkflow ? (
-                            <Button onClick={handleRequestEdit}>Request Edit</Button>
+                            <Button onClick={() => setIsRequestEditDialogOpen(true)}>Request Edit</Button>
                         ) : (
                             <>
                                 <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>
@@ -767,14 +812,16 @@ export default function ProcurementQuickSubmitPage() {
                                     ) : null}
                                     {saveStatus === 'saving' && lastAction === 'draft' ? 'Saving Draft...' : saveStatus === 'saved' && lastAction === 'draft' ? 'Saved' : 'Save as Draft'}
                                 </Button>
-                                <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
-                                    {saveStatus === 'saving' && lastAction === 'submit' ? (
-                                        <Loader className="mr-2 h-4 w-4 animate-spin"/>
-                                    ) : saveStatus === 'saved' && lastAction === 'submit' ? (
-                                        <Check className="mr-2 h-4 w-4" />
-                                    ) : null}
-                                    {saveStatus === 'saving' && lastAction === 'submit' ? 'Saving Submission...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
-                                </Button>
+                                {role !== 'Requester' && (
+                                    <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
+                                        {saveStatus === 'saving' && lastAction === 'submit' ? (
+                                            <Loader className="mr-2 h-4 w-4 animate-spin"/>
+                                        ) : saveStatus === 'saved' && lastAction === 'submit' ? (
+                                            <Check className="mr-2 h-4 w-4" />
+                                        ) : null}
+                                        {saveStatus === 'saving' && lastAction === 'submit' ? 'Saving Submission...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
+                                    </Button>
+                                )}
                             </>
                         )}
                     </div>
@@ -795,6 +842,29 @@ export default function ProcurementQuickSubmitPage() {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+
+            <Dialog open={isRequestEditDialogOpen} onOpenChange={setIsRequestEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Request to Edit Submission</DialogTitle>
+                        <DialogDescription>
+                            Please provide a reason for requesting to edit this locked submission. This will be sent to your manager.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea 
+                            placeholder="e.g., 'Need to add an urgent item that was missed.'" 
+                            value={editRequestReason} 
+                            onChange={(e) => setEditRequestReason(e.target.value)}
+                            rows={4}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsRequestEditDialogOpen(false)}>Cancel</Button>
+                        <Button onClick={handleRequestEdit}>Send Request</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

@@ -76,7 +76,8 @@
                 "enum": [
                   "completed",
                   "pending",
-                  "waiting"
+                  "waiting",
+                  "rejected"
                 ]
               },
               "delegatedById": {
@@ -171,6 +172,14 @@
               "comments": {
                 "type": "string",
                 "description": "Comments or justification for this specific line item, especially if it's over budget."
+              },
+              "addedById": {
+                "type": "string",
+                "description": "The UID of the user who added this line item."
+              },
+              "addedByName": {
+                "type": "string",
+                "description": "The name of the user who added this line item."
               }
             }
           }

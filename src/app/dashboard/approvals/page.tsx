@@ -477,13 +477,14 @@ export default function ApprovalsPage() {
             }
         }
 
-        const timelineUpdater = (stepName: string, status: 'completed' | 'pending') => {
+        const timelineUpdater = (stepName: string, nextStageName: string) => {
             return (step: ApprovalRequest['timeline'][0]) => {
                 if (step.stage === stepName) {
-                    const completedStep = { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
-                    return completedStep;
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
                 }
-                if (step.stage === status) return { ...step, status: 'pending' as const };
+                if (step.stage === nextStageName) {
+                    return { ...step, status: 'pending' as const };
+                }
                 return step;
             };
         };
@@ -496,12 +497,7 @@ export default function ApprovalsPage() {
             } else if (activeRequest.status === 'Pending Executive') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Executive Approval', 'Procurement Processing'));
             } else if (activeRequest.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
@@ -515,12 +511,20 @@ export default function ApprovalsPage() {
             if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Executive Approval') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
-                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
-                    if (step.stage === 'Procurement Processing') return { ...step, status: 'pending' as const };
-                    return step;
-                });
+                
+                const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
+                const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
+
+                if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') {
+                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
+                }
+                if (execApprovalIndex > -1) {
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, ...delegationInfo };
+                }
+                const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
+                if (procurementProcessingIndex > -1) {
+                        newTimeline[procurementProcessingIndex] = { ...newTimeline[procurementProcessingIndex], status: 'pending' };
+                }
             }
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
@@ -992,7 +996,7 @@ export default function ApprovalsPage() {
                                 <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                     <div className="flex-1">
                                         <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
-                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</p>
+                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy}</p>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
@@ -1352,4 +1356,5 @@ export default function ApprovalsPage() {
 
 
     
+
 

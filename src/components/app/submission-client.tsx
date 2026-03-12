@@ -22,7 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Lock, Plus, Trash2, Upload, Paperclip, History, Loader } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { type UserRole } from "@/firebase/auth/use-user";
+import { type User, type UserRole } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { procurementCategories } from "@/lib/procurement-categories";
 import {
@@ -52,6 +52,8 @@ type Item = {
   receivedQty: number;
   fulfillmentComments: string[];
   comments?: string;
+  addedById?: string;
+  addedByName?: string;
 };
 
 type RecurringItem = {
@@ -70,6 +72,7 @@ const formatCurrency = (amount: number) => {
 };
 
 export function SubmissionClient({ 
+    user,
     userRole, 
     items,
     setItems,
@@ -77,6 +80,7 @@ export function SubmissionClient({
     recurringItems,
     recurringLoading,
 }: { 
+    user: User,
     userRole: UserRole, 
     items: Item[],
     setItems: React.Dispatch<React.SetStateAction<Item[]>>,
@@ -93,6 +97,16 @@ export function SubmissionClient({
     const submissionItemDescriptions = new Set(items.map(item => item.description));
     return recurringItems.filter(item => !submissionItemDescriptions.has(item.name));
   }, [items, recurringItems]);
+
+  const canEditItem = (item: Item) => {
+    if (isLocked) return false;
+    if (userRole === 'Administrator' || userRole === 'Manager') return true;
+    if (item.type === 'Recurring' && (userRole === 'Manager' || userRole === 'Administrator')) return true;
+    if (item.type === 'Recurring') return false; // Requesters can't edit recurring items
+    if (!item.addedById) return true; // Allow editing of legacy items without an owner
+    if (userRole === 'Requester' && item.addedById === user.uid) return true;
+    return false;
+  };
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
@@ -115,6 +129,8 @@ export function SubmissionClient({
       receivedQty: 0,
       fulfillmentComments: [],
       comments: "",
+      addedById: user.uid,
+      addedByName: user.displayName || user.email || 'User',
     };
     setItems(prev => [...prev, newItem]);
   };
@@ -182,6 +198,8 @@ export function SubmissionClient({
                     receivedQty: 0,
                     fulfillmentComments: [],
                     comments: item.comments || "",
+                    addedById: user.uid,
+                    addedByName: user.displayName || user.email || 'User',
                 };
             }).filter((item): item is Item => item !== null);
             
@@ -229,6 +247,7 @@ export function SubmissionClient({
               <TableHead className="w-[80px]">Qty</TableHead>
               <TableHead className="w-[250px]">Category</TableHead>
               <TableHead className="w-[200px]">Comments</TableHead>
+              <TableHead className="w-[150px]">Added By</TableHead>
               <TableHead className="w-[120px] text-right">Unit Price</TableHead>
               <TableHead className="w-[120px] text-right">Total</TableHead>
               <TableHead className="w-[80px] text-center">Actions</TableHead>
@@ -247,7 +266,7 @@ export function SubmissionClient({
                     type="text"
                     value={item.description}
                     onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
-                    readOnly={isLocked || item.type === "Recurring"}
+                    readOnly={!canEditItem(item)}
                     className="bg-transparent border-0"
                   />
                 </TableCell>
@@ -256,7 +275,7 @@ export function SubmissionClient({
                     type="text"
                     value={item.brand}
                     onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
-                    readOnly={isLocked || item.type === "Recurring"}
+                    readOnly={!canEditItem(item)}
                     className="bg-transparent border-0"
                   />
                 </TableCell>
@@ -265,7 +284,7 @@ export function SubmissionClient({
                     type="number"
                     value={item.qty}
                     onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
-                    readOnly={isLocked || (item.type === 'Recurring' && userRole !== 'Manager' && userRole !== 'Administrator')}
+                    readOnly={!canEditItem(item)}
                     className="w-16 bg-transparent border-0"
                   />
                 </TableCell>
@@ -273,7 +292,7 @@ export function SubmissionClient({
                    <Select
                         value={item.category}
                         onValueChange={(value) => handleItemChange(item.id, "category", value)}
-                        disabled={isLocked || item.type === 'Recurring'}
+                        disabled={!canEditItem(item)}
                     >
                         <SelectTrigger className="w-full bg-transparent border-0">
                             <SelectValue placeholder="Select a category" />
@@ -293,12 +312,15 @@ export function SubmissionClient({
                     placeholder="Add a comment..."
                   />
                 </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                    {item.addedByName || 'System'}
+                </TableCell>
                 <TableCell>
                   <Input
                     type="number"
                     value={item.unitPrice}
                     onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
-                    readOnly={isLocked || item.type === "Recurring"}
+                    readOnly={!canEditItem(item)}
                     className="w-24 text-right bg-transparent border-0"
                   />
                 </TableCell>
@@ -306,7 +328,7 @@ export function SubmissionClient({
                   {formatCurrency(item.qty * item.unitPrice)}
                 </TableCell>
                 <TableCell className="text-center">
-                  {item.type === "One-Off" && !isLocked ? (
+                  {(item.type === "One-Off" && canEditItem(item)) ? (
                     <Button
                       variant="ghost"
                       size="icon"

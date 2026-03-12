@@ -11,6 +11,8 @@ export type ApprovalItem = {
     fulfillmentComments: string[];
     estimatedLeadTimeDays?: number;
     comments?: string;
+    addedById?: string;
+    addedByName?: string;
 };
 
 export type ApprovalRequest = {
@@ -19,7 +21,7 @@ export type ApprovalRequest = {
     departmentId: string;
     period: string;
     total: number;
-    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment';
+    status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment' | 'Archived';
     submittedBy: string;
     submittedById: string;
     timeline: {
