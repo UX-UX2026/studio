@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Button } from "@/components/ui/button";
@@ -97,9 +98,9 @@ export default function LoginPage() {
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <div className="h-20 w-auto flex flex-col items-center justify-center">
+                        <div className="h-20 w-auto flex flex-row items-baseline justify-center gap-3">
                             <span className="text-3xl font-bold">UBUNTU</span>
-                            <span className="text-lg tracking-[0.4em]">PATHWAYS</span>
+                            <span className="text-xl font-semibold tracking-wider">PATHWAYS</span>
                         </div>
                     </div>
                     <CardTitle className="text-2xl">Welcome to ProcurePortal</CardTitle>
