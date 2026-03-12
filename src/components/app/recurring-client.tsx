@@ -42,7 +42,7 @@ export function RecurringClient({ role }: { role: UserRole }) {
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
     
-    const canManage = role === 'Administrator' || role === 'Procurement Officer' || role === 'Requester';
+    const canManage = role === 'Administrator' || role === 'Procurement Officer' || role === 'Requester' || role === 'Manager';
 
     const handleItemChange = async (id: string, field: keyof RecurringItem, value: any) => {
         if (!user || !firestore) return;
