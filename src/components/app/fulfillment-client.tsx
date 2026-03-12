@@ -49,6 +49,7 @@ type FulfillmentItem = ApprovalItem & {
   item: string; // This is item.description
   approvedOn: string;
   request: any;
+  submittedBy: string;
 };
 
 const fulfillmentStatuses = ["Sourcing", "Quoted", "Ordered", "Completed"];
@@ -199,6 +200,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           <TableHeader>
             <TableRow>
               <TableHead>Item</TableHead>
+              <TableHead>Submitted By</TableHead>
               <TableHead>Total Qty</TableHead>
               <TableHead>Rcvd Qty</TableHead>
               <TableHead>Outstanding</TableHead>
@@ -213,6 +215,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               return (
                 <TableRow key={item.id} className={outstandingQty > 0 && item.approvedOn > '10' ? "bg-red-500/10" : ""}>
                   <TableCell className="font-medium">{item.item}</TableCell>
+                  <TableCell>{item.submittedBy}</TableCell>
                   <TableCell>{item.qty}</TableCell>
                   <TableCell>
                       <Input

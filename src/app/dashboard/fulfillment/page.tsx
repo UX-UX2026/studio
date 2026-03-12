@@ -40,6 +40,7 @@ export type FulfillmentItem = ApprovalItem & {
   item: string;
   approvedOn: string;
   request: any;
+  submittedBy: string;
 };
 
 export default function FulfillmentPage() {
@@ -67,6 +68,7 @@ export default function FulfillmentPage() {
                 procurementRequestId: req.id,
                 department: req.department,
                 item: item.description,
+                submittedBy: req.submittedBy,
                 approvedOn: req.timeline.find(t => t.stage === 'Executive Approval')?.date || new Date().toISOString(),
                  request: {
                     itemName: item.description,
