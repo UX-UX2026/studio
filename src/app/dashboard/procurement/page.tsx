@@ -34,7 +34,7 @@ import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RecurringClient } from "@/components/app/recurring-client";
 import { Badge } from "@/components/ui/badge";
-import { Dialog } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 const formatCurrency = (amount: number) => {
