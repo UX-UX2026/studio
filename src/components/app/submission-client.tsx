@@ -100,13 +100,34 @@ export function SubmissionClient({
 
   const canEditItem = (item: Item) => {
     if (isLocked) return false;
+    // Admins and Managers can edit anything.
     if (userRole === 'Administrator' || userRole === 'Manager') return true;
-    if (item.type === 'Recurring' && (userRole === 'Manager' || userRole === 'Administrator')) return true;
-    if (item.type === 'Recurring') return false; // Requesters can't edit recurring items
-    if (!item.addedById) return true; // Allow editing of legacy items without an owner
+
+    // Nobody other than Admin/Manager can edit recurring items.
+    if (item.type === 'Recurring') return false; 
+    
+    // Requesters can edit their own one-off items.
     if (userRole === 'Requester' && item.addedById === user.uid) return true;
+    
+    // Allow editing of legacy one-off items without an owner
+    if (item.type === 'One-Off' && !item.addedById) return true; 
+
     return false;
   };
+
+  const canRemoveItem = (item: Item) => {
+    if (isLocked) return false;
+    // Admins and Managers can remove anything from a draft.
+    if (userRole === 'Administrator' || userRole === 'Manager') return true; 
+    
+    // Requesters can remove items they added themselves.
+    if (userRole === 'Requester' && item.addedById === user.uid) return true;
+
+    // For legacy ONE-OFF items without an owner, let requesters remove them.
+    if (userRole === 'Requester' && !item.addedById && item.type === 'One-Off') return true;
+
+    return false;
+  }
 
   const handleItemChange = (id: number | string, field: keyof Item, value: any) => {
     setItems((prevItems) =>
@@ -151,6 +172,8 @@ export function SubmissionClient({
       fulfillmentStatus: 'Pending',
       receivedQty: 0,
       fulfillmentComments: [],
+      addedById: user.uid,
+      addedByName: user.displayName || user.email || 'User',
     };
     setItems(prev => [...prev, newItem]);
     toast({ title: "Item Added", description: `Added "${itemToAdd.name}" to the submission.`})
@@ -328,7 +351,7 @@ export function SubmissionClient({
                   {formatCurrency(item.qty * item.unitPrice)}
                 </TableCell>
                 <TableCell className="text-center">
-                  {(item.type === "One-Off" && canEditItem(item)) ? (
+                  {canRemoveItem(item) ? (
                     <Button
                       variant="ghost"
                       size="icon"
