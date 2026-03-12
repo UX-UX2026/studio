@@ -89,7 +89,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
     if (format === 'pdf') {
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
-        if (logo) {
+        if (logo && logo.imageUrl.startsWith('data:image')) {
              doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
 
@@ -610,7 +610,7 @@ export default function ApprovalsPage() {
                         console.error("Email API call to assistants failed:", emailError);
                         await logErrorToFirestore(firestore, {
                             userId: user.uid,
-                            userName: user.displayName || 'System',
+                            userName: 'System',
                             action: 'notification.assistant_email_failed',
                             errorMessage: (emailError as Error).message,
                             errorStack: (emailError as Error).stack,
@@ -684,7 +684,7 @@ export default function ApprovalsPage() {
                                 console.error("Email API call failed:", emailError);
                                 await logErrorToFirestore(firestore, {
                                     userId: user.uid,
-                                    userName: user.displayName || 'System',
+                                    userName: 'System',
                                     action: 'notification.email_api_failed',
                                     errorMessage: (emailError as Error).message,
                                     errorStack: (emailError as Error).stack,
@@ -1397,14 +1397,3 @@ export default function ApprovalsPage() {
     </>
   );
 }
-
-    
-
-    
-
-
-
-    
-
-
-

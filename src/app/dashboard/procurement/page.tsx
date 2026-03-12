@@ -121,7 +121,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
     if (format === 'pdf') {
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
-        if (logo) {
+        if (logo && logo.imageUrl.startsWith('data:image')) {
             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
 
