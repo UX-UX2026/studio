@@ -90,7 +90,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
         if (logo) {
-            doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
 
         doc.setFontSize(18);
@@ -281,7 +281,7 @@ export default function ApprovalsPage() {
             if (!userDepartment) return null; // Manager must have a department
             return query(baseQuery, where('department', '==', userDepartment));
         }
-        if (role === 'Procurement Officer') {
+        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Requester') {
@@ -569,6 +569,55 @@ export default function ApprovalsPage() {
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+
+            // Special Notification for PO Acknowledgment to Procurement Assistant
+            if (role === 'Procurement Officer' && newStatus === 'In Fulfillment') {
+                const assistantsQuery = query(collection(firestore, 'users'), where('role', '==', 'Procurement Assistant'));
+                const assistantsSnapshot = await getDocs(assistantsQuery);
+                const assistantEmails = assistantsSnapshot.docs.map(doc => doc.data().email).filter(Boolean);
+        
+                if (assistantEmails.length > 0) {
+                    const link = `${window.location.origin}/dashboard/fulfillment`;
+                    const emailHtml = requestActionRequiredTemplate(
+                        { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                        "Fulfillment Started",
+                        link
+                    );
+        
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: assistantEmails.join(','),
+                                subject: `Request Now In Fulfillment: ${activeRequest.id.substring(0,8)}...`,
+                                html: emailHtml,
+                            })
+                        });
+                        const responseData = await response.json();
+                        if (!response.ok) {
+                          throw new Error(responseData.error || 'Failed to send email to assistants');
+                        }
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.sent',
+                            details: `Fulfillment notification sent to Procurement Assistants: ${assistantEmails.join(', ')}`,
+                            entity: { type: 'procurementRequest', id: selectedRequestId },
+                            timestamp: serverTimestamp()
+                        });
+                    } catch (emailError) {
+                        console.error("Email API call to assistants failed:", emailError);
+                        await logErrorToFirestore(firestore, {
+                            userId: user.uid,
+                            userName: user.displayName || 'System',
+                            action: 'notification.assistant_email_failed',
+                            errorMessage: (emailError as Error).message,
+                            errorStack: (emailError as Error).stack,
+                        });
+                    }
+                }
+            }
             
             if (departments && activeRequest.departmentId) {
                 const department = departments.find(d => d.id === activeRequest.departmentId);
@@ -1356,5 +1405,6 @@ export default function ApprovalsPage() {
 
 
     
+
 
 
