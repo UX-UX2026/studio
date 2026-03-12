@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -151,11 +152,22 @@ export default function ProcurementQuickSubmitPage() {
 
     const userDrafts = useMemo(() => {
         if (!user || !allDrafts) return [];
+
+        let draftsForUser: ApprovalRequest[];
+
+        if (role === 'Manager' && userDepartment) {
+            draftsForUser = allDrafts.filter(draft => draft.department === userDepartment);
+        } else if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
+            draftsForUser = allDrafts;
+        } else { // Requester
+            draftsForUser = allDrafts.filter(draft => draft.submittedById === user.uid);
+        }
+        
         // We filter out the currently active draft from the "other drafts" list
-        return allDrafts
-            .filter(draft => draft.submittedById === user.uid && draft.id !== editingRequestId)
+        return draftsForUser
+            .filter(draft => draft.id !== editingRequestId)
             .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-    }, [user, allDrafts, editingRequestId]);
+    }, [user, allDrafts, editingRequestId, role, userDepartment]);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;

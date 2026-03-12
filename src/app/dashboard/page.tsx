@@ -155,7 +155,7 @@ export default function DashboardPage() {
 
   const userOpenRequests = useMemo(() => {
     if (!allOpenRequests) return [];
-    if (role === 'Requester' && userDepartment) {
+    if ((role === 'Manager' || role === 'Requester') && userDepartment) {
         return allOpenRequests.filter(req => req.department === userDepartment);
     }
     return allOpenRequests;
@@ -206,11 +206,21 @@ export default function DashboardPage() {
 
   const userDrafts = useMemo(() => {
     if (!user || !allDrafts) return [];
-    return allDrafts
-        .filter(draft => draft.submittedById === user.uid)
+    
+    let draftsForUser: ApprovalRequest[];
+
+    if (role === 'Manager' && userDepartment) {
+        draftsForUser = allDrafts.filter(draft => draft.department === userDepartment);
+    } else if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
+        draftsForUser = allDrafts;
+    } else { // Requester
+        draftsForUser = allDrafts.filter(draft => draft.submittedById === user.uid);
+    }
+
+    return draftsForUser
         .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0))
         .slice(0, 5);
-  }, [user, allDrafts]);
+  }, [user, allDrafts, role, userDepartment]);
 
 
   const allFulfillmentItems = useMemo(() => {
