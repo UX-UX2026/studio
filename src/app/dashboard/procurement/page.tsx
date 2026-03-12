@@ -4,7 +4,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion } from "firebase/firestore";
@@ -36,7 +36,11 @@ import { RecurringClient } from "@/components/app/recurring-client";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { submissionReadyForReviewTemplate } from "@/lib/email-templates";
+import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
+import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -113,6 +117,138 @@ type WorkflowStage = {
     permissions: string[];
 };
 
+const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf') => {
+    if (format === 'pdf') {
+        const doc = new jsPDF();
+        const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
+        if (logo) {
+            doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+        }
+
+        doc.setFontSize(18);
+        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
+
+        const detailsData = [
+            ["Request ID", request.id],
+            ["Department", request.department],
+            ["Period", request.period],
+            ["Submitted By", request.submittedBy],
+            ["Total", formatCurrency(request.total)],
+            ["Status", request.status],
+        ];
+        autoTable(doc, {
+            startY: 42,
+            head: [['Request Details', '']],
+            body: detailsData,
+            theme: 'striped',
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+
+        const itemsData = request.items.map(item => [
+            item.type,
+            item.description,
+            item.category,
+            item.qty,
+            formatCurrency(item.unitPrice),
+            formatCurrency(item.qty * item.unitPrice),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+            body: itemsData,
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+        
+        const summaryTableData = summaryData.lines.map(line => [
+            line.category,
+            formatCurrency(line.procurementTotal),
+            formatCurrency(line.forecastTotal),
+            formatCurrency(line.variance),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+            body: summaryTableData,
+            foot: [[
+                'Total',
+                formatCurrency(summaryData.totals.procurement),
+                formatCurrency(summaryData.totals.forecast),
+                formatCurrency(summaryData.totals.variance)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [201, 115, 83] },
+            footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+        });
+        
+        const timelineData = request.timeline.map(step => [
+            step.stage,
+            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+            step.status,
+            step.date || 'N/A',
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Stage', 'Actor', 'Status', 'Date']],
+            body: timelineData,
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+
+        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+        return;
+    }
+
+    const detailsData = [
+        { Key: "Request ID", Value: request.id },
+        { Key: "Department", Value: request.department },
+        { Key: "Period", Value: request.period },
+        { Key: "Submitted By", Value: request.submittedBy },
+        { Key: "Total", Value: formatCurrency(request.total) },
+        { Key: "Status", Value: request.status },
+    ];
+    const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+
+    const itemsData = request.items.map(item => ({
+        'Type': item.type,
+        'Description': item.description,
+        'Category': item.category,
+        'Brand': item.brand,
+        'Quantity': item.qty,
+        'Unit Price': item.unitPrice,
+        'Total': item.qty * item.unitPrice,
+    }));
+    const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
+
+    const summaryDataForSheet = summaryData.lines.map(line => ({
+        'Category': line.category,
+        'Request Total': line.procurementTotal,
+        'Forecast Total': line.forecastTotal,
+        'Variance': line.variance,
+    }));
+    summaryDataForSheet.push({
+        'Category': 'GRAND TOTAL',
+        'Request Total': summaryData.totals.procurement,
+        'Forecast Total': summaryData.totals.forecast,
+        'Variance': summaryData.totals.variance,
+    });
+    const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
+
+    const timelineData = request.timeline.map(step => ({
+        'Stage': step.stage,
+        'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+        'Status': step.status,
+        'Date': step.date || 'N/A',
+    }));
+    const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
+    XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
+    XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
+
+    XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
+};
+
 export default function ProcurementQuickSubmitPage() {
     const { user, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
@@ -136,6 +272,10 @@ export default function ProcurementQuickSubmitPage() {
     // State for the edit request dialog
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
     const [editRequestReason, setEditRequestReason] = useState('');
+
+    const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
+    const [rejectionReason, setRejectionReason] = useState('');
+    const [isSaving, setIsSaving] = useState(false);
 
     // State for loading previous submissions
     const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
@@ -213,6 +353,18 @@ export default function ProcurementQuickSubmitPage() {
         );
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+    
+    const activeRequest = useMemo(() => {
+        if (!editingRequestId || !periodRequests) return null;
+        return periodRequests.find(req => req.id === editingRequestId);
+    }, [editingRequestId, periodRequests]);
+
+    const canApproveOrReject = useMemo(() => {
+        if (role !== 'Executive' && role !== 'Administrator') return false;
+        if (!activeRequest) return false;
+        const validStatus = ['Pending Manager Approval', 'Pending Executive', 'Queries Raised'];
+        return validStatus.includes(activeRequest.status);
+    }, [role, activeRequest]);
 
     // Handle incoming query params to resume a draft
     useEffect(() => {
@@ -520,6 +672,222 @@ export default function ProcurementQuickSubmitPage() {
                 errorMessage: error.message,
                 errorStack: error.stack,
             });
+        }
+    };
+
+    const handleApprove = async () => {
+        if (!activeRequest || !editingRequestId || !user || !firestore || !allUsers) return;
+
+        setIsSaving(true);
+        let newStatus: ApprovalRequest['status'] = activeRequest.status;
+        let newTimeline = [...activeRequest.timeline];
+        let toastMessage: {title: string, description: string} | null = null;
+        const actorName = user.displayName || role || 'System';
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
+        const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+
+        if (isDelegateForExecutive && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+            const executive = allUsers.find(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (executive) {
+                delegationInfo = { delegatedById: executive.id, delegatedByName: executive.displayName };
+            }
+        }
+
+        if (role === 'Executive' || role === 'Administrator' || isDelegateForExecutive) {
+            if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+                newStatus = 'Approved';
+                toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+                
+                const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
+                const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
+
+                if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') {
+                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
+                }
+                if (execApprovalIndex > -1) {
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, ...delegationInfo };
+                }
+                const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
+                if (procurementProcessingIndex > -1) {
+                        newTimeline[procurementProcessingIndex] = { ...newTimeline[procurementProcessingIndex], status: 'pending' };
+                }
+            }
+        }
+
+        if (!toastMessage) {
+            setIsSaving(false);
+            return;
+        }
+
+        const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
+        const updateData = { status: newStatus, timeline: newTimeline };
+        const action = 'request.approve';
+
+        const finalToastMessage = toastMessage;
+        
+        try {
+            await updateDoc(requestRef, updateData);
+            toast(finalToastMessage);
+
+            if (newStatus === 'Approved') {
+                const reportDataForGeneration: ApprovalRequest = {
+                    ...activeRequest,
+                    ...updateData,
+                };
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx');
+            }
+
+            let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
+            if (delegationInfo.delegatedByName) {
+                auditDetails = `Approved request ${activeRequest.id.substring(0,8)}... on behalf of ${delegationInfo.delegatedByName}, new status "${newStatus}"`;
+            }
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action,
+                details: auditDetails,
+                entity: { type: 'procurementRequest', id: editingRequestId },
+                timestamp: serverTimestamp()
+            });
+            
+            if (departments && activeRequest.departmentId) {
+                const department = departments.find(d => d.id === activeRequest.departmentId);
+                const nextStage = newTimeline.find(step => step.status === 'pending');
+                
+                if (department && department.workflow && nextStage) {
+                    const workflowStageConfig = department.workflow.find(wfStage => wfStage.name === nextStage.stage);
+                    
+                    if (workflowStageConfig) {
+                        const usersCollectionRef = collection(firestore, 'users');
+                        const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
+                        const querySnapshot = await getDocs(q);
+                        
+                        const recipients: string[] = [];
+                        querySnapshot.forEach(doc => {
+                            const userProfile = doc.data();
+                            if (userProfile.email) recipients.push(userProfile.email);
+                        });
+                        
+                        const uniqueRecipients = [...new Set(recipients)];
+                
+                        if (uniqueRecipients.length > 0) {
+                            const link = `${window.location.origin}/dashboard/approvals?id=${editingRequestId}`;
+                            const emailHtml = requestActionRequiredTemplate(
+                                { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                                nextStage.stage,
+                                link
+                            );
+
+                            await fetch('/api/send-email', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    to: uniqueRecipients.join(','),
+                                    subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
+                                    html: emailHtml,
+                                })
+                            });
+                        }
+                    }
+                }
+            }
+            
+        } catch (error: any) {
+            console.error("Approval Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Approval Failed",
+                description: error.message || "Could not update the request.",
+            });
+        } finally {
+            setIsSaving(false);
+        }
+    };
+    
+    const handleConfirmReject = async () => {
+        if (!activeRequest || !editingRequestId || !user || !firestore) return;
+        
+        if (!rejectionReason.trim()) {
+            toast({
+                variant: "destructive",
+                title: "Rejection Reason Required",
+                description: "Please provide a reason for rejecting this request.",
+            });
+            return;
+        }
+
+        setIsSaving(true);
+        const newStatus: ApprovalRequest['status'] = 'Rejected';
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let newTimeline = [...activeRequest.timeline];
+        const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
+        if (currentStepIndex !== -1) {
+            newTimeline[currentStepIndex] = {
+                ...newTimeline[currentStepIndex],
+                status: 'rejected',
+                actor: user.displayName || 'System',
+                date: currentDate,
+            };
+        }
+        
+        const commentData = {
+            actor: user.displayName || "User",
+            actorId: user.uid,
+            text: `REJECTED: ${rejectionReason}`,
+            timestamp: new Date().toLocaleString("en-GB"),
+        };
+
+        const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
+        try {
+            await updateDoc(requestRef, { 
+                status: newStatus, 
+                timeline: newTimeline,
+                comments: arrayUnion(commentData)
+            });
+            toast({
+                title: "Request Rejected",
+                description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName || 'System',
+                action: 'request.reject',
+                details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
+                entity: { type: 'procurementRequest', id: editingRequestId },
+                timestamp: serverTimestamp()
+            });
+
+            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocSnap = await getDocs(query(collection(firestore, 'users'), where('id', '==', activeRequest.submittedById)));
+            if (!userDocSnap.empty) {
+                const submitterProfile = userDocSnap.docs[0].data();
+                if (submitterProfile.email) {
+                    const link = `${window.location.origin}/dashboard/approvals?id=${editingRequestId}`;
+                    const emailHtml = requestRejectedTemplate(activeRequest, commentData, link);
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                    });
+                }
+            }
+
+            setRejectionReason('');
+            setIsRejectDialogOpen(false);
+        } catch(error: any) {
+            console.error("Reject Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Reject Failed",
+                description: error.message || "Could not update the request.",
+            });
+        } finally {
+            setIsSaving(false);
         }
     };
     
@@ -888,7 +1256,7 @@ export default function ProcurementQuickSubmitPage() {
                 <Tabs defaultValue="submission" className="w-full">
                     <CardHeader className="flex flex-row items-start justify-between">
                          <div>
-                            <CardTitle>Period Submission</CardTitle>
+                            <CardTitle>Period Submission {activeRequest && `(Submitted by ${activeRequest.submittedBy})`}</CardTitle>
                             <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
                          </div>
                          <TabsList className="grid grid-cols-2">
@@ -1019,7 +1387,18 @@ export default function ProcurementQuickSubmitPage() {
                         <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
                     )}
                     <div className="flex gap-3">
-                        {isLockedByWorkflow ? (
+                        {canApproveOrReject ? (
+                            <>
+                                <Button variant="destructive" onClick={() => setIsRejectDialogOpen(true)} disabled={isSaving}>
+                                    {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                    <X className="mr-2 h-4 w-4" />Reject
+                                </Button>
+                                <Button onClick={handleApprove} disabled={isSaving}>
+                                    {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                    <Check className="mr-2 h-4 w-4" />Approve
+                                </Button>
+                            </>
+                        ) : isLockedByWorkflow ? (
                             <Button onClick={() => setIsRequestEditDialogOpen(true)}>Request Edit</Button>
                         ) : (
                             <>
@@ -1133,7 +1512,32 @@ export default function ProcurementQuickSubmitPage() {
                 </DialogContent>
             </Dialog>
 
+            <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reject Request</DialogTitle>
+                        <DialogDescription>
+                            Please provide a reason for rejecting this request. This will be added to the communication log.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea 
+                            placeholder="Enter rejection reason here..." 
+                            value={rejectionReason} 
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                            rows={5}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setIsRejectDialogOpen(false); setRejectionReason(''); }}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleConfirmReject} disabled={isSaving}>
+                            {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                            Confirm Rejection
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
-
