@@ -1,13 +1,12 @@
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,6 +35,7 @@ import { RecurringClient } from "@/components/app/recurring-client";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { submissionReadyForReviewTemplate } from "@/lib/email-templates";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -49,6 +49,7 @@ const formatCurrency = (amount: number) => {
 type Department = {
     id: string;
     name: string;
+    managerId?: string;
     budgetHeaders?: string[];
     workflow?: WorkflowStage[];
     budgetYear?: number;
@@ -57,6 +58,13 @@ type Department = {
             status: 'Open' | 'Locked';
         }
     }
+};
+
+type UserProfile = {
+    id: string;
+    displayName: string;
+    email: string;
+    role: string;
 };
 
 type AppMetadata = {
@@ -122,6 +130,7 @@ export default function ProcurementQuickSubmitPage() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
     const [openCategory, setOpenCategory] = useState<string | null>(null);
+    const [isNotifying, setIsNotifying] = useState(false);
 
     // State for the edit request dialog
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
@@ -169,6 +178,9 @@ export default function ProcurementQuickSubmitPage() {
     
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
+
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
 
     // Handle incoming query params to resume a draft
     useEffect(() => {
@@ -525,6 +537,77 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
 
+    const handleNotifyManager = async () => {
+        if (!user || !firestore || !selectedDepartmentId || !departments || !allUsers) {
+            toast({ variant: "destructive", title: "Cannot notify", description: "Missing required data to find manager." });
+            return;
+        }
+        
+        setIsNotifying(true);
+        const action = 'request.notify_manager';
+    
+        try {
+            const department = departments.find(d => d.id === selectedDepartmentId);
+            if (!department || !department.managerId) {
+                throw new Error("No manager is assigned to this department.");
+            }
+    
+            const manager = allUsers.find(u => u.id === department.managerId);
+            if (!manager || !manager.email) {
+                throw new Error("Manager's email address could not be found.");
+            }
+            
+            const link = `${window.location.origin}/dashboard/procurement?deptId=${selectedDepartmentId}&period=${encodeURIComponent(selectedPeriod)}`;
+            const emailHtml = submissionReadyForReviewTemplate(
+                { department: department.name, period: selectedPeriod, requesterName: user.displayName || 'A requester' },
+                link
+            );
+    
+            const response = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: manager.email,
+                    subject: `Procurement Submission Ready for Review: ${department.name} - ${selectedPeriod}`,
+                    html: emailHtml,
+                })
+            });
+    
+            const responseData = await response.json();
+            if (!response.ok) {
+              throw new Error(responseData.error || 'Failed to send email');
+            }
+    
+            toast({ title: 'Manager Notified', description: `An email has been sent to ${manager.displayName}.` });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Notified manager for period ${selectedPeriod} in ${department.name}`,
+                entity: { type: 'procurementRequest', id: editingRequestId || 'new' },
+                timestamp: serverTimestamp()
+            });
+    
+        } catch (error: any) {
+            console.error("Notify Manager Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Notification Failed",
+                description: error.message,
+            });
+            await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        } finally {
+            setIsNotifying(false);
+        }
+    };
+
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
       if (userLoading) return;
@@ -537,7 +620,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading;
+    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -812,7 +895,13 @@ export default function ProcurementQuickSubmitPage() {
                                     ) : null}
                                     {saveStatus === 'saving' && lastAction === 'draft' ? 'Saving Draft...' : saveStatus === 'saved' && lastAction === 'draft' ? 'Saved' : 'Save as Draft'}
                                 </Button>
-                                {role !== 'Requester' && (
+                                
+                                {role === 'Requester' ? (
+                                    <Button onClick={handleNotifyManager} disabled={isLocked || isNotifying || saveStatus === 'saving'}>
+                                        {isNotifying ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Bell className="mr-2 h-4 w-4" />}
+                                        Notify Manager
+                                    </Button>
+                                ) : (
                                     <Button className="shadow-lg shadow-primary/20" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
                                         {saveStatus === 'saving' && lastAction === 'submit' ? (
                                             <Loader className="mr-2 h-4 w-4 animate-spin"/>
@@ -868,7 +957,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-
-
-    

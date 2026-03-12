@@ -6,6 +6,12 @@ interface RequestDetails {
     submittedBy: string;
 }
 
+interface SubmissionReadyDetails {
+    department: string;
+    period: string;
+    requesterName: string;
+}
+
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
       style: "currency",
@@ -241,6 +247,43 @@ export const reminderTemplate = (request: RequestDetails, stageName: string, lin
                         <p>Your timely review is appreciated. Please review the request by clicking the button below:</p>
                         <div class="button-container">
                             <a href="${link}" class="button" style="background-color: #17a2b8;">View Request in ProcureEase</a>
+                        </div>
+                    </div>
+                    <div class="footer">
+                        <p>This is an automated notification from the ProcureEase system.</p>
+                    </div>
+                </div>
+            </div>
+        </body>
+        </html>
+    `;
+};
+
+
+export const submissionReadyForReviewTemplate = (details: SubmissionReadyDetails, link: string): string => {
+    return `
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Procurement Submission Ready for Review</title>
+            ${emailStyles}
+        </head>
+        <body>
+            <div class="wrapper">
+                <div class="container">
+                    <div class="header">
+                        <h2 style="color: #28a745;">Submission Ready for Review</h2>
+                    </div>
+                     <div class="content">
+                        <p>Hello,</p>
+                        <p><strong>${details.requesterName}</strong> has indicated that they have completed adding items to the procurement submission for the <strong>${details.department}</strong> department for the period <strong>${details.period}</strong>.</p>
+                        
+                        <p>Please review the submission, add any manager-level items, and submit it for final approval when ready.</p>
+
+                        <div class="button-container">
+                            <a href="${link}" class="button" style="background-color: #28a745;">Review Submission</a>
                         </div>
                     </div>
                     <div class="footer">
