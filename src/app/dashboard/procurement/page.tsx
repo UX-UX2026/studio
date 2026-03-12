@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, Fragment } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -137,6 +137,15 @@ export default function ProcurementQuickSubmitPage() {
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
     const [editRequestReason, setEditRequestReason] = useState('');
 
+    // State for loading previous submissions
+    const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
+    const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
+
+    // State for archiving current draft
+    const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
+    const [archiveReason, setArchiveReason] = useState('');
+
+
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -193,6 +202,17 @@ export default function ProcurementQuickSubmitPage() {
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
     const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
+    const previousSubmissionsQuery = useMemo(() => {
+        if (!firestore || !selectedDepartmentId) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('departmentId', '==', selectedDepartmentId),
+            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']),
+            orderBy('updatedAt', 'desc')
+        );
+    }, [firestore, selectedDepartmentId]);
+    const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
 
     // Handle incoming query params to resume a draft
     useEffect(() => {
@@ -549,6 +569,85 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
 
+    const handleArchiveCurrentDraft = async () => {
+        if (!editingRequestId || !user || !firestore) return;
+        if (!archiveReason.trim()) {
+            toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for archiving this draft.' });
+            return;
+        }
+        
+        const draftToArchive = allDrafts?.find(req => req.id === editingRequestId);
+        if (!draftToArchive) {
+             toast({ variant: 'destructive', title: 'Error', description: 'Cannot find the draft to archive.' });
+            return;
+        }
+        
+        const action = 'request.draft_archive_with_reason';
+        try {
+            const docRef = doc(firestore, 'procurementRequests', editingRequestId);
+            await updateDoc(docRef, { 
+                status: 'Archived', 
+                updatedAt: serverTimestamp(),
+                comments: arrayUnion({
+                    actor: user.displayName || "User",
+                    actorId: user.uid,
+                    text: `ARCHIVED: ${archiveReason}`,
+                    timestamp: new Date().toLocaleString("en-GB"),
+                })
+            });
+            
+            toast({ title: 'Draft Archived', description: 'The draft has been moved to the recycle bin.' });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action: action,
+                details: `Archived draft for ${draftToArchive.period} with reason: ${archiveReason}`,
+                entity: { type: 'procurementRequest', id: editingRequestId },
+                timestamp: serverTimestamp()
+            });
+
+            setEditingRequestId(null);
+            setDraftItems([]);
+        } catch (error: any) {
+             console.error("Archive current draft error:", error);
+             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
+             await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        } finally {
+            setArchiveReason('');
+            setIsArchiveCurrentDialogOpen(false);
+        }
+    };
+
+    const handleLoadPrevious = () => {
+        if (!previousSubmissionToLoad || !previousSubmissions || !user) return;
+        const submissionToLoad = previousSubmissions.find(s => s.id === previousSubmissionToLoad);
+        if (!submissionToLoad) return;
+    
+        const newItems = submissionToLoad.items.map((item, index) => ({
+            ...item,
+            id: Date.now() + index, // Give it a new temporary ID for the client
+            type: 'One-Off' as const, // Treat all loaded items as one-off
+            addedById: user.uid,
+            addedByName: user.displayName || user.email || 'User',
+            fulfillmentStatus: 'Pending' as const, // Reset fulfillment state
+            receivedQty: 0,
+            fulfillmentComments: [],
+        }));
+    
+        setDraftItems(newItems);
+        setEditingRequestId(null); // This becomes a new draft, not an edit of the old one.
+        toast({ title: 'Submission Loaded', description: `Loaded ${newItems.length} items as a new draft.` });
+        setIsLoadConfirmDialogOpen(false);
+        setPreviousSubmissionToLoad(null); // Reset select
+    };
+
     const handleNotifyManager = async () => {
         if (!user || !firestore || !selectedDepartmentId || !departments || !allUsers) {
             toast({ variant: "destructive", title: "Cannot notify", description: "Missing required data to find manager." });
@@ -632,7 +731,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading;
+    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -688,6 +787,31 @@ export default function ProcurementQuickSubmitPage() {
                                     ) : (
                                         <div className="p-4 text-sm text-muted-foreground">No open periods found for this department.</div>
                                     )}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                            <Label htmlFor="load-previous">Load from Previous</Label>
+                            <Select 
+                                onValueChange={val => {
+                                    if(draftItems.length > 0) {
+                                        setPreviousSubmissionToLoad(val);
+                                        setIsLoadConfirmDialogOpen(true);
+                                    } else {
+                                        setPreviousSubmissionToLoad(val);
+                                        handleLoadPrevious(); // Call directly if no items to overwrite
+                                    }
+                                }}
+                                value={previousSubmissionToLoad || ""}
+                                disabled={!selectedDepartmentId || previousSubmissionsLoading || isLocked}
+                            >
+                                <SelectTrigger id="load-previous" disabled={!selectedDepartmentId || previousSubmissionsLoading || isLocked}>
+                                    <SelectValue placeholder={previousSubmissionsLoading ? "Loading..." : "Select a past submission..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {previousSubmissions && previousSubmissions.length > 0 ? previousSubmissions.map(s => (
+                                        <SelectItem key={s.id} value={s.id}>{s.period} - {s.id.substring(0, 8)} ({s.items.length} items)</SelectItem>
+                                    )) : <div className="p-4 text-sm text-muted-foreground">No previous submissions found.</div>}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -899,6 +1023,10 @@ export default function ProcurementQuickSubmitPage() {
                             <Button onClick={() => setIsRequestEditDialogOpen(true)}>Request Edit</Button>
                         ) : (
                             <>
+                                <Button variant="destructive" onClick={() => setIsArchiveCurrentDialogOpen(true)} disabled={!editingRequestId || isLocked}>
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete Draft
+                                </Button>
                                 <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>
                                     {saveStatus === 'saving' && lastAction === 'draft' ? (
                                         <Loader className="mr-2 h-4 w-4 animate-spin"/>
@@ -966,6 +1094,46 @@ export default function ProcurementQuickSubmitPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Load Previous Submission?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will replace all items in your current draft with the items from the selected submission. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setPreviousSubmissionToLoad(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            
+            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Archive Current Draft?</DialogTitle>
+                        <DialogDescription>
+                            Please provide a reason for archiving this draft. It will be moved to the recycle bin, and the current form will be cleared.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <Textarea 
+                            placeholder="e.g., 'Duplicate submission, starting over.'" 
+                            value={archiveReason} 
+                            onChange={(e) => setArchiveReason(e.target.value)}
+                            rows={4}
+                        />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setIsArchiveCurrentDialogOpen(false); setArchiveReason(''); }}>Cancel</Button>
+                        <Button variant="destructive" onClick={handleArchiveCurrentDraft}>Archive Draft</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }
+
