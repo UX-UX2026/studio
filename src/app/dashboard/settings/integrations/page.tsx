@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -27,9 +28,29 @@ type OdooConfig = {
     vendorModel?: string;
 };
 
+type QuickBooksConfig = {
+    clientId?: string;
+    clientSecret?: string;
+    realmId?: string;
+};
+
+type XeroConfig = {
+    clientId?: string;
+    clientSecret?: string;
+    tenantId?: string;
+};
+
+type SageConfig = {
+    clientId?: string;
+    clientSecret?: string;
+};
+
 type AppMetadata = {
     id: string;
     odooConfig?: OdooConfig;
+    quickbooksConfig?: QuickBooksConfig;
+    xeroConfig?: XeroConfig;
+    sageConfig?: SageConfig;
     accountingPlatform?: 'odoo' | 'quickbooks' | 'xero' | 'sage';
 };
 
@@ -43,16 +64,21 @@ export default function IntegrationsPage() {
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
     const [platform, setPlatform] = useState<'odoo' | 'quickbooks' | 'xero' | 'sage'>('odoo');
-    const [config, setConfig] = useState<OdooConfig>({});
+    const [odooConfig, setOdooConfig] = useState<OdooConfig>({});
+    const [quickbooksConfig, setQuickbooksConfig] = useState<QuickBooksConfig>({});
+    const [xeroConfig, setXeroConfig] = useState<XeroConfig>({});
+    const [sageConfig, setSageConfig] = useState<SageConfig>({});
+
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
 
     useEffect(() => {
         if (appMetadata) {
             setPlatform(appMetadata.accountingPlatform || 'odoo');
-            if (appMetadata.odooConfig) {
-                setConfig(appMetadata.odooConfig);
-            }
+            setOdooConfig(appMetadata.odooConfig || {});
+            setQuickbooksConfig(appMetadata.quickbooksConfig || {});
+            setXeroConfig(appMetadata.xeroConfig || {});
+            setSageConfig(appMetadata.sageConfig || {});
         }
     }, [appMetadata]);
 
@@ -73,8 +99,14 @@ export default function IntegrationsPage() {
         );
     }
     
-    const handleConfigChange = (field: keyof OdooConfig, value: string) => {
-        setConfig(prev => ({ ...prev, [field]: value }));
+    const handleConfigChange = (platform: 'odoo' | 'quickbooks' | 'xero' | 'sage', field: string, value: string) => {
+        const setterMap = {
+            odoo: setOdooConfig,
+            quickbooks: setQuickbooksConfig,
+            xero: setXeroConfig,
+            sage: setSageConfig,
+        };
+        setterMap[platform](prev => ({...prev, [field]: value}));
     };
 
     const handleSaveChanges = async () => {
@@ -89,7 +121,10 @@ export default function IntegrationsPage() {
         try {
             await setDoc(appMetadataRef, { 
                 accountingPlatform: platform,
-                odooConfig: config 
+                odooConfig,
+                quickbooksConfig,
+                xeroConfig,
+                sageConfig,
             }, { merge: true });
             toast({ title: "Settings Saved", description: "Integration settings have been updated." });
             
@@ -140,7 +175,7 @@ export default function IntegrationsPage() {
         switch (platform) {
             case 'odoo':
                 return (
-                    <>
+                    <div className="space-y-8">
                         <div>
                             <h3 className="text-lg font-semibold mb-4">Connection Settings</h3>
                             <div className="space-y-4">
@@ -148,8 +183,8 @@ export default function IntegrationsPage() {
                                     <Label htmlFor="odoo-url">Odoo Instance URL</Label>
                                     <Input
                                         id="odoo-url"
-                                        value={config.url || ''}
-                                        onChange={(e) => handleConfigChange('url', e.target.value)}
+                                        value={odooConfig.url || ''}
+                                        onChange={(e) => handleConfigChange('odoo', 'url', e.target.value)}
                                         placeholder="https://your-odoo-domain.com"
                                     />
                                 </div>
@@ -158,8 +193,8 @@ export default function IntegrationsPage() {
                                         <Label htmlFor="odoo-db">Database Name</Label>
                                         <Input
                                             id="odoo-db"
-                                            value={config.db || ''}
-                                            onChange={(e) => handleConfigChange('db', e.target.value)}
+                                            value={odooConfig.db || ''}
+                                            onChange={(e) => handleConfigChange('odoo', 'db', e.target.value)}
                                             placeholder="your_odoo_database"
                                         />
                                     </div>
@@ -167,8 +202,8 @@ export default function IntegrationsPage() {
                                         <Label htmlFor="odoo-username">Username / Login</Label>
                                         <Input
                                             id="odoo-username"
-                                            value={config.username || ''}
-                                            onChange={(e) => handleConfigChange('username', e.target.value)}
+                                            value={odooConfig.username || ''}
+                                            onChange={(e) => handleConfigChange('odoo', 'username', e.target.value)}
                                             placeholder="admin@example.com"
                                         />
                                     </div>
@@ -178,8 +213,8 @@ export default function IntegrationsPage() {
                                     <Input
                                         id="odoo-api-key"
                                         type="password"
-                                        value={config.apiKey || ''}
-                                        onChange={(e) => handleConfigChange('apiKey', e.target.value)}
+                                        value={odooConfig.apiKey || ''}
+                                        onChange={(e) => handleConfigChange('odoo', 'apiKey', e.target.value)}
                                         placeholder="••••••••••••••••"
                                     />
                                     <p className="text-xs text-muted-foreground">
@@ -202,8 +237,8 @@ export default function IntegrationsPage() {
                                         <Label htmlFor="odoo-po-model">Purchase Order Model</Label>
                                         <Input
                                             id="odoo-po-model"
-                                            value={config.purchaseOrderModel || ''}
-                                            onChange={(e) => handleConfigChange('purchaseOrderModel', e.target.value)}
+                                            value={odooConfig.purchaseOrderModel || ''}
+                                            onChange={(e) => handleConfigChange('odoo', 'purchaseOrderModel', e.target.value)}
                                             placeholder="purchase.order"
                                         />
                                     </div>
@@ -211,8 +246,8 @@ export default function IntegrationsPage() {
                                         <Label htmlFor="odoo-bill-model">Vendor Bill Model</Label>
                                         <Input
                                             id="odoo-bill-model"
-                                            value={config.vendorBillModel || ''}
-                                            onChange={(e) => handleConfigChange('vendorBillModel', e.target.value)}
+                                            value={odooConfig.vendorBillModel || ''}
+                                            onChange={(e) => handleConfigChange('odoo', 'vendorBillModel', e.target.value)}
                                             placeholder="account.move"
                                         />
                                     </div>
@@ -221,24 +256,162 @@ export default function IntegrationsPage() {
                                     <Label htmlFor="odoo-vendor-model">Vendor Model</Label>
                                     <Input
                                         id="odoo-vendor-model"
-                                        value={config.vendorModel || ''}
-                                        onChange={(e) => handleConfigChange('vendorModel', e.target.value)}
+                                        value={odooConfig.vendorModel || ''}
+                                        onChange={(e) => handleConfigChange('odoo', 'vendorModel', e.target.value)}
                                         placeholder="res.partner"
                                     />
                                 </div>
                             </div>
                         </div>
-                    </>
+                    </div>
                 );
             case 'quickbooks':
+                return (
+                    <div className="space-y-8">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">QuickBooks Connection</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Enter your QuickBooks App credentials to connect your account. These can be found in your developer dashboard.
+                            </p>
+                            <div className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="qb-client-id">Client ID</Label>
+                                    <Input
+                                        id="qb-client-id"
+                                        value={quickbooksConfig.clientId || ''}
+                                        onChange={(e) => handleConfigChange('quickbooks', 'clientId', e.target.value)}
+                                        placeholder="Your QuickBooks Client ID"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="qb-client-secret">Client Secret</Label>
+                                    <Input
+                                        id="qb-client-secret"
+                                        type="password"
+                                        value={quickbooksConfig.clientSecret || ''}
+                                        onChange={(e) => handleConfigChange('quickbooks', 'clientSecret', e.target.value)}
+                                        placeholder="••••••••••••••••"
+                                    />
+                                </div>
+                                 <div className="grid gap-2">
+                                    <Label htmlFor="qb-realm-id">Realm ID (Company ID)</Label>
+                                    <Input
+                                        id="qb-realm-id"
+                                        value={quickbooksConfig.realmId || ''}
+                                        onChange={(e) => handleConfigChange('quickbooks', 'realmId', e.target.value)}
+                                        placeholder="Your Company ID"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        This is usually available after the initial OAuth connection.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4 p-4 border-l-4 border-blue-500 bg-blue-500/10">
+                            <div className="flex-1">
+                                <h4 className="font-semibold">Connect to QuickBooks</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    You will be redirected to QuickBooks to authorize the connection.
+                                </p>
+                            </div>
+                            <Button disabled>Connect (Coming Soon)</Button>
+                        </div>
+                    </div>
+                );
             case 'xero':
+                 return (
+                    <div className="space-y-8">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Xero Connection</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Enter your Xero App credentials to connect your account.
+                            </p>
+                            <div className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="xero-client-id">Client ID</Label>
+                                    <Input
+                                        id="xero-client-id"
+                                        value={xeroConfig.clientId || ''}
+                                        onChange={(e) => handleConfigChange('xero', 'clientId', e.target.value)}
+                                        placeholder="Your Xero Client ID"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="xero-client-secret">Client Secret</Label>
+                                    <Input
+                                        id="xero-client-secret"
+                                        type="password"
+                                        value={xeroConfig.clientSecret || ''}
+                                        onChange={(e) => handleConfigChange('xero', 'clientSecret', e.target.value)}
+                                        placeholder="••••••••••••••••"
+                                    />
+                                </div>
+                                 <div className="grid gap-2">
+                                    <Label htmlFor="xero-tenant-id">Tenant ID</Label>
+                                    <Input
+                                        id="xero-tenant-id"
+                                        value={xeroConfig.tenantId || ''}
+                                        onChange={(e) => handleConfigChange('xero', 'tenantId', e.target.value)}
+                                        placeholder="Your Xero Tenant ID"
+                                    />
+                                     <p className="text-xs text-muted-foreground">
+                                        This is available after the initial OAuth connection.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                         <div className="flex items-center gap-4 p-4 border-l-4 border-blue-500 bg-blue-500/10">
+                            <div className="flex-1">
+                                <h4 className="font-semibold">Connect to Xero</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    You will be redirected to Xero to authorize the connection.
+                                </p>
+                            </div>
+                            <Button disabled>Connect (Coming Soon)</Button>
+                        </div>
+                    </div>
+                );
             case 'sage':
                 return (
-                    <div className="flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-lg h-64">
-                        <h3 className="text-lg font-semibold">Coming Soon!</h3>
-                        <p className="text-muted-foreground">Integration for {platform.charAt(0).toUpperCase() + platform.slice(1)} is under development.</p>
+                    <div className="space-y-8">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Sage Accounting Connection</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Enter your Sage App credentials to connect your account.
+                            </p>
+                            <div className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="sage-client-id">Client ID</Label>
+                                    <Input
+                                        id="sage-client-id"
+                                        value={sageConfig.clientId || ''}
+                                        onChange={(e) => handleConfigChange('sage', 'clientId', e.target.value)}
+                                        placeholder="Your Sage Client ID"
+                                    />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="sage-client-secret">Client Secret</Label>
+                                    <Input
+                                        id="sage-client-secret"
+                                        type="password"
+                                        value={sageConfig.clientSecret || ''}
+                                        onChange={(e) => handleConfigChange('sage', 'clientSecret', e.target.value)}
+                                        placeholder="••••••••••••••••"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                         <div className="flex items-center gap-4 p-4 border-l-4 border-blue-500 bg-blue-500/10">
+                            <div className="flex-1">
+                                <h4 className="font-semibold">Connect to Sage</h4>
+                                <p className="text-sm text-muted-foreground">
+                                    You will be redirected to Sage to authorize the connection.
+                                </p>
+                            </div>
+                            <Button disabled>Connect (Coming Soon)</Button>
+                        </div>
                     </div>
-                )
+                );
         }
     }
 
@@ -300,7 +473,7 @@ export default function IntegrationsPage() {
                         <Label htmlFor="query-textarea">API Query</Label>
                         <Textarea 
                             id="query-textarea"
-                            placeholder={`// Example for Odoo: Search for vendors in a specific city\n{\n  "model": "${config.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`}
+                            placeholder={`// Example for Odoo: Search for vendors in a specific city\n{\n  "model": "${odooConfig.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`}
                             rows={8}
                             className="font-mono text-xs"
                             disabled
