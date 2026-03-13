@@ -40,6 +40,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building, iconClass: "text-orange-500" },
         { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield, iconClass: "text-purple-500" },
         { href: '/dashboard/settings/budget', label: 'Budget Integration', description: 'Import, view, and manage budget data from an external sheet.', icon: Banknote, iconClass: "text-green-500" },
+        { href: '/dashboard/settings/integrations', label: 'Integrations', description: 'Connect to external accounting platforms like Odoo.', icon: Layers, iconClass: "text-violet-500" },
         { href: '/dashboard/settings/email', label: 'Email & Notifications', description: 'Configure email settings and templates.', icon: Mail, iconClass: "text-pink-500" },
         { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', description: 'Lock and unlock submission periods for each department.', icon: CalendarClock, iconClass: "text-teal-500" },
         { href: '/dashboard/settings/procurement-rules', label: 'Procurement Rules', description: 'Set application-wide rules for procurement submissions.', icon: Scale, iconClass: "text-rose-500" },
