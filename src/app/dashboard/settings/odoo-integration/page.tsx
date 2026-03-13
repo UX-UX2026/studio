@@ -14,6 +14,8 @@ import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/fires
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 type OdooConfig = {
     url?: string;
@@ -28,9 +30,10 @@ type OdooConfig = {
 type AppMetadata = {
     id: string;
     odooConfig?: OdooConfig;
+    accountingPlatform?: 'odoo' | 'quickbooks' | 'xero' | 'sage';
 };
 
-export default function OdooIntegrationPage() {
+export default function IntegrationsPage() {
     const { user, role, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
@@ -39,13 +42,17 @@ export default function OdooIntegrationPage() {
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
+    const [platform, setPlatform] = useState<'odoo' | 'quickbooks' | 'xero' | 'sage'>('odoo');
     const [config, setConfig] = useState<OdooConfig>({});
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
 
     useEffect(() => {
-        if (appMetadata?.odooConfig) {
-            setConfig(appMetadata.odooConfig);
+        if (appMetadata) {
+            setPlatform(appMetadata.accountingPlatform || 'odoo');
+            if (appMetadata.odooConfig) {
+                setConfig(appMetadata.odooConfig);
+            }
         }
     }, [appMetadata]);
 
@@ -77,22 +84,25 @@ export default function OdooIntegrationPage() {
         }
 
         setIsSaving(true);
-        const action = 'odoo_integration.update';
+        const action = 'integrations.update';
 
         try {
-            await setDoc(appMetadataRef, { odooConfig: config }, { merge: true });
-            toast({ title: "Settings Saved", description: "Odoo integration settings have been updated." });
+            await setDoc(appMetadataRef, { 
+                accountingPlatform: platform,
+                odooConfig: config 
+            }, { merge: true });
+            toast({ title: "Settings Saved", description: "Integration settings have been updated." });
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: user.displayName,
                 action: action,
-                details: `Updated Odoo integration settings.`,
-                entity: { type: 'system', id: 'odoo_config' },
+                details: `Updated integration settings for ${platform}.`,
+                entity: { type: 'system', id: 'integrations_config' },
                 timestamp: serverTimestamp()
             });
         } catch (error: any) {
-            console.error("Save Odoo Config Error:", error);
+            console.error("Save Integration Config Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Save Failed',
@@ -126,107 +136,142 @@ export default function OdooIntegrationPage() {
         }, 2000);
     };
 
+    const renderPlatformFields = () => {
+        switch (platform) {
+            case 'odoo':
+                return (
+                    <>
+                        <div>
+                            <h3 className="text-lg font-semibold mb-4">Connection Settings</h3>
+                            <div className="space-y-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="odoo-url">Odoo Instance URL</Label>
+                                    <Input
+                                        id="odoo-url"
+                                        value={config.url || ''}
+                                        onChange={(e) => handleConfigChange('url', e.target.value)}
+                                        placeholder="https://your-odoo-domain.com"
+                                    />
+                                </div>
+                                <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="odoo-db">Database Name</Label>
+                                        <Input
+                                            id="odoo-db"
+                                            value={config.db || ''}
+                                            onChange={(e) => handleConfigChange('db', e.target.value)}
+                                            placeholder="your_odoo_database"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="odoo-username">Username / Login</Label>
+                                        <Input
+                                            id="odoo-username"
+                                            value={config.username || ''}
+                                            onChange={(e) => handleConfigChange('username', e.target.value)}
+                                            placeholder="admin@example.com"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="odoo-api-key">API Key or Password</Label>
+                                    <Input
+                                        id="odoo-api-key"
+                                        type="password"
+                                        value={config.apiKey || ''}
+                                        onChange={(e) => handleConfigChange('apiKey', e.target.value)}
+                                        placeholder="••••••••••••••••"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        It is recommended to use a dedicated API key with limited permissions instead of a user password.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <Separator />
+
+                        <div>
+                            <h3 className="text-lg font-semibold mb-4">Model Mappings</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Specify the technical names of the Odoo models to use for synchronization.
+                            </p>
+                            <div className="space-y-4">
+                                 <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="odoo-po-model">Purchase Order Model</Label>
+                                        <Input
+                                            id="odoo-po-model"
+                                            value={config.purchaseOrderModel || ''}
+                                            onChange={(e) => handleConfigChange('purchaseOrderModel', e.target.value)}
+                                            placeholder="purchase.order"
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="odoo-bill-model">Vendor Bill Model</Label>
+                                        <Input
+                                            id="odoo-bill-model"
+                                            value={config.vendorBillModel || ''}
+                                            onChange={(e) => handleConfigChange('vendorBillModel', e.target.value)}
+                                            placeholder="account.move"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="odoo-vendor-model">Vendor Model</Label>
+                                    <Input
+                                        id="odoo-vendor-model"
+                                        value={config.vendorModel || ''}
+                                        onChange={(e) => handleConfigChange('vendorModel', e.target.value)}
+                                        placeholder="res.partner"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                );
+            case 'quickbooks':
+            case 'xero':
+            case 'sage':
+                return (
+                    <div className="flex flex-col items-center justify-center text-center p-8 border-2 border-dashed rounded-lg h-64">
+                        <h3 className="text-lg font-semibold">Coming Soon!</h3>
+                        <p className="text-muted-foreground">Integration for {platform.charAt(0).toUpperCase() + platform.slice(1)} is under development.</p>
+                    </div>
+                )
+        }
+    }
+
+
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Layers className="h-6 w-6 text-primary" />
-                        Odoo Integration Settings
+                        Accounting Integrations
                     </CardTitle>
                     <CardDescription>
-                        Configure the connection to your Odoo instance. This information will be used to synchronize financial data.
+                        Configure connections to your online accounting platforms to synchronize financial data.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                    <div>
-                        <h3 className="text-lg font-semibold mb-4">Connection Settings</h3>
-                        <div className="space-y-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="odoo-url">Odoo Instance URL</Label>
-                                <Input
-                                    id="odoo-url"
-                                    value={config.url || ''}
-                                    onChange={(e) => handleConfigChange('url', e.target.value)}
-                                    placeholder="https://your-odoo-domain.com"
-                                />
-                            </div>
-                            <div className="grid md:grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="odoo-db">Database Name</Label>
-                                    <Input
-                                        id="odoo-db"
-                                        value={config.db || ''}
-                                        onChange={(e) => handleConfigChange('db', e.target.value)}
-                                        placeholder="your_odoo_database"
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="odoo-username">Username / Login</Label>
-                                    <Input
-                                        id="odoo-username"
-                                        value={config.username || ''}
-                                        onChange={(e) => handleConfigChange('username', e.target.value)}
-                                        placeholder="admin@example.com"
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="odoo-api-key">API Key or Password</Label>
-                                <Input
-                                    id="odoo-api-key"
-                                    type="password"
-                                    value={config.apiKey || ''}
-                                    onChange={(e) => handleConfigChange('apiKey', e.target.value)}
-                                    placeholder="••••••••••••••••"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    It is recommended to use a dedicated API key with limited permissions instead of a user password.
-                                </p>
-                            </div>
-                        </div>
+                     <div>
+                        <Label htmlFor="platform-select">Select Platform</Label>
+                        <Select value={platform} onValueChange={(v) => setPlatform(v as any)}>
+                            <SelectTrigger id="platform-select" className="w-[280px] mt-2">
+                                <SelectValue placeholder="Select an accounting platform" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="odoo">Odoo</SelectItem>
+                                <SelectItem value="quickbooks">QuickBooks</SelectItem>
+                                <SelectItem value="xero">Xero</SelectItem>
+                                <SelectItem value="sage">Sage</SelectItem>
+                            </SelectContent>
+                        </Select>
                     </div>
-                    
                     <Separator />
-
-                    <div>
-                        <h3 className="text-lg font-semibold mb-4">Model Mappings</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                            Specify the technical names of the Odoo models to use for synchronization.
-                        </p>
-                        <div className="space-y-4">
-                             <div className="grid md:grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="odoo-po-model">Purchase Order Model</Label>
-                                    <Input
-                                        id="odoo-po-model"
-                                        value={config.purchaseOrderModel || ''}
-                                        onChange={(e) => handleConfigChange('purchaseOrderModel', e.target.value)}
-                                        placeholder="purchase.order"
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="odoo-bill-model">Vendor Bill Model</Label>
-                                    <Input
-                                        id="odoo-bill-model"
-                                        value={config.vendorBillModel || ''}
-                                        onChange={(e) => handleConfigChange('vendorBillModel', e.target.value)}
-                                        placeholder="account.move"
-                                    />
-                                </div>
-                            </div>
-                            <div className="grid gap-2">
-                                <Label htmlFor="odoo-vendor-model">Vendor Model</Label>
-                                <Input
-                                    id="odoo-vendor-model"
-                                    value={config.vendorModel || ''}
-                                    onChange={(e) => handleConfigChange('vendorModel', e.target.value)}
-                                    placeholder="res.partner"
-                                />
-                            </div>
-                        </div>
-                    </div>
-
+                    {renderPlatformFields()}
                 </CardContent>
                 <CardFooter className="flex justify-end gap-2 border-t pt-6">
                     <Button variant="outline" onClick={handleTestConnection} disabled={isSaving || isTesting}>
@@ -244,18 +289,18 @@ export default function OdooIntegrationPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Terminal className="h-6 w-6 text-primary" />
-                        Odoo Query Engine
+                        Query Engine
                     </CardTitle>
                     <CardDescription>
-                        This is a placeholder for a future feature that will allow you to build and test direct queries against the Odoo API.
+                        This is a placeholder for a future feature that will allow you to build and test direct queries against the selected platform's API.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
-                        <Label htmlFor="query-textarea">Odoo API Query</Label>
+                        <Label htmlFor="query-textarea">API Query</Label>
                         <Textarea 
                             id="query-textarea"
-                            placeholder={`// Example: Search for vendors in a specific city\n{\n  "model": "${config.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`}
+                            placeholder={`// Example for Odoo: Search for vendors in a specific city\n{\n  "model": "${config.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`}
                             rows={8}
                             className="font-mono text-xs"
                             disabled
