@@ -72,6 +72,11 @@ export default function IntegrationsPage() {
     const [isSaving, setIsSaving] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
 
+    const [query, setQuery] = useState('');
+    const [isQuerying, setIsQuerying] = useState(false);
+    const [queryResult, setQueryResult] = useState('');
+
+
     useEffect(() => {
         if (appMetadata) {
             setPlatform(appMetadata.accountingPlatform || 'odoo');
@@ -81,6 +86,26 @@ export default function IntegrationsPage() {
             setSageConfig(appMetadata.sageConfig || {});
         }
     }, [appMetadata]);
+
+    const getQueryPlaceholder = useMemo(() => {
+        switch (platform) {
+            case 'odoo':
+                return `// Example for Odoo: Search for vendors in a specific city\n{\n  "model": "${odooConfig.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`;
+            case 'quickbooks':
+                 return `// Example for QuickBooks: Query for an account by name\n"SELECT * FROM Account WHERE Name = 'Accounts Receivable'"`;
+            case 'xero':
+                return `// Example for Xero: Get all contacts\n// Method: GET\n// Endpoint: /api.xro/2.0/Contacts`;
+            case 'sage':
+                return `// Example for Sage: Get all purchase invoices\n// Method: GET\n// Endpoint: /purchase_invoices`;
+            default:
+                return "Enter your API query here."
+        }
+    }, [platform, odooConfig.vendorModel]);
+
+    useEffect(() => {
+        setQuery(getQueryPlaceholder);
+    }, [getQueryPlaceholder]);
+
 
     useEffect(() => {
         if (userLoading) return;
@@ -159,7 +184,7 @@ export default function IntegrationsPage() {
         setIsTesting(true);
         toast({
             title: 'Testing Connection...',
-            description: 'This is a placeholder. No real connection test is performed.',
+            description: 'This is a simulation. No real API call is being made.',
         });
         setTimeout(() => {
             setIsTesting(false);
@@ -167,6 +192,30 @@ export default function IntegrationsPage() {
                 variant: 'default',
                 title: 'Test Complete',
                 description: 'Placeholder test finished successfully.',
+            });
+        }, 2000);
+    };
+
+    const handleRunQuery = () => {
+        setIsQuerying(true);
+        setQueryResult('');
+        toast({
+            title: 'Running Query...',
+            description: 'This is a simulation. No real API call is being made.',
+        });
+        setTimeout(() => {
+            setIsQuerying(false);
+            setQueryResult(JSON.stringify({
+                "status": "success",
+                "message": "This is a mock response.",
+                "data": [
+                    { "id": 1, "name": "Mock Vendor A", "city": "Port Elizabeth" },
+                    { "id": 2, "name": "Mock Vendor B", "city": "Port Elizabeth" },
+                ]
+            }, null, 2));
+            toast({
+                title: 'Query Complete',
+                description: 'Mock response received.',
             });
         }, 2000);
     };
@@ -462,23 +511,44 @@ export default function IntegrationsPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Terminal className="h-6 w-6 text-primary" />
-                        Query Engine
+                        API Query Engine
                     </CardTitle>
                     <CardDescription>
-                        This is a placeholder for a future feature that will allow you to build and test direct queries against the selected platform's API.
+                        Build and test direct queries against the selected platform's API. This is a simulation tool for development.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-4">
-                        <Label htmlFor="query-textarea">API Query</Label>
-                        <Textarea 
-                            id="query-textarea"
-                            placeholder={`// Example for Odoo: Search for vendors in a specific city\n{\n  "model": "${odooConfig.vendorModel || 'res.partner'}",\n  "method": "search_read",\n  "args": [[["city", "=", "Port Elizabeth"]]],\n  "kwargs": {\n    "fields": ["name", "email", "phone"]\n  }\n}`}
-                            rows={8}
-                            className="font-mono text-xs"
-                            disabled
-                        />
-                        <Button disabled>Run Query</Button>
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <Label htmlFor="query-textarea">API Query</Label>
+                            <Textarea 
+                                id="query-textarea"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder={getQueryPlaceholder}
+                                rows={12}
+                                className="font-mono text-xs"
+                            />
+                            <Button onClick={handleRunQuery} disabled={isQuerying}>
+                                {isQuerying ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                                Run Query
+                            </Button>
+                        </div>
+                        <div className="space-y-4">
+                            <Label htmlFor="query-result">Result</Label>
+                            <div className="h-full min-h-[250px] rounded-md border bg-muted p-4">
+                                {isQuerying ? (
+                                     <div className="flex items-center justify-center h-full text-muted-foreground">
+                                        <Loader className="mr-2 h-4 w-4 animate-spin"/>
+                                        Executing query...
+                                    </div>
+                                ) : (
+                                    <pre id="query-result" className="text-xs whitespace-pre-wrap break-all">
+                                        {queryResult || "Query results will appear here."}
+                                    </pre>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
