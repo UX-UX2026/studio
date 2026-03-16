@@ -423,10 +423,18 @@ export default function DashboardPage() {
             if (logo && logo.imageUrl.startsWith('data:image')) {
                 doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
             }
+
+            if (request.companyName) {
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
+            }
+
             doc.setFontSize(18);
+            doc.setFont('helvetica', 'normal');
             doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
 
-            const detailsData = [
+            const detailsData: (string|number)[][] = [
                 ["Request ID", request.id],
                 ["Department", request.department],
                 ["Period", request.period],
@@ -434,6 +442,11 @@ export default function DashboardPage() {
                 ["Total", formatCurrency(request.total)],
                 ["Status", request.status],
             ];
+            
+            if (request.companyName) {
+                detailsData.splice(1, 0, ["Company", request.companyName]);
+            }
+
             autoTable(doc, {
                 startY: 42,
                 head: [['Request Details', '']],
@@ -496,15 +509,16 @@ export default function DashboardPage() {
         }
 
         // XLSX Logic
-        const detailsData = [
+        const detailsDataForSheet = [
             { Key: "Request ID", Value: request.id },
+            { Key: "Company", Value: request.companyName || 'N/A' },
             { Key: "Department", Value: request.department },
             { Key: "Period", Value: request.period },
             { Key: "Submitted By", Value: request.submittedBy },
             { Key: "Total", Value: formatCurrency(request.total) },
             { Key: "Status", Value: request.status },
         ];
-        const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+        const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
 
         const itemsData = request.items.map(item => ({
             'Type': item.type,

@@ -92,11 +92,18 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
         if (logo && logo.imageUrl.startsWith('data:image')) {
              doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
+        
+        if (request.companyName) {
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
+        }
 
         doc.setFontSize(18);
+        doc.setFont('helvetica', 'normal');
         doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
 
-        const detailsData = [
+        const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
             ["Department", request.department],
             ["Period", request.period],
@@ -104,6 +111,11 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             ["Total", formatCurrency(request.total)],
             ["Status", request.status],
         ];
+
+        if (request.companyName) {
+            detailsData.splice(1, 0, ["Company", request.companyName]);
+        }
+
         autoTable(doc, {
             startY: 42,
             head: [['Request Details', '']],
@@ -166,16 +178,16 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
     }
 
     // XLSX logic
-    // 1. Request Details
-    const detailsData = [
+    const detailsDataForSheet = [
         { Key: "Request ID", Value: request.id },
+        { Key: "Company", Value: request.companyName || 'N/A' },
         { Key: "Department", Value: request.department },
         { Key: "Period", Value: request.period },
         { Key: "Submitted By", Value: request.submittedBy },
         { Key: "Total", Value: formatCurrency(request.total) },
         { Key: "Status", Value: request.status },
     ];
-    const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+    const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
 
     // 2. Line Items
     const itemsData = request.items.map(item => ({
@@ -1045,7 +1057,7 @@ export default function ApprovalsPage() {
                                 <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                     <div className="flex-1">
                                         <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
-                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy}</p>
+                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy}</p>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>

@@ -62,7 +62,8 @@ type Department = {
         [period: string]: {
             status: 'Open' | 'Locked';
         }
-    }
+    },
+    companyIds?: string[];
 };
 
 type UserProfile = {
@@ -70,6 +71,11 @@ type UserProfile = {
     displayName: string;
     email: string;
     role: string;
+};
+
+type Company = {
+    id: string;
+    name: string;
 };
 
 type AppMetadata = {
@@ -125,10 +131,17 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
 
+        if (request.companyName) {
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
+        }
+
         doc.setFontSize(18);
+        doc.setFont('helvetica', 'normal');
         doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
 
-        const detailsData = [
+        const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
             ["Department", request.department],
             ["Period", request.period],
@@ -136,6 +149,11 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             ["Total", formatCurrency(request.total)],
             ["Status", request.status],
         ];
+
+        if (request.companyName) {
+            detailsData.splice(1, 0, ["Company", request.companyName]);
+        }
+
         autoTable(doc, {
             startY: 42,
             head: [['Request Details', '']],
@@ -197,15 +215,16 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
         return;
     }
 
-    const detailsData = [
+    const detailsDataForSheet = [
         { Key: "Request ID", Value: request.id },
+        { Key: "Company", Value: request.companyName || 'N/A' },
         { Key: "Department", Value: request.department },
         { Key: "Period", Value: request.period },
         { Key: "Submitted By", Value: request.submittedBy },
         { Key: "Total", Value: formatCurrency(request.total) },
         { Key: "Status", Value: request.status },
     ];
-    const detailsSheet = XLSX.utils.json_to_sheet(detailsData, { skipHeader: true });
+    const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
 
     const itemsData = request.items.map(item => ({
         'Type': item.type,
@@ -258,6 +277,7 @@ export default function ProcurementQuickSubmitPage() {
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
+    const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
     
     const [draftItems, setDraftItems] = useState<Item[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
@@ -289,6 +309,9 @@ export default function ProcurementQuickSubmitPage() {
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
     
     const allDraftsQuery = useMemo(() => {
         if (!firestore) return null;
@@ -353,6 +376,13 @@ export default function ProcurementQuickSubmitPage() {
         );
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+
+    const associatedCompanies = useMemo(() => {
+        if (!selectedDepartmentId || !departments || !companies) return [];
+        const dept = departments.find(d => d.id === selectedDepartmentId);
+        if (!dept || !dept.companyIds) return [];
+        return companies.filter(c => dept.companyIds!.includes(c.id));
+    }, [selectedDepartmentId, departments, companies]);
     
     const activeRequest = useMemo(() => {
         if (!editingRequestId || !periodRequests) return null;
@@ -459,6 +489,7 @@ export default function ProcurementQuickSubmitPage() {
             // A draft or submitted request exists. Load its items...
             const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
+            setSelectedCompanyId(existingRequest.companyId || '');
 
             // ...and also add any NEW recurring items from the master list that are not already present.
             const savedItemDescriptions = new Set(savedItems.map(i => i.description));
@@ -471,6 +502,7 @@ export default function ProcurementQuickSubmitPage() {
         } else {
             // This is a brand new submission for the period.
             setEditingRequestId(null);
+            setSelectedCompanyId('');
             // Start with all active recurring items from the master list.
             const initialItems = recurringItems
                 ?.filter(item => item.active)
@@ -554,6 +586,16 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
         }
+        
+        const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
+        if (associatedCompanies.length > 0 && !selectedCompanyId && !isDraft) {
+            toast({
+                variant: "destructive",
+                title: "Company Required",
+                description: "Please select a company for this submission.",
+            });
+            return;
+        }
 
         const activePipelineRequest = periodRequests?.find(req => 
             req.departmentId === selectedDepartmentId && 
@@ -606,6 +648,8 @@ export default function ProcurementQuickSubmitPage() {
         const baseRequestData = {
             department: departmentName,
             departmentId: selectedDepartmentId,
+            companyId: selectedCompanyId,
+            companyName: selectedCompany?.name || '',
             period: selectedPeriod,
             total: submissionTotal,
             status: newStatus,
@@ -1099,7 +1143,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading;
+    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading || companiesLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -1127,8 +1171,8 @@ export default function ProcurementQuickSubmitPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex flex-wrap items-end gap-4">
-                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
+                        <div className="grid items-center gap-1.5">
                             <Label htmlFor="department">Department</Label>
                             <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role === 'Manager' && !!userDepartment)}>
                                 <SelectTrigger id="department">
@@ -1143,7 +1187,24 @@ export default function ProcurementQuickSubmitPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                        <div className="grid items-center gap-1.5">
+                           <Label htmlFor="company">Company</Label>
+                            <Select 
+                                value={selectedCompanyId} 
+                                onValueChange={setSelectedCompanyId}
+                                disabled={isLocked || associatedCompanies.length === 0}
+                            >
+                                <SelectTrigger id="company">
+                                    <SelectValue placeholder={associatedCompanies.length === 0 ? "No companies linked" : "Select company..."} />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {associatedCompanies.map(c => (
+                                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid items-center gap-1.5">
                             <Label htmlFor="period">Procurement Period</Label>
                              <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}>
                                 <SelectTrigger id="period">
@@ -1158,7 +1219,7 @@ export default function ProcurementQuickSubmitPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
+                        <div className="grid items-center gap-1.5">
                             <Label htmlFor="load-previous">Load from Previous</Label>
                             <Select 
                                 onValueChange={val => {
