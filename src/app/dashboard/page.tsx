@@ -424,11 +424,9 @@ export default function DashboardPage() {
                 doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
             }
 
-            if (request.companyName) {
-                doc.setFontSize(14);
-                doc.setFont('helvetica', 'bold');
-                doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
-            }
+            doc.setFontSize(14);
+            doc.setFont('helvetica', 'bold');
+            doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
 
             doc.setFontSize(18);
             doc.setFont('helvetica', 'normal');
@@ -436,16 +434,13 @@ export default function DashboardPage() {
 
             const detailsData: (string|number)[][] = [
                 ["Request ID", request.id],
+                ["Company", request.companyName || 'N/A'],
                 ["Department", request.department],
                 ["Period", request.period],
-                ["Submitted By", request.submittedBy],
+                ["Submitted By", request.submittedBy || 'N/A'],
                 ["Total", formatCurrency(request.total)],
                 ["Status", request.status],
             ];
-            
-            if (request.companyName) {
-                detailsData.splice(1, 0, ["Company", request.companyName]);
-            }
 
             autoTable(doc, {
                 startY: 42,
@@ -514,7 +509,7 @@ export default function DashboardPage() {
             { Key: "Company", Value: request.companyName || 'N/A' },
             { Key: "Department", Value: request.department },
             { Key: "Period", Value: request.period },
-            { Key: "Submitted By", Value: request.submittedBy },
+            { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
             { Key: "Total", Value: formatCurrency(request.total) },
             { Key: "Status", Value: request.status },
         ];
@@ -756,7 +751,7 @@ export default function DashboardPage() {
                                   <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
                                 </TableCell>
                                 <TableCell>{req.period}</TableCell>
-                                <TableCell>{req.submittedBy}</TableCell>
+                                <TableCell>{req.submittedBy || 'N/A'}</TableCell>
                                 <TableCell>{getStatusBadge(req.status)}</TableCell>
                                 <TableCell className="text-right font-mono">
                                   {formatCurrency(req.total)}

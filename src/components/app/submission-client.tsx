@@ -22,7 +22,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Lock, Plus, Trash2, Upload, Paperclip, History, Loader } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { type User, type UserRole } from "@/firebase/auth/use-user";
+import { type User, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { cn } from "@/lib/utils";
 import { procurementCategories } from "@/lib/procurement-categories";
 import {
@@ -73,6 +73,7 @@ const formatCurrency = (amount: number) => {
 
 export function SubmissionClient({ 
     user,
+    profile,
     userRole, 
     items,
     setItems,
@@ -81,6 +82,7 @@ export function SubmissionClient({
     recurringLoading,
 }: { 
     user: User,
+    profile: UserProfile | null,
     userRole: UserRole, 
     items: Item[],
     setItems: React.Dispatch<React.SetStateAction<Item[]>>,
@@ -151,7 +153,7 @@ export function SubmissionClient({
       fulfillmentComments: [],
       comments: "",
       addedById: user.uid,
-      addedByName: user.displayName || user.email || 'User',
+      addedByName: profile?.displayName || user.email || 'User',
     };
     setItems(prev => [...prev, newItem]);
   };
@@ -173,7 +175,7 @@ export function SubmissionClient({
       receivedQty: 0,
       fulfillmentComments: [],
       addedById: user.uid,
-      addedByName: user.displayName || user.email || 'User',
+      addedByName: profile?.displayName || user.email || 'User',
     };
     setItems(prev => [...prev, newItem]);
     toast({ title: "Item Added", description: `Added "${itemToAdd.name}" to the submission.`})
@@ -222,7 +224,7 @@ export function SubmissionClient({
                     fulfillmentComments: [],
                     comments: item.comments || "",
                     addedById: user.uid,
-                    addedByName: user.displayName || user.email || 'User',
+                    addedByName: profile?.displayName || user.email || 'User',
                 };
             }).filter((item): item is Item => item !== null);
             

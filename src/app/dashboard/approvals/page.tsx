@@ -93,11 +93,9 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
              doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
         
-        if (request.companyName) {
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
-        }
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
 
         doc.setFontSize(18);
         doc.setFont('helvetica', 'normal');
@@ -105,16 +103,13 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
 
         const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
+            ["Company", request.companyName || 'N/A'],
             ["Department", request.department],
             ["Period", request.period],
-            ["Submitted By", request.submittedBy],
+            ["Submitted By", request.submittedBy || 'N/A'],
             ["Total", formatCurrency(request.total)],
             ["Status", request.status],
         ];
-
-        if (request.companyName) {
-            detailsData.splice(1, 0, ["Company", request.companyName]);
-        }
 
         autoTable(doc, {
             startY: 42,
@@ -183,7 +178,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
         { Key: "Company", Value: request.companyName || 'N/A' },
         { Key: "Department", Value: request.department },
         { Key: "Period", Value: request.period },
-        { Key: "Submitted By", Value: request.submittedBy },
+        { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
         { Key: "Total", Value: formatCurrency(request.total) },
         { Key: "Status", Value: request.status },
     ];
@@ -470,13 +465,13 @@ export default function ApprovalsPage() {
     }
     
     const handleApprove = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers || !profile) return;
 
         setIsSubmittingAction(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = user.displayName || role || 'System';
+        const actorName = profile.displayName || user.displayName || role || 'System';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
@@ -574,7 +569,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 details: auditDetails,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -716,7 +711,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action: 'request.approve',
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -732,7 +727,7 @@ export default function ApprovalsPage() {
     };
 
     const handleConfirmReject = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
         
         if (!newComment.trim()) {
             toast({
@@ -753,13 +748,13 @@ export default function ApprovalsPage() {
             newTimeline[currentStepIndex] = {
                 ...newTimeline[currentStepIndex],
                 status: 'rejected',
-                actor: user.displayName || 'System',
+                actor: profile.displayName || user.displayName || 'System',
                 date: currentDate,
             };
         }
         
         const commentData = {
-            actor: user.displayName || "User",
+            actor: profile.displayName || user.displayName || "User",
             actorId: user.uid,
             text: `REJECTED: ${newComment}`,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -785,7 +780,7 @@ export default function ApprovalsPage() {
             
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -820,7 +815,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -831,7 +826,7 @@ export default function ApprovalsPage() {
     };
     
     const handleRaiseQuery = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
 
         if (!newComment.trim()) {
             toast({
@@ -846,7 +841,7 @@ export default function ApprovalsPage() {
         const newStatus: ApprovalRequest['status'] = 'Queries Raised';
 
         const commentData = {
-            actor: user.displayName || "User",
+            actor: profile.displayName || user.displayName || "User",
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -871,7 +866,7 @@ export default function ApprovalsPage() {
             
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -906,7 +901,7 @@ export default function ApprovalsPage() {
             });
              await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -918,11 +913,11 @@ export default function ApprovalsPage() {
 
 
     const handleAddComment = async () => {
-        if (!activeRequest || !user || !newComment.trim() || !firestore) return;
+        if (!activeRequest || !user || !newComment.trim() || !firestore || !profile) return;
 
         setIsSubmittingAction(true);
         const commentData = {
-            actor: user.displayName || "User",
+            actor: profile.displayName || user.displayName || "User",
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -941,7 +936,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
@@ -957,7 +952,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -1037,7 +1032,7 @@ export default function ApprovalsPage() {
                                                             <p className="text-xs text-muted-foreground">{req.period}</p>
                                                             <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
                                                         </div>
-                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p>
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -1057,7 +1052,7 @@ export default function ApprovalsPage() {
                                 <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                     <div className="flex-1">
                                         <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
-                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy}</p>
+                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>

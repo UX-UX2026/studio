@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell, X } from "lucide-react";
@@ -66,7 +66,7 @@ type Department = {
     companyIds?: string[];
 };
 
-type UserProfile = {
+type UserProfileData = {
     id: string;
     displayName: string;
     email: string;
@@ -131,11 +131,9 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
         }
 
-        if (request.companyName) {
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text(request.companyName, doc.internal.pageSize.getWidth() - 14, 20, { align: 'right', maxWidth: 100 });
-        }
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
 
         doc.setFontSize(18);
         doc.setFont('helvetica', 'normal');
@@ -143,16 +141,13 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
 
         const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
+            ["Company", request.companyName || 'N/A'],
             ["Department", request.department],
             ["Period", request.period],
-            ["Submitted By", request.submittedBy],
+            ["Submitted By", request.submittedBy || 'N/A'],
             ["Total", formatCurrency(request.total)],
             ["Status", request.status],
         ];
-
-        if (request.companyName) {
-            detailsData.splice(1, 0, ["Company", request.companyName]);
-        }
 
         autoTable(doc, {
             startY: 42,
@@ -220,7 +215,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
         { Key: "Company", Value: request.companyName || 'N/A' },
         { Key: "Department", Value: request.department },
         { Key: "Period", Value: request.period },
-        { Key: "Submitted By", Value: request.submittedBy },
+        { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
         { Key: "Total", Value: formatCurrency(request.total) },
         { Key: "Status", Value: request.status },
     ];
@@ -269,7 +264,7 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, role, department: userDepartment, loading: userLoading } = useUser();
+    const { user, profile, role, department: userDepartment, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -364,7 +359,7 @@ export default function ProcurementQuickSubmitPage() {
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
-    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfileData>(usersQuery);
 
     const previousSubmissionsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
@@ -552,7 +547,7 @@ export default function ProcurementQuickSubmitPage() {
         try {
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile?.displayName || user.displayName,
                 action: action,
                 details: `User requested to edit locked submission with reason: "${editRequestReason}"`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
@@ -573,7 +568,7 @@ export default function ProcurementQuickSubmitPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile?.displayName || user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -582,7 +577,7 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     const handleSaveRequest = async (isDraft: boolean) => {
-        if (!user || !departmentName || !selectedDepartmentId || !firestore) {
+        if (!user || !profile || !departmentName || !selectedDepartmentId || !firestore) {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
             return;
         }
@@ -621,7 +616,7 @@ export default function ProcurementQuickSubmitPage() {
         const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
         
         const defaultTimeline = [
-            { stage: "Request Submission", actor: user.displayName || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
+            { stage: "Request Submission", actor: profile.displayName || user.email || 'Requester', date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
             { stage: "Manager Review", actor: "Manager", date: null, status: newStatus === 'Draft' ? 'waiting' : ('pending' as const) },
             { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
             { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
@@ -637,7 +632,7 @@ export default function ProcurementQuickSubmitPage() {
           : defaultTimeline;
         
         if (timeline.length > 0) {
-            timeline[0].actor = user.displayName || 'Requester';
+            timeline[0].actor = profile.displayName || user.email || 'Requester';
             if(isDraft) {
                 for (let i = 1; i < timeline.length; i++) {
                     timeline[i].status = 'waiting';
@@ -653,7 +648,7 @@ export default function ProcurementQuickSubmitPage() {
             period: selectedPeriod,
             total: submissionTotal,
             status: newStatus,
-            submittedBy: user.displayName,
+            submittedBy: profile.displayName || user.email || "Unknown User",
             submittedById: user.uid,
             timeline: timeline,
             comments: editingRequestId ? periodRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
@@ -693,7 +688,7 @@ export default function ProcurementQuickSubmitPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action: action,
                 details: `${isDraft ? (editingRequestId ? 'Updated draft' : 'Created draft') : 'Submitted request'} for ${selectedPeriod}.`,
                 entity: { type: 'procurementRequest', id: docId },
@@ -711,7 +706,7 @@ export default function ProcurementQuickSubmitPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -720,13 +715,13 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     const handleApprove = async () => {
-        if (!activeRequest || !editingRequestId || !user || !firestore || !allUsers) return;
+        if (!activeRequest || !editingRequestId || !user || !firestore || !allUsers || !profile) return;
 
         setIsSaving(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = user.displayName || role || 'System';
+        const actorName = profile.displayName || user.displayName || role || 'System';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
@@ -790,7 +785,7 @@ export default function ProcurementQuickSubmitPage() {
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action,
                 details: auditDetails,
                 entity: { type: 'procurementRequest', id: editingRequestId },
@@ -852,7 +847,7 @@ export default function ProcurementQuickSubmitPage() {
     };
     
     const handleConfirmReject = async () => {
-        if (!activeRequest || !editingRequestId || !user || !firestore) return;
+        if (!activeRequest || !editingRequestId || !user || !firestore || !profile) return;
         
         if (!rejectionReason.trim()) {
             toast({
@@ -873,13 +868,13 @@ export default function ProcurementQuickSubmitPage() {
             newTimeline[currentStepIndex] = {
                 ...newTimeline[currentStepIndex],
                 status: 'rejected',
-                actor: user.displayName || 'System',
+                actor: profile.displayName || user.displayName || 'System',
                 date: currentDate,
             };
         }
         
         const commentData = {
-            actor: user.displayName || "User",
+            actor: profile.displayName || user.displayName || "User",
             actorId: user.uid,
             text: `REJECTED: ${rejectionReason}`,
             timestamp: new Date().toLocaleString("en-GB"),
@@ -899,7 +894,7 @@ export default function ProcurementQuickSubmitPage() {
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: profile.displayName || user.displayName || 'System',
                 action: 'request.reject',
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
@@ -953,7 +948,7 @@ export default function ProcurementQuickSubmitPage() {
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile?.displayName || user.displayName,
                 action: action,
                 details: `Archived draft for ${draftToArchive.period}`,
                 entity: { type: 'procurementRequest', id: deletingRequestId },
@@ -970,7 +965,7 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile?.displayName || user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -982,7 +977,7 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     const handleArchiveCurrentDraft = async () => {
-        if (!editingRequestId || !user || !firestore) return;
+        if (!editingRequestId || !user || !firestore || !profile) return;
         if (!archiveReason.trim()) {
             toast({ variant: 'destructive', title: 'Reason Required', description: 'Please provide a reason for archiving this draft.' });
             return;
@@ -1001,7 +996,7 @@ export default function ProcurementQuickSubmitPage() {
                 status: 'Archived', 
                 updatedAt: serverTimestamp(),
                 comments: arrayUnion({
-                    actor: user.displayName || "User",
+                    actor: profile.displayName || user.displayName || "User",
                     actorId: user.uid,
                     text: `ARCHIVED: ${archiveReason}`,
                     timestamp: new Date().toLocaleString("en-GB"),
@@ -1012,7 +1007,7 @@ export default function ProcurementQuickSubmitPage() {
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action: action,
                 details: `Archived draft for ${draftToArchive.period} with reason: ${archiveReason}`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
@@ -1026,7 +1021,7 @@ export default function ProcurementQuickSubmitPage() {
              toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
              await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -1038,7 +1033,7 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     const handleLoadPrevious = () => {
-        if (!previousSubmissionToLoad || !previousSubmissions || !user) return;
+        if (!previousSubmissionToLoad || !previousSubmissions || !user || !profile) return;
         const submissionToLoad = previousSubmissions.find(s => s.id === previousSubmissionToLoad);
         if (!submissionToLoad) return;
     
@@ -1047,7 +1042,7 @@ export default function ProcurementQuickSubmitPage() {
             id: Date.now() + index, // Give it a new temporary ID for the client
             type: 'One-Off' as const, // Treat all loaded items as one-off
             addedById: user.uid,
-            addedByName: user.displayName || user.email || 'User',
+            addedByName: profile.displayName || user.email || 'User',
             fulfillmentStatus: 'Pending' as const, // Reset fulfillment state
             receivedQty: 0,
             fulfillmentComments: [],
@@ -1061,7 +1056,7 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     const handleNotifyManager = async () => {
-        if (!user || !firestore || !selectedDepartmentId || !departments || !allUsers) {
+        if (!user || !profile || !firestore || !selectedDepartmentId || !departments || !allUsers) {
             toast({ variant: "destructive", title: "Cannot notify", description: "Missing required data to find manager." });
             return;
         }
@@ -1082,7 +1077,7 @@ export default function ProcurementQuickSubmitPage() {
             
             const link = `${window.location.origin}/dashboard/procurement?deptId=${selectedDepartmentId}&period=${encodeURIComponent(selectedPeriod)}`;
             const emailHtml = submissionReadyForReviewTemplate(
-                { department: department.name, period: selectedPeriod, requesterName: user.displayName || 'A requester' },
+                { department: department.name, period: selectedPeriod, requesterName: profile.displayName || user.email || 'A requester' },
                 link
             );
     
@@ -1105,7 +1100,7 @@ export default function ProcurementQuickSubmitPage() {
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action,
                 details: `Notified manager for period ${selectedPeriod} in ${department.name}`,
                 entity: { type: 'procurementRequest', id: editingRequestId || 'new' },
@@ -1121,7 +1116,7 @@ export default function ProcurementQuickSubmitPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: profile.displayName || user.displayName,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -1329,6 +1324,7 @@ export default function ProcurementQuickSubmitPage() {
                         <TabsContent value="submission">
                             <SubmissionClient 
                                 user={user}
+                                profile={profile}
                                 userRole={role} 
                                 items={draftItems}
                                 setItems={setDraftItems}
