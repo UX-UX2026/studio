@@ -36,7 +36,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc, orderBy } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
@@ -76,6 +76,19 @@ type BudgetItem = {
     yearTotal: number;
 };
 
+type AuditEvent = {
+    id: string;
+    userId: string;
+    userName: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
+    entity?: {
+        type: string;
+        id: string;
+    };
+};
+
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
       style: "currency",
@@ -85,7 +98,7 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf') => {
+const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
     if (format === 'pdf') {
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
@@ -167,6 +180,26 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             body: timelineData,
             headStyles: { fillColor: [201, 115, 83] },
         });
+
+        if (auditLogs && auditLogs.length > 0) {
+            const emailLog = auditLogs
+                .filter(log => log.action === 'notification.sent')
+                .map(log => ({
+                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                    details: log.details,
+                }));
+        
+            if (emailLog.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Notification Email History']],
+                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                    theme: 'striped',
+                    headStyles: { fillColor: [201, 115, 83] },
+                    styles: { fontSize: 8 },
+                });
+            }
+        }
 
         doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
         return;
@@ -322,6 +355,16 @@ export default function ApprovalsPage() {
     }, [firestore, activeRequest]);
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
     
+    const auditLogsQuery = useMemo(() => {
+        if (!firestore || !activeRequest?.id) return null;
+        return query(
+            collection(firestore, 'auditLogs'), 
+            where('entity.id', '==', activeRequest.id),
+            orderBy('timestamp', 'asc')
+        );
+    }, [firestore, activeRequest]);
+    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+
     const summaryData = useBudgetSummary(
         activeRequest?.items || [],
         activeRequest?.departmentId || '',
@@ -330,7 +373,7 @@ export default function ApprovalsPage() {
         departments
     );
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || (!!activeRequest && budgetsLoading);
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || (!!activeRequest && budgetsLoading) || (!!activeRequest && auditLogsLoading);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -471,7 +514,7 @@ export default function ApprovalsPage() {
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
@@ -559,7 +602,7 @@ export default function ApprovalsPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx');
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs);
             }
 
             let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
@@ -569,7 +612,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: `${profile.displayName || user.displayName || 'System'} (${role || 'N/A'})`,
+                userName: actorName,
                 action,
                 details: auditDetails,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -711,7 +754,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: `${profile.displayName || user.displayName || 'System'} (${role || 'N/A'})`,
+                userName: actorName,
                 action: 'request.approve',
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -742,7 +785,7 @@ export default function ApprovalsPage() {
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
-        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
 
         let newTimeline = [...activeRequest.timeline];
         const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
@@ -842,7 +885,7 @@ export default function ApprovalsPage() {
         setIsSubmittingAction(true);
         const newStatus: ApprovalRequest['status'] = 'Queries Raised';
 
-        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
 
         const commentData = {
             actor: actorString,
@@ -920,7 +963,7 @@ export default function ApprovalsPage() {
         if (!activeRequest || !user || !newComment.trim() || !firestore || !profile) return;
 
         setIsSubmittingAction(true);
-        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const commentData = {
             actor: actorString,
             actorId: user.uid,
@@ -1319,10 +1362,10 @@ export default function ApprovalsPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx')}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx', auditLogs)}>
                                                             Export as Excel (.xlsx)
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf')}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf', auditLogs)}>
                                                             Export as PDF (.pdf)
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -1409,3 +1452,4 @@ export default function ApprovalsPage() {
     </>
   );
 }
+

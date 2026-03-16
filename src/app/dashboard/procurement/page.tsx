@@ -123,7 +123,20 @@ type WorkflowStage = {
     permissions: string[];
 };
 
-const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf') => {
+type AuditEvent = {
+    id: string;
+    userId: string;
+    userName: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
+    entity?: {
+        type: string;
+        id: string;
+    };
+};
+
+const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
     if (format === 'pdf') {
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
@@ -205,6 +218,26 @@ const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnTyp
             body: timelineData,
             headStyles: { fillColor: [201, 115, 83] },
         });
+
+        if (auditLogs && auditLogs.length > 0) {
+            const emailLog = auditLogs
+                .filter(log => log.action === 'notification.sent')
+                .map(log => ({
+                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                    details: log.details,
+                }));
+        
+            if (emailLog.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Notification Email History']],
+                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                    theme: 'striped',
+                    headStyles: { fillColor: [201, 115, 83] },
+                    styles: { fontSize: 8 },
+                });
+            }
+        }
 
         doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
         return;
@@ -371,6 +404,16 @@ export default function ProcurementQuickSubmitPage() {
         );
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+
+    const auditLogsQuery = useMemo(() => {
+        if (!firestore || !editingRequestId) return null;
+        return query(
+            collection(firestore, 'auditLogs'), 
+            where('entity.id', '==', editingRequestId),
+            orderBy('timestamp', 'asc')
+        );
+    }, [firestore, editingRequestId]);
+    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
 
     const associatedCompanies = useMemo(() => {
         if (!selectedDepartmentId || !departments || !companies) return [];
@@ -547,7 +590,7 @@ export default function ProcurementQuickSubmitPage() {
         try {
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: `${profile?.displayName || user.displayName} (${role || 'N/A'})`,
+                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
                 action: action,
                 details: `User requested to edit locked submission with reason: "${editRequestReason}"`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
@@ -568,7 +611,7 @@ export default function ProcurementQuickSubmitPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: `${profile?.displayName || user.displayName} (${role || 'N/A'})`,
+                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -615,7 +658,7 @@ export default function ProcurementQuickSubmitPage() {
         
         const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
         
-        const actorString = `${profile.displayName || user.email || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
 
         const defaultTimeline = [
             { stage: "Request Submission", actor: actorString, date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
@@ -723,7 +766,7 @@ export default function ProcurementQuickSubmitPage() {
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
@@ -777,7 +820,7 @@ export default function ProcurementQuickSubmitPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx');
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs);
             }
 
             let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
@@ -864,7 +907,7 @@ export default function ProcurementQuickSubmitPage() {
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
-        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         
         let newTimeline = [...activeRequest.timeline];
         const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
@@ -952,7 +995,7 @@ export default function ProcurementQuickSubmitPage() {
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: `${profile.displayName || user.displayName} (${role || 'N/A'})`,
+                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
                 action: action,
                 details: `Archived draft for ${draftToArchive.period}`,
                 entity: { type: 'procurementRequest', id: deletingRequestId },
@@ -969,7 +1012,7 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: `${profile.displayName || user.displayName} (${role || 'N/A'})`,
+                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -993,7 +1036,7 @@ export default function ProcurementQuickSubmitPage() {
             return;
         }
         
-        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const action = 'request.draft_archive_with_reason';
         try {
             const docRef = doc(firestore, 'procurementRequests', editingRequestId);
@@ -1047,7 +1090,7 @@ export default function ProcurementQuickSubmitPage() {
             id: Date.now() + index, // Give it a new temporary ID for the client
             type: 'One-Off' as const, // Treat all loaded items as one-off
             addedById: user.uid,
-            addedByName: `${profile.displayName || user.email || 'User'} (${role || 'N/A'})`,
+            addedByName: `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`,
             fulfillmentStatus: 'Pending' as const, // Reset fulfillment state
             receivedQty: 0,
             fulfillmentComments: [],
@@ -1068,7 +1111,7 @@ export default function ProcurementQuickSubmitPage() {
         
         setIsNotifying(true);
         const action = 'request.notify_manager';
-        const actorString = `${profile.displayName || user.email || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
     
         try {
             const department = departments.find(d => d.id === selectedDepartmentId);
@@ -1144,7 +1187,7 @@ export default function ProcurementQuickSubmitPage() {
       }
     }, [user, role, userLoading, router]);
 
-    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading || companiesLoading;
+    const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading || companiesLoading || auditLogsLoading;
     const monthForHeader = selectedPeriod.split(' ')[0];
 
     const budgetProgress = useMemo(() => {
@@ -1550,7 +1593,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
@@ -1604,3 +1647,4 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+

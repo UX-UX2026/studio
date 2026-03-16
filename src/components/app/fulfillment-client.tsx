@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -70,7 +71,7 @@ const getStatusBadge = (status: string) => {
 };
 
 export function FulfillmentClient({ items: initialItems, role }: { items: FulfillmentItem[], role: UserRole }) {
-  const { user } = useUser();
+  const { user, profile } = useUser();
   const [items, setItems] = useState(initialItems);
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<FulfillmentItem | null>(null);
@@ -87,7 +88,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   
   const handleItemUpdate = async (itemId: string | number, field: keyof FulfillmentItem, value: any) => {
       const itemToUpdate = items.find(i => i.id === itemId);
-      if (!itemToUpdate || !firestore || !user) return;
+      if (!itemToUpdate || !firestore || !user || !profile) return;
       
       const requestRef = doc(firestore, 'procurementRequests', itemToUpdate.procurementRequestId);
       const action = 'fulfillment.update';
@@ -119,7 +120,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
 
           const auditLogData = {
             userId: user.uid,
-            userName: user.displayName,
+            userName: `${profile.displayName || user.email} (${role})`,
             action: action,
             details: `Updated field '${String(field)}' to '${value}' for item '${itemToUpdate.item}'`,
             entity: { type: 'procurementRequest', id: itemToUpdate.procurementRequestId },
@@ -136,7 +137,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: `${profile?.displayName || user.email} (${role})`,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -150,9 +151,9 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
   };
 
   const handleAddComment = () => {
-      if (!selectedItem || !newComment.trim() || !role) return;
+      if (!selectedItem || !newComment.trim() || !role || !profile || !user) return;
 
-      const newCommentText = `${role}: ${newComment}`;
+      const newCommentText = `${profile.displayName || user.email} (${role}): ${newComment}`;
       const updatedComments = [...(selectedItem.fulfillmentComments || []), newCommentText];
       
       handleItemUpdate(selectedItem.id, 'fulfillmentComments', updatedComments);
@@ -370,3 +371,4 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     </>
   );
 }
+
