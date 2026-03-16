@@ -17,6 +17,15 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+    DropdownMenuCheckboxItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -31,6 +40,7 @@ type Department = {
     name: string;
     managerId: string | null;
     budget: number;
+    companyIds?: string[];
 };
 
 type UserProfile = {
@@ -38,6 +48,11 @@ type UserProfile = {
     displayName: string;
     role: string;
 }
+
+type Company = {
+    id: string;
+    name: string;
+};
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -58,6 +73,9 @@ export default function DepartmentsPage() {
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
     const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
 
+    const companiesQuery = useMemo(() => query(collection(firestore, 'companies'), orderBy('name')), [firestore]);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
+
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingDepartment, setEditingDepartment] = useState<Department | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -66,6 +84,7 @@ export default function DepartmentsPage() {
     const [name, setName] = useState('');
     const [managerId, setManagerId] = useState<string | null>(null);
     const [budget, setBudget] = useState(0);
+    const [companyIds, setCompanyIds] = useState<string[]>([]);
     
     const { toast } = useToast();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -87,15 +106,17 @@ export default function DepartmentsPage() {
                 setName(editingDepartment.name);
                 setManagerId(editingDepartment.managerId);
                 setBudget(editingDepartment.budget);
+                setCompanyIds(editingDepartment.companyIds || []);
             } else {
                 setName('');
                 setManagerId(null);
                 setBudget(0);
+                setCompanyIds([]);
             }
         }
     }, [editingDepartment, isDialogOpen]);
     
-    const loading = userLoading || departmentsLoading || usersLoading;
+    const loading = userLoading || departmentsLoading || usersLoading || companiesLoading;
 
     if (loading || !user || role !== 'Administrator') {
         return (
@@ -121,7 +142,7 @@ export default function DepartmentsPage() {
         }
 
         setIsSaving(true);
-        const departmentData = { name, managerId, budget };
+        const departmentData = { name, managerId, budget, companyIds };
         const action = editingDepartment ? 'department.update' : 'department.create';
         log('Prepared department data for saving.', { departmentData });
 
@@ -223,6 +244,11 @@ export default function DepartmentsPage() {
         if (!managerId) return 'Unassigned';
         return users?.find(u => u.id === managerId)?.displayName || 'Unknown';
     }
+
+    const getCompanyNames = (companyIds: string[] | undefined) => {
+        if (!companyIds || !companies || companyIds.length === 0) return 'Unassigned';
+        return companyIds.map(id => companies.find(c => c.id === id)?.name || id.substring(0,6)+'...').join(', ');
+    };
 
     const handleImportClick = () => {
         fileInputRef.current?.click();
@@ -338,6 +364,7 @@ export default function DepartmentsPage() {
                                 <TableRow>
                                     <TableHead>Department Name</TableHead>
                                     <TableHead>Manager</TableHead>
+                                    <TableHead>Companies</TableHead>
                                     <TableHead className="text-right">Approved Budget</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -347,6 +374,7 @@ export default function DepartmentsPage() {
                                     <TableRow key={dept.id}>
                                         <TableCell className="font-medium">{dept.name}</TableCell>
                                         <TableCell>{getManagerName(dept.managerId)}</TableCell>
+                                        <TableCell className="text-xs text-muted-foreground">{getCompanyNames(dept.companyIds)}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(dept.budget)}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(dept)}>
@@ -390,6 +418,36 @@ export default function DepartmentsPage() {
                                     ))}
                                 </SelectContent>
                             </Select>
+                        </div>
+                         <div className="grid grid-cols-4 items-center gap-4">
+                            <Label className="text-right">Companies</Label>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="col-span-3 text-left font-normal justify-between">
+                                        <span>{companyIds.length > 0 ? `${companyIds.length} selected` : "Select companies"}</span>
+                                        <ChevronDown className="h-4 w-4 opacity-50" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-56">
+                                    <DropdownMenuLabel>Associated Companies</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {companies?.map(company => (
+                                        <DropdownMenuCheckboxItem
+                                            key={company.id}
+                                            checked={companyIds.includes(company.id)}
+                                            onCheckedChange={(checked) => {
+                                                if (checked) {
+                                                    setCompanyIds(prev => [...prev, company.id]);
+                                                } else {
+                                                    setCompanyIds(prev => prev.filter(id => id !== company.id));
+                                                }
+                                            }}
+                                        >
+                                            {company.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="budget" className="text-right">Budget (ZAR)</Label>

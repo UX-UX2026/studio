@@ -24,6 +24,8 @@ export type ApprovalRequest = {
     status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment' | 'Archived';
     submittedBy: string;
     submittedById: string;
+    companyId?: string;
+    companyName?: string;
     timeline: {
         stage: string;
         actor: string;
