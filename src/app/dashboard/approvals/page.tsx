@@ -471,7 +471,7 @@ export default function ApprovalsPage() {
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = profile.displayName || user.displayName || role || 'System';
+        const actorName = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
@@ -569,7 +569,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: `${profile.displayName || user.displayName || 'System'} (${role || 'N/A'})`,
                 action,
                 details: auditDetails,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -711,7 +711,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: `${profile.displayName || user.displayName || 'System'} (${role || 'N/A'})`,
                 action: 'request.approve',
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -742,19 +742,21 @@ export default function ApprovalsPage() {
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
+        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+
         let newTimeline = [...activeRequest.timeline];
         const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
         if (currentStepIndex !== -1) {
             newTimeline[currentStepIndex] = {
                 ...newTimeline[currentStepIndex],
                 status: 'rejected',
-                actor: profile.displayName || user.displayName || 'System',
+                actor: actorString,
                 date: currentDate,
             };
         }
         
         const commentData = {
-            actor: profile.displayName || user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: `REJECTED: ${newComment}`,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -780,7 +782,7 @@ export default function ApprovalsPage() {
             
             const auditLogData = {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -815,7 +817,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -840,8 +842,10 @@ export default function ApprovalsPage() {
         setIsSubmittingAction(true);
         const newStatus: ApprovalRequest['status'] = 'Queries Raised';
 
+        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
+
         const commentData = {
-            actor: profile.displayName || user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -866,7 +870,7 @@ export default function ApprovalsPage() {
             
             const auditLogData = {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
@@ -901,7 +905,7 @@ export default function ApprovalsPage() {
             });
              await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -916,8 +920,9 @@ export default function ApprovalsPage() {
         if (!activeRequest || !user || !newComment.trim() || !firestore || !profile) return;
 
         setIsSubmittingAction(true);
+        const actorString = `${profile.displayName || user.displayName || 'User'} (${role || 'N/A'})`;
         const commentData = {
-            actor: profile.displayName || user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -936,7 +941,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
@@ -952,7 +957,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: profile.displayName || user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
