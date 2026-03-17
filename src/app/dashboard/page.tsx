@@ -435,11 +435,11 @@ export default function DashboardPage() {
             // Fetch audit logs for the request
             const auditLogsQuery = query(
                 collection(firestore, 'auditLogs'), 
-                where('entity.id', '==', request.id),
-                orderBy('timestamp', 'asc')
+                where('entity.id', '==', request.id)
             );
             const auditLogsSnapshot = await getDocs(auditLogsQuery);
-            const auditLogs = auditLogsSnapshot.docs.map(doc => doc.data() as AuditEvent);
+            let auditLogs = auditLogsSnapshot.docs.map(doc => doc.data() as AuditEvent);
+            auditLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
 
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");

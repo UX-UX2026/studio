@@ -36,7 +36,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc, orderBy } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
@@ -359,11 +359,14 @@ export default function ApprovalsPage() {
         if (!firestore || !activeRequest?.id) return null;
         return query(
             collection(firestore, 'auditLogs'), 
-            where('entity.id', '==', activeRequest.id),
-            orderBy('timestamp', 'asc')
+            where('entity.id', '==', activeRequest.id)
         );
     }, [firestore, activeRequest]);
-    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+    const { data: unsortedAuditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+    const auditLogs = useMemo(() => {
+        if (!unsortedAuditLogs) return null;
+        return [...unsortedAuditLogs].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+    }, [unsortedAuditLogs]);
 
     const summaryData = useBudgetSummary(
         activeRequest?.items || [],

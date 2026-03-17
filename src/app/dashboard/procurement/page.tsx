@@ -409,11 +409,14 @@ export default function ProcurementQuickSubmitPage() {
         if (!firestore || !editingRequestId) return null;
         return query(
             collection(firestore, 'auditLogs'), 
-            where('entity.id', '==', editingRequestId),
-            orderBy('timestamp', 'asc')
+            where('entity.id', '==', editingRequestId)
         );
     }, [firestore, editingRequestId]);
-    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+    const { data: unsortedAuditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+    const auditLogs = useMemo(() => {
+        if (!unsortedAuditLogs) return null;
+        return [...unsortedAuditLogs].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
+    }, [unsortedAuditLogs]);
 
     const associatedCompanies = useMemo(() => {
         if (!selectedDepartmentId || !departments || !companies) return [];
