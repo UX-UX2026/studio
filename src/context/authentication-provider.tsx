@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -58,7 +57,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     const initialize = async () => {
       const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
       if (!isConfigValid) {
-        throw new Error("Firebase configuration is missing or incomplete. Please update your environment variables (.env file for local development) and restart the server.");
+        throw new Error("Firebase configuration is missing or incomplete. For local development, please update your .env file. For production (e.g., Vercel), set the required environment variables in your project settings. Then, restart your development server or redeploy.");
       }
 
       const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
@@ -156,5 +155,3 @@ export const useAuthentication = () => {
   }
   return context;
 };
-
-    
