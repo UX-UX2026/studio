@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FulfillmentClient } from "@/components/app/fulfillment-client";
 import {
   Accordion,
@@ -19,6 +18,20 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
 import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import {
+  ChartContainer,
+  ChartTooltipContent,
+  ChartLegend,
+  ChartLegendContent,
+  type ChartConfig
+} from "@/components/ui/chart";
 
 
 export type FulfillmentItem = ApprovalItem & {
@@ -27,6 +40,7 @@ export type FulfillmentItem = ApprovalItem & {
   item: string;
   approvedOn: string;
   request: any;
+  submittedBy: string;
 };
 
 export default function FulfillmentPage() {
@@ -54,7 +68,8 @@ export default function FulfillmentPage() {
                 procurementRequestId: req.id,
                 department: req.department,
                 item: item.description,
-                approvedOn: req.timeline.find(t => t.stage === 'Executive Review')?.date || new Date().toISOString(),
+                submittedBy: req.submittedBy,
+                approvedOn: req.timeline.find(t => t.stage === 'Executive Approval')?.date || new Date().toISOString(),
                  request: {
                     itemName: item.description,
                     itemDescription: item.description,
@@ -105,6 +120,31 @@ export default function FulfillmentPage() {
         return stats;
     }, [fulfillmentItemsByDept]);
 
+    const fulfillmentStatusSummary = useMemo(() => {
+        if (!allFulfillmentItems) return { data: [], total: 0 };
+        const statusCounts = allFulfillmentItems.reduce((acc, item) => {
+            const status = item.fulfillmentStatus || 'Pending';
+            acc[status] = (acc[status] || 0) + 1;
+            return acc;
+        }, {} as Record<string, number>);
+        
+        const data = Object.entries(statusCounts).map(([name, value]) => ({ 
+            name, 
+            value,
+            fill: `var(--color-${name.replace(/ /g, "")})`
+        }));
+        
+        return { data, total: allFulfillmentItems.length };
+    }, [allFulfillmentItems]);
+
+    const fulfillmentStatusChartConfig = {
+        Sourcing: { label: "Sourcing", color: "hsl(var(--chart-1))" },
+        Quoted: { label: "Quoted", color: "hsl(var(--chart-2))" },
+        Ordered: { label: "Ordered", color: "hsl(var(--chart-3))" },
+        Completed: { label: "Completed", color: "hsl(var(--chart-4))" },
+        Pending: { label: "Pending", color: "hsl(var(--chart-5))" },
+    } satisfies ChartConfig;
+
     const departmentOrder = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
     
     const departmentsForUser = useMemo(() => {
@@ -125,40 +165,69 @@ export default function FulfillmentPage() {
     }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Procurement Fulfillment</CardTitle>
-        <p className="text-sm text-muted-foreground">
-            Track and manage outstanding procurement items, grouped by department. View completion progress for each.
-        </p>
-      </CardHeader>
-      <CardContent>
-        <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentsForUser}>
-            {departmentsForUser.map(dept => (
-                <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                    <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
-                        <div className="flex justify-between items-center w-full">
-                            <span className="font-semibold">{dept}</span>
-                            <div className="flex items-center gap-4 mr-4">
-                                {fulfillmentStatsByDept[dept] && (
-                                    <div className="flex items-center gap-2 text-sm text-muted-foreground w-32">
-                                        <Progress value={fulfillmentStatsByDept[dept].percentage} className="w-full h-2" />
-                                        <span className="font-semibold text-foreground">{Math.round(fulfillmentStatsByDept[dept].percentage)}%</span>
-                                    </div>
-                                )}
-                                <Badge variant="secondary">{fulfillmentItemsByDept[dept].length}</Badge>
+    <div className="space-y-6">
+        <Card>
+            <CardHeader>
+                <CardTitle>Fulfillment Status Overview</CardTitle>
+                <CardDescription>
+                Breakdown of all fulfillment items by their current status.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ChartContainer config={fulfillmentStatusChartConfig} className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                    {fulfillmentStatusSummary.data.length > 0 ? (
+                    <PieChart>
+                        <Tooltip content={<ChartTooltipContent />} />
+                        <Pie data={fulfillmentStatusSummary.data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                        {fulfillmentStatusSummary.data.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                        </Pie>
+                        <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                    </PieChart>
+                    ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                        No fulfillment items found.
+                    </div>
+                    )}
+                </ResponsiveContainer>
+                </ChartContainer>
+            </CardContent>
+        </Card>
+        <Card>
+        <CardHeader>
+            <CardTitle>Procurement Fulfillment Details</CardTitle>
+            <p className="text-sm text-muted-foreground">
+                Track and manage procurement items, grouped by department. View overall fulfillment and completion progress for each.
+            </p>
+        </CardHeader>
+        <CardContent>
+            <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentsForUser}>
+                {departmentsForUser.map(dept => (
+                    <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                        <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                            <div className="flex justify-between items-center w-full">
+                                <span className="font-semibold">{dept}</span>
+                                <div className="flex items-center gap-4 mr-4">
+                                    {fulfillmentStatsByDept[dept] && (
+                                        <div className="flex items-center gap-2 text-sm text-muted-foreground w-32">
+                                            <Progress value={fulfillmentStatsByDept[dept].percentage} className="w-full h-2" />
+                                            <span className="font-semibold text-foreground">{Math.round(fulfillmentStatsByDept[dept].percentage)}%</span>
+                                        </div>
+                                    )}
+                                    <Badge variant="secondary">{fulfillmentItemsByDept[dept].length}</Badge>
+                                </div>
                             </div>
-                        </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="p-2 pt-0">
-                        <FulfillmentClient items={fulfillmentItemsByDept[dept]} role={role}/>
-                    </AccordionContent>
-                </AccordionItem>
-            ))}
-        </Accordion>
-      </CardContent>
-    </Card>
+                        </AccordionTrigger>
+                        <AccordionContent className="p-2 pt-0">
+                            <FulfillmentClient items={fulfillmentItemsByDept[dept]} role={role}/>
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+            </Accordion>
+        </CardContent>
+        </Card>
+    </div>
   );
 }
-
-    

@@ -1,10 +1,10 @@
 
 'use client';
 
-import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, ChevronRight } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import {
   Accordion,
   AccordionContent,
@@ -27,12 +27,27 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc, orderBy } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { useBudgetSummary } from "@/hooks/use-budget-summary";
+import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemplate } from '@/lib/email-templates';
+import * as XLSX from 'xlsx';
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 
 type WorkflowStage = {
@@ -49,6 +64,204 @@ type Department = {
   id: string;
   name: string;
   workflow?: WorkflowStage[];
+  budgetHeaders?: string[];
+  budgetYear?: number;
+};
+
+type BudgetItem = {
+    id: string;
+    departmentId: string;
+    category: string;
+    forecasts: number[];
+    yearTotal: number;
+};
+
+type AuditEvent = {
+    id: string;
+    userId: string;
+    userName: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
+    entity?: {
+        type: string;
+        id: string;
+    };
+};
+
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-ZA", {
+      style: "currency",
+      currency: "ZAR",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+};
+
+const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
+    if (format === 'pdf') {
+        const doc = new jsPDF();
+        const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
+        if (logo && logo.imageUrl.startsWith('data:image')) {
+             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+        }
+        
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
+
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
+
+        const detailsData: (string|number)[][] = [
+            ["Request ID", request.id],
+            ["Company", request.companyName || 'N/A'],
+            ["Department", request.department],
+            ["Period", request.period],
+            ["Submitted By", request.submittedBy || 'N/A'],
+            ["Total", formatCurrency(request.total)],
+            ["Status", request.status],
+        ];
+
+        autoTable(doc, {
+            startY: 42,
+            head: [['Request Details', '']],
+            body: detailsData,
+            theme: 'striped',
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+
+        const itemsData = request.items.map(item => [
+            item.type,
+            item.description,
+            item.category,
+            item.qty,
+            formatCurrency(item.unitPrice),
+            formatCurrency(item.qty * item.unitPrice),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+            body: itemsData,
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+        
+        const summaryTableData = summaryData.lines.map(line => [
+            line.category,
+            formatCurrency(line.procurementTotal),
+            formatCurrency(line.forecastTotal),
+            formatCurrency(line.variance),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+            body: summaryTableData,
+            foot: [[
+                'Total',
+                formatCurrency(summaryData.totals.procurement),
+                formatCurrency(summaryData.totals.forecast),
+                formatCurrency(summaryData.totals.variance)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: [201, 115, 83] },
+            footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+        });
+        
+        const timelineData = request.timeline.map(step => [
+            step.stage,
+            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+            step.status,
+            step.date || 'N/A',
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Stage', 'Actor', 'Status', 'Date']],
+            body: timelineData,
+            headStyles: { fillColor: [201, 115, 83] },
+        });
+
+        if (auditLogs && auditLogs.length > 0) {
+            const emailLog = auditLogs
+                .filter(log => log.action === 'notification.sent')
+                .map(log => ({
+                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                    details: log.details,
+                }));
+        
+            if (emailLog.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Notification Email History']],
+                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                    theme: 'striped',
+                    headStyles: { fillColor: [201, 115, 83] },
+                    styles: { fontSize: 8 },
+                });
+            }
+        }
+
+        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+        return;
+    }
+
+    // XLSX logic
+    const detailsDataForSheet = [
+        { Key: "Request ID", Value: request.id },
+        { Key: "Company", Value: request.companyName || 'N/A' },
+        { Key: "Department", Value: request.department },
+        { Key: "Period", Value: request.period },
+        { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
+        { Key: "Total", Value: formatCurrency(request.total) },
+        { Key: "Status", Value: request.status },
+    ];
+    const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
+
+    // 2. Line Items
+    const itemsData = request.items.map(item => ({
+        'Type': item.type,
+        'Description': item.description,
+        'Category': item.category,
+        'Brand': item.brand,
+        'Quantity': item.qty,
+        'Unit Price': item.unitPrice,
+        'Total': item.qty * item.unitPrice,
+    }));
+    const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
+
+    // 3. Budget Summary
+    const summaryDataForSheet = summaryData.lines.map(line => ({
+        'Category': line.category,
+        'Request Total': line.procurementTotal,
+        'Forecast Total': line.forecastTotal,
+        'Variance': line.variance,
+    }));
+    summaryDataForSheet.push({
+        'Category': 'GRAND TOTAL',
+        'Request Total': summaryData.totals.procurement,
+        'Forecast Total': summaryData.totals.forecast,
+        'Variance': summaryData.totals.variance,
+    });
+    const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
+
+    // 4. Approval History
+    const timelineData = request.timeline.map(step => ({
+        'Stage': step.stage,
+        'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+        'Status': step.status,
+        'Date': step.date || 'N/A',
+    }));
+    const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
+    
+    // Create workbook and add sheets
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
+    XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
+    XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
+    XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
+
+    // Download the file
+    XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
 };
 
 
@@ -80,15 +293,6 @@ const getFulfillmentStatusBadge = (status: string) => {
     }
 };
 
-const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-ZA", {
-      style: "currency",
-      currency: "ZAR",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
-};
-
 export default function ApprovalsPage() {
     const { user, profile, loading: userLoading } = useUser();
     const router = useRouter();
@@ -117,7 +321,7 @@ export default function ApprovalsPage() {
             if (!userDepartment) return null; // Manager must have a department
             return query(baseQuery, where('department', '==', userDepartment));
         }
-        if (role === 'Procurement Officer') {
+        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Requester') {
@@ -132,14 +336,44 @@ export default function ApprovalsPage() {
     
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
     
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
     const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
+    const [openCategory, setOpenCategory] = useState<string | null>(null);
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading;
+    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+    
+    const budgetsQuery = useMemo(() => {
+        if (!firestore || !activeRequest?.departmentId) return null;
+        return query(collection(firestore, 'budgets'), where('departmentId', '==', activeRequest.departmentId));
+    }, [firestore, activeRequest]);
+    const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
+    
+    const auditLogsQuery = useMemo(() => {
+        if (!firestore || !activeRequest?.id) return null;
+        return query(
+            collection(firestore, 'auditLogs'), 
+            where('entity.id', '==', activeRequest.id),
+            orderBy('timestamp', 'asc')
+        );
+    }, [firestore, activeRequest]);
+    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+
+    const summaryData = useBudgetSummary(
+        activeRequest?.items || [],
+        activeRequest?.departmentId || '',
+        activeRequest?.period || '',
+        budgetItems,
+        departments
+    );
+
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || (!!activeRequest && budgetsLoading) || (!!activeRequest && auditLogsLoading);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -164,8 +398,6 @@ export default function ApprovalsPage() {
         }
     }, [filteredRequests, selectedRequestId]);
 
-
-    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
     
     const showFulfillmentTab = useMemo(() => {
         if (!activeRequest) return false;
@@ -173,19 +405,28 @@ export default function ApprovalsPage() {
     }, [activeRequest]);
 
     const canApprove = useMemo(() => {
-        if (!activeRequest || !role) return false;
+        if (!activeRequest || !role || !user || !allUsers) return false;
         const { status } = activeRequest;
         
         if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
         if (role === 'Manager' && (status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
-        if (role === 'Executive' && (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
+        
+        // Executive approval check
+        if (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised') {
+            // Direct executive can approve
+            if (role === 'Executive') return true;
+            // Delegate can approve
+            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (isDelegateForExecutive) return true;
+        }
+
         if (role === 'Procurement Officer' && status === 'Approved') return true;
         
         return false;
-    }, [activeRequest, role]);
+    }, [activeRequest, role, user, allUsers]);
 
     const canRejectOrQuery = useMemo(() => {
-        if (!activeRequest || !role) return false;
+        if (!activeRequest || !role || !user || !allUsers) return false;
         const { status } = activeRequest;
         
         if (role === 'Administrator') {
@@ -195,14 +436,17 @@ export default function ApprovalsPage() {
         if (role === 'Manager') {
             return status === 'Pending Manager Approval' || status === 'Queries Raised';
         }
-        if (role === 'Executive') {
-            // An exec can also act on a request waiting for a manager.
-            return status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised';
+        if (status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised') {
+            // Direct executive can reject/query
+            if (role === 'Executive') return true;
+            // Delegate can reject/query
+            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (isDelegateForExecutive) return true;
         }
         
         // Requesters and Procurement Officers cannot reject or raise queries through these buttons.
         return false;
-    }, [activeRequest, role]);
+    }, [activeRequest, role, user, allUsers]);
 
 
     const approvalSummary = useMemo(() => {
@@ -236,6 +480,12 @@ export default function ApprovalsPage() {
 
     const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
 
+    const budgetProgress = useMemo(() => {
+        const { procurement, forecast } = summaryData.totals;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
+    }, [summaryData]);
+
 
     useEffect(() => {
       if (loading) return;
@@ -258,65 +508,78 @@ export default function ApprovalsPage() {
     }
     
     const handleApprove = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers || !profile) return;
 
         setIsSubmittingAction(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-
+        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
+        const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+
+        if (isDelegateForExecutive && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
+            const executive = allUsers.find(u => u.role === 'Executive' && u.delegatedToId === user.uid);
+            if (executive) {
+                delegationInfo = { delegatedById: executive.id, delegatedByName: executive.displayName };
+            }
+        }
+
+        const timelineUpdater = (stepName: string, nextStageName: string) => {
+            return (step: ApprovalRequest['timeline'][0]) => {
+                if (step.stage === stepName) {
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
+                }
+                if (step.stage === nextStageName) {
+                    return { ...step, status: 'pending' as const };
+                }
+                return step;
+            };
+        };
 
         if (role === 'Administrator') {
             if (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Pending Executive';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
-                    if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
             } else if (activeRequest.status === 'Pending Executive') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
-                    if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
-                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Executive Approval', 'Procurement Processing'));
             } else if (activeRequest.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
-                newTimeline = newTimeline.map(step => {
-                    if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Administrator' };
-                    return step;
-                });
+                newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
             }
         } else if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Manager Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Manager' };
-                if (step.stage === 'Executive Review') return { ...step, status: 'pending' as const };
-                return step;
-            });
-        } else if (role === 'Executive' && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
-            newStatus = 'Approved';
-            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Executive Review') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Executive' };
-                if (step.stage === 'Manager Review' && step.status !== 'completed') return { ...step, status: 'completed' as const, date: currentDate, actor: step.actor };
-                if (step.stage === 'Procurement Ack.') return { ...step, status: 'pending' as const };
-                return step;
-            });
+            newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
+        } else if (role === 'Executive' || isDelegateForExecutive) {
+            if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+                newStatus = 'Approved';
+                toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+                
+                const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
+                const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
+
+                if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') {
+                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
+                }
+                if (execApprovalIndex > -1) {
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, ...delegationInfo };
+                }
+                const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
+                if (procurementProcessingIndex > -1) {
+                        newTimeline[procurementProcessingIndex] = { ...newTimeline[procurementProcessingIndex], status: 'pending' };
+                }
+            }
         } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
-            newTimeline = newTimeline.map(step => {
-                if (step.stage === 'Procurement Ack.') return { ...step, status: 'completed' as const, date: currentDate, actor: user.displayName || 'Procurement Officer' };
-                return step;
-            });
+            newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
         }
 
         if (!toastMessage) {
@@ -334,15 +597,77 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast(finalToastMessage);
 
+            if (newStatus === 'Approved') {
+                const reportDataForGeneration: ApprovalRequest = {
+                    ...activeRequest,
+                    ...updateData,
+                };
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs);
+            }
+
+            let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
+            if (delegationInfo.delegatedByName) {
+                auditDetails = `Approved request ${activeRequest.id.substring(0,8)}... on behalf of ${delegationInfo.delegatedByName}, new status "${newStatus}"`;
+            }
+
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorName,
                 action,
-                details: `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`,
+                details: auditDetails,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+
+            // Special Notification for PO Acknowledgment to Procurement Assistant
+            if (role === 'Procurement Officer' && newStatus === 'In Fulfillment') {
+                const assistantsQuery = query(collection(firestore, 'users'), where('role', '==', 'Procurement Assistant'));
+                const assistantsSnapshot = await getDocs(assistantsQuery);
+                const assistantEmails = assistantsSnapshot.docs.map(doc => doc.data().email).filter(Boolean);
+        
+                if (assistantEmails.length > 0) {
+                    const link = `${window.location.origin}/dashboard/fulfillment`;
+                    const emailHtml = requestActionRequiredTemplate(
+                        { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                        "Fulfillment Started",
+                        link
+                    );
+        
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: assistantEmails.join(','),
+                                subject: `Request Now In Fulfillment: ${activeRequest.id.substring(0,8)}...`,
+                                html: emailHtml,
+                            })
+                        });
+                        const responseData = await response.json();
+                        if (!response.ok) {
+                          throw new Error(responseData.error || 'Failed to send email to assistants');
+                        }
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.sent',
+                            details: `Fulfillment notification sent to Procurement Assistants: ${assistantEmails.join(', ')}`,
+                            entity: { type: 'procurementRequest', id: selectedRequestId },
+                            timestamp: serverTimestamp()
+                        });
+                    } catch (emailError) {
+                        console.error("Email API call to assistants failed:", emailError);
+                        await logErrorToFirestore(firestore, {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.assistant_email_failed',
+                            errorMessage: (emailError as Error).message,
+                            errorStack: (emailError as Error).stack,
+                        });
+                    }
+                }
+            }
             
             if (departments && activeRequest.departmentId) {
                 const department = departments.find(d => d.id === activeRequest.departmentId);
@@ -352,48 +677,37 @@ export default function ApprovalsPage() {
                     const workflowStageConfig = department.workflow.find(wfStage => wfStage.name === nextStage.stage);
                     
                     if (workflowStageConfig) {
-                        // Log simulated notification
-                        let notificationDetails = `System triggered notification for stage '${nextStage.stage}' to role '${workflowStageConfig.role}'.`;
-                        if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
-                            if (workflowStageConfig.sendToBoth) {
-                                notificationDetails += ` Recipient: Primary and Alternate (${workflowStageConfig.alternateEmail}).`;
-                            } else {
-                                notificationDetails = `System triggered notification for stage '${nextStage.stage}' to alternate email: ${workflowStageConfig.alternateEmail}.`;
-                            }
-                        }
-                        const notificationLogData = {
-                            userId: user.uid,
-                            userName: 'System',
-                            action: 'notification.sent',
-                            details: notificationDetails,
-                            entity: { type: 'procurementRequest', id: selectedRequestId },
-                            timestamp: serverTimestamp()
-                        };
-                        await addDoc(collection(firestore, 'auditLogs'), notificationLogData);
-
-                        // Real Email Sending Logic
                         const usersCollectionRef = collection(firestore, 'users');
                         const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
                         const querySnapshot = await getDocs(q);
                         
-                        const recipients: string[] = [];
+                        const primaryRecipients: string[] = [];
                         querySnapshot.forEach(doc => {
                             const userProfile = doc.data();
-                            if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
-                                if (workflowStageConfig.sendToBoth) {
-                                    recipients.push(userProfile.email);
-                                    recipients.push(workflowStageConfig.alternateEmail);
-                                } else {
-                                    recipients.push(workflowStageConfig.alternateEmail);
-                                }
-                            } else {
-                                 recipients.push(userProfile.email);
-                            }
+                            if (userProfile.email) primaryRecipients.push(userProfile.email);
                         });
+
+                        let finalRecipients: string[] = [];
+                        if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
+                            if (workflowStageConfig.sendToBoth) {
+                                finalRecipients = [...primaryRecipients, workflowStageConfig.alternateEmail];
+                            } else {
+                                finalRecipients = [workflowStageConfig.alternateEmail];
+                            }
+                        } else {
+                            finalRecipients = primaryRecipients;
+                        }
                         
-                        const uniqueRecipients = [...new Set(recipients)];
+                        const uniqueRecipients = [...new Set(finalRecipients)];
                 
                         if (uniqueRecipients.length > 0) {
+                            const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                            const emailHtml = requestActionRequiredTemplate(
+                                { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                                nextStage.stage,
+                                link
+                            );
+
                             try {
                                 const response = await fetch('/api/send-email', {
                                     method: 'POST',
@@ -401,18 +715,26 @@ export default function ApprovalsPage() {
                                     body: JSON.stringify({
                                         to: uniqueRecipients.join(','),
                                         subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
-                                        html: `<p>A procurement request for department <strong>${activeRequest.department}</strong> requires your attention.</p><p>Request ID: ${activeRequest.id}</p><p>Total: ${formatCurrency(activeRequest.total)}</p><p>Please log in to the portal to review the request.</p>`
+                                        html: emailHtml,
                                     })
                                 });
                                 const responseData = await response.json();
                                 if (!response.ok) {
                                   throw new Error(responseData.error || 'Failed to send email');
                                 }
+                                await addDoc(collection(firestore, 'auditLogs'), {
+                                    userId: user.uid,
+                                    userName: 'System',
+                                    action: 'notification.sent',
+                                    details: `Notification sent for stage '${nextStage.stage}' to: ${uniqueRecipients.join(', ')}`,
+                                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                                    timestamp: serverTimestamp()
+                                });
                             } catch (emailError) {
                                 console.error("Email API call failed:", emailError);
                                 await logErrorToFirestore(firestore, {
                                     userId: user.uid,
-                                    userName: user.displayName || 'System',
+                                    userName: 'System',
                                     action: 'notification.email_api_failed',
                                     errorMessage: (emailError as Error).message,
                                     errorStack: (emailError as Error).stack,
@@ -432,7 +754,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorName,
                 action: 'request.approve',
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -448,7 +770,7 @@ export default function ApprovalsPage() {
     };
 
     const handleConfirmReject = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
         
         if (!newComment.trim()) {
             toast({
@@ -463,19 +785,21 @@ export default function ApprovalsPage() {
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
+
         let newTimeline = [...activeRequest.timeline];
         const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
         if (currentStepIndex !== -1) {
             newTimeline[currentStepIndex] = {
                 ...newTimeline[currentStepIndex],
                 status: 'rejected',
-                actor: user.displayName || 'System',
+                actor: actorString,
                 date: currentDate,
             };
         }
         
         const commentData = {
-            actor: user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: `REJECTED: ${newComment}`,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -498,18 +822,35 @@ export default function ApprovalsPage() {
                 title: "Request Rejected",
                 description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
             });
-            setNewComment('');
-            setIsRejectDialogOpen(false);
-
+            
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+
+            // Notify submitter
+            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const submitterProfile = userDocSnap.data();
+                if (submitterProfile.email) {
+                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                    const emailHtml = requestRejectedTemplate(activeRequest, commentData, link);
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                    });
+                }
+            }
+
+            setNewComment('');
+            setIsRejectDialogOpen(false);
         } catch(error: any) {
             console.error("Reject Error:", error);
             toast({
@@ -519,7 +860,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -530,7 +871,7 @@ export default function ApprovalsPage() {
     };
     
     const handleRaiseQuery = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore) return;
+        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
 
         if (!newComment.trim()) {
             toast({
@@ -544,8 +885,10 @@ export default function ApprovalsPage() {
         setIsSubmittingAction(true);
         const newStatus: ApprovalRequest['status'] = 'Queries Raised';
 
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
+
         const commentData = {
-            actor: user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -567,18 +910,35 @@ export default function ApprovalsPage() {
                 title: "Query Raised",
                 description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
             });
-            setNewComment("");
-            setIsQueryDialogOpen(false);
             
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
+            
+            // Notify submitter
+            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const submitterProfile = userDocSnap.data();
+                if (submitterProfile.email) {
+                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                    const emailHtml = queryRaisedTemplate(activeRequest, commentData, link);
+                    await fetch('/api/send-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                    });
+                }
+            }
+
+            setNewComment("");
+            setIsQueryDialogOpen(false);
         } catch (error: any) {
             console.error("Raise Query Error:", error);
             toast({
@@ -588,7 +948,7 @@ export default function ApprovalsPage() {
             });
              await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -600,11 +960,12 @@ export default function ApprovalsPage() {
 
 
     const handleAddComment = async () => {
-        if (!activeRequest || !user || !newComment.trim() || !firestore) return;
+        if (!activeRequest || !user || !newComment.trim() || !firestore || !profile) return;
 
         setIsSubmittingAction(true);
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const commentData = {
-            actor: user.displayName || "User",
+            actor: actorString,
             actorId: user.uid,
             text: newComment,
             timestamp: new Date().toLocaleString("en-GB", {
@@ -623,7 +984,7 @@ export default function ApprovalsPage() {
 
             const auditLogData = {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
@@ -639,7 +1000,7 @@ export default function ApprovalsPage() {
             });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName || 'System',
+                userName: actorString,
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack,
@@ -648,6 +1009,9 @@ export default function ApprovalsPage() {
             setIsSubmittingAction(false);
         }
     };
+
+    const showFooterActions = activeRequest && (activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised');
+    const showExportAction = activeRequest && ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
     
   return (
     <>
@@ -716,7 +1080,7 @@ export default function ApprovalsPage() {
                                                             <p className="text-xs text-muted-foreground">{req.period}</p>
                                                             <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
                                                         </div>
-                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy}</p>
+                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p>
                                                     </div>
                                                 </CardContent>
                                             </Card>
@@ -736,15 +1100,16 @@ export default function ApprovalsPage() {
                                 <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                     <div className="flex-1">
                                         <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
-                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.period} - {activeRequest.department} - {formatCurrency(activeRequest.total)}</p>
+                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
                                     <CardContent className="pt-0">
                                     <Tabs defaultValue="items">
-                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-4" : "grid-cols-3")}>
+                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-5" : "grid-cols-4")}>
                                                 <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
                                                 <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
+                                                <TabsTrigger value="summary">Budget Summary</TabsTrigger>
                                                 {showFulfillmentTab && <TabsTrigger value="fulfillment">Fulfillment Details</TabsTrigger>}
                                                 <TabsTrigger value="communication">Communication Log</TabsTrigger>
                                             </TabsList>
@@ -770,7 +1135,7 @@ export default function ApprovalsPage() {
                                                                     </CardHeader>
                                                                     <CardContent className="p-3 pt-0">
                                                                         <div className="text-xs text-muted-foreground">
-                                                                            <p><span className="font-semibold">Actor:</span> {step.actor}</p>
+                                                                            <p><span className="font-semibold">Actor:</span> {step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor}</p>
                                                                             <p><span className="font-semibold">Status:</span> {step.status}</p>
                                                                             <p><span className="font-semibold">Date:</span> {step.date || '...'}</p>
                                                                         </div>
@@ -818,6 +1183,100 @@ export default function ApprovalsPage() {
                                                                     </TableRow>
                                                                 ))}
                                                             </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </div>
+                                            </TabsContent>
+                                            <TabsContent value="summary" className="pt-4">
+                                                <div className="space-y-4">
+                                                    <div className="p-4 border rounded-lg bg-muted/50">
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <h3 className="font-semibold text-lg">Budget vs. Actuals: {activeRequest.period}</h3>
+                                                                <p className="text-sm text-muted-foreground">Live comparison of this request against the forecast.</p>
+                                                            </div>
+                                                            <div className="text-right">
+                                                                <p className="text-2xl font-bold">{formatCurrency(summaryData.totals.procurement)}</p>
+                                                                <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(summaryData.totals.forecast)}</p>
+                                                            </div>
+                                                        </div>
+                                                        <Progress value={budgetProgress} className="mt-4" />
+                                                    </div>
+                                                    <div className="overflow-auto rounded-lg border">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted hover:bg-muted">
+                                                                    <TableHead className="font-bold">Category</TableHead>
+                                                                    <TableHead className="text-right font-bold">Request Total</TableHead>
+                                                                    <TableHead className="text-right font-bold">Forecast Total</TableHead>
+                                                                    <TableHead className="text-right font-bold">Variance</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
+                                                                    <React.Fragment key={item.category}>
+                                                                        <TableRow 
+                                                                            className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
+                                                                            onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
+                                                                        >
+                                                                            <TableCell className="font-medium flex items-center gap-2">
+                                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
+                                                                                {item.category}
+                                                                            </TableCell>
+                                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                                            <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                                {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
+                                                                                {formatCurrency(item.variance)}
+                                                                            </TableCell>
+                                                                        </TableRow>
+                                                                        {openCategory === item.category && (
+                                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                                <TableCell colSpan={4} className="p-2">
+                                                                                    <div className="p-2 bg-background rounded-md border">
+                                                                                        <Table>
+                                                                                            <TableHeader>
+                                                                                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                                                    <TableHead>Item</TableHead>
+                                                                                                    <TableHead>Type</TableHead>
+                                                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                                                </TableRow>
+                                                                                            </TableHeader>
+                                                                                            <TableBody>
+                                                                                                {item.items.map((subItem) => (
+                                                                                                    <TableRow key={subItem.id}>
+                                                                                                        <TableCell>{subItem.description}</TableCell>
+                                                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                                    </TableRow>
+                                                                                                ))}
+                                                                                            </TableBody>
+                                                                                        </Table>
+                                                                                    </div>
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        )}
+                                                                    </React.Fragment>
+                                                                )) : (
+                                                                    <TableRow>
+                                                                        <TableCell colSpan={4} className="text-center h-24 text-muted-foreground">
+                                                                            No budget or request data available for this summary.
+                                                                        </TableCell>
+                                                                    </TableRow>
+                                                                )}
+                                                            </TableBody>
+                                                            <TableFooter>
+                                                                <TableRow className="bg-muted hover:bg-muted font-bold">
+                                                                    <TableCell>Subtotal</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
+                                                                    <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                                                                </TableRow>
+                                                            </TableFooter>
                                                         </Table>
                                                     </div>
                                                 </div>
@@ -892,15 +1351,37 @@ export default function ApprovalsPage() {
                                             </TabsContent>
                                     </Tabs>
                                     </CardContent>
-                                    {(activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised') && (
+                                    {(showFooterActions || showExportAction) && (
                                         <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                            <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
-                                                {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
-                                                <Check className="mr-2 h-4 w-4" />
-                                                {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
-                                            </Button>
+                                            {showExportAction && (
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="outline" className="mr-auto">
+                                                            <Download className="mr-2 h-4 w-4"/>
+                                                            Export Report
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx', auditLogs)}>
+                                                            Export as Excel (.xlsx)
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf', auditLogs)}>
+                                                            Export as PDF (.pdf)
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            )}
+                                            {showFooterActions && (
+                                                <>
+                                                    <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                                                    <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
+                                                    <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
+                                                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                                        <Check className="mr-2 h-4 w-4" />
+                                                        {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
+                                                    </Button>
+                                                </>
+                                            )}
                                         </CardFooter>
                                     )}
                                 </AccordionContent>
@@ -910,7 +1391,7 @@ export default function ApprovalsPage() {
                 ) : (
                     <Card>
                         <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">
-                            <p className="text-muted-foreground">Select a request to view its details.</p>
+                            {loading ? <Loader className="h-8 w-8 animate-spin" /> : <p className="text-muted-foreground">Select a request to view its details.</p>}
                         </CardContent>
                     </Card>
                 )}
@@ -972,4 +1453,3 @@ export default function ApprovalsPage() {
   );
 }
 
-    

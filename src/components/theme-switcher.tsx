@@ -28,7 +28,9 @@ export function ThemeSwitcher() {
             <SelectItem value="light">Ubuntu Light</SelectItem>
             <SelectItem value="dark">Ubuntu Dark</SelectItem>
             <SelectItem value="classic">Classic Light</SelectItem>
+            <SelectItem value="hybrid">Hybrid</SelectItem>
             <SelectItem value="colorful">Colorful</SelectItem>
+            <SelectItem value="glass">Glass</SelectItem>
             <SelectItem value="system">System</SelectItem>
           </SelectContent>
         </Select>

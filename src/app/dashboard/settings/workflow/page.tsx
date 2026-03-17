@@ -22,6 +22,7 @@ import { useRoles } from "@/lib/roles-provider";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { workflowTestTemplate } from "@/lib/email-templates";
 
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
@@ -50,6 +51,13 @@ type Department = {
   workflow?: WorkflowStage[];
 };
 
+type UserProfile = {
+    id: string;
+    displayName: string;
+    email: string;
+    role: string;
+};
+
 const initialWorkflow: WorkflowStage[] = [
     { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit', 'comment'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
     { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
@@ -67,9 +75,13 @@ export default function WorkflowPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [workflow, setWorkflow] = useState<WorkflowStage[]>([]);
     const [isSaving, setIsSaving] = useState(false);
+    const [isTesting, setIsTesting] = useState<string | null>(null);
 
     useEffect(() => {
         if (userLoading) return;
@@ -97,7 +109,7 @@ export default function WorkflowPage() {
         }
     }, [selectedDepartmentId, departments]);
     
-    const loading = userLoading || deptsLoading;
+    const loading = userLoading || deptsLoading || usersLoading;
     
     if (loading || !user || adminRole !== 'Administrator') {
         return (
@@ -153,6 +165,87 @@ export default function WorkflowPage() {
         newWorkflow.splice(newIndex, 0, movedItem);
         
         setWorkflow(newWorkflow);
+    };
+
+    const handleTestNotification = async (stageId: string) => {
+        if (!firestore || !users || !user) return;
+    
+        const stage = workflow.find(s => s.id === stageId);
+        if (!stage) {
+            toast({ variant: 'destructive', title: 'Stage not found' });
+            return;
+        }
+    
+        setIsTesting(stageId);
+    
+        try {
+            const primaryRecipients = users.filter(u => u.role === stage.role).map(u => u.email).filter(Boolean);
+    
+            let finalRecipients: string[] = [];
+            if (stage.useAlternateEmail && stage.alternateEmail) {
+                if (stage.sendToBoth) {
+                    finalRecipients = [...new Set([...primaryRecipients, stage.alternateEmail])];
+                } else {
+                    finalRecipients = [stage.alternateEmail];
+                }
+            } else {
+                finalRecipients = [...new Set(primaryRecipients)];
+            }
+            
+            if (user.email) {
+                finalRecipients.push(user.email);
+                finalRecipients = [...new Set(finalRecipients)];
+            }
+    
+            if (finalRecipients.length === 0) {
+                toast({
+                    variant: 'destructive',
+                    title: 'No Recipients Found',
+                    description: `No users with role "${stage.role}" or an alternate email is configured.`,
+                });
+                setIsTesting(null);
+                return;
+            }
+            
+            const emailHtml = workflowTestTemplate(stage.name, finalRecipients);
+            
+            const response = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    to: finalRecipients.join(','),
+                    subject: `[TEST] ProcureEase Notification: ${stage.name}`,
+                    html: emailHtml,
+                })
+            });
+    
+            const responseData = await response.json();
+            if (!response.ok) {
+                throw new Error(responseData.error || 'Failed to send test email.');
+            }
+    
+            toast({
+                title: 'Test Email Sent',
+                description: `Sent to: ${finalRecipients.join(', ')}`,
+            });
+    
+        } catch (error: any) {
+            console.error("Test Notification Error:", error);
+            toast({
+                variant: "destructive",
+                title: "Test Failed",
+                description: error.message,
+            });
+            await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action: 'workflow.test_notification',
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        } finally {
+            setIsTesting(null);
+        }
     };
 
     const handleSaveWorkflow = async () => {
@@ -252,7 +345,7 @@ export default function WorkflowPage() {
                                     <TableHead className="w-[200px]">Assigned Role</TableHead>
                                     <TableHead>Permissions</TableHead>
                                     <TableHead>Notifications</TableHead>
-                                    <TableHead className="text-right w-[120px]">Actions</TableHead>
+                                    <TableHead className="text-right w-[160px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -364,6 +457,19 @@ export default function WorkflowPage() {
                                             </Popover>
                                         </TableCell>
                                         <TableCell className="text-right">
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => handleTestNotification(stage.id)}
+                                                disabled={isTesting === stage.id}
+                                                title="Test Notification"
+                                            >
+                                                {isTesting === stage.id ? (
+                                                    <Loader className="h-4 w-4 animate-spin" />
+                                                ) : (
+                                                    <Mail className="h-4 w-4 text-cyan-500" />
+                                                )}
+                                            </Button>
                                             <Button variant="ghost" size="icon" onClick={() => handleMoveStage(index, 'up')} disabled={index === 0}>
                                                 <ArrowUp className="h-4 w-4" />
                                             </Button>

@@ -6,6 +6,14 @@
       "description": "Represents a request for procuring goods or services for a specific period.",
       "type": "object",
       "properties": {
+        "companyId": {
+            "type": "string",
+            "description": "The ID of the company this request is for."
+        },
+        "companyName": {
+            "type": "string",
+            "description": "The name of the company this request is for."
+        },
         "department": {
           "type": "string",
           "description": "The department name requesting the procurement."
@@ -76,8 +84,17 @@
                 "enum": [
                   "completed",
                   "pending",
-                  "waiting"
+                  "waiting",
+                  "rejected"
                 ]
+              },
+              "delegatedById": {
+                "type": "string",
+                "description": "If approved by a delegate, the UID of the user who delegated the authority."
+              },
+              "delegatedByName": {
+                  "type": "string",
+                  "description": "If approved by a delegate, the name of the user who delegated the authority."
               }
             }
           }
@@ -163,6 +180,14 @@
               "comments": {
                 "type": "string",
                 "description": "Comments or justification for this specific line item, especially if it's over budget."
+              },
+              "addedById": {
+                "type": "string",
+                "description": "The UID of the user who added this line item."
+              },
+              "addedByName": {
+                "type": "string",
+                "description": "The name of the user who added this line item."
               }
             }
           }
@@ -226,6 +251,14 @@
             "Both"
           ],
           "description": "Determines where to send email notifications."
+        },
+        "delegatedToId": {
+          "type": "string",
+          "description": "The UID of the user this user has delegated approval authority to."
+        },
+        "delegatedToName": {
+          "type": "string",
+          "description": "The display name of the user this user has delegated approval authority to."
         }
       },
       "required": [
@@ -251,6 +284,13 @@
         "budget": {
           "type": "number",
           "description": "The approved budget for the department."
+        },
+        "companyIds": {
+            "type": "array",
+            "description": "An array of company IDs this department is associated with.",
+            "items": {
+                "type": "string"
+            }
         },
         "workflow": {
           "type": "array",
@@ -366,7 +406,9 @@
               "settings:auditlog",
               "settings:errorlog",
               "settings:procurement-periods",
-              "settings:data"
+              "settings:data",
+              "settings:notifications",
+              "settings:email"
             ]
           }
         }
@@ -465,6 +507,24 @@
         "limitToOneSubmissionPerPeriod": {
           "type": "boolean",
           "description": "If true, allows only one active procurement request per department per period."
+        },
+        "reminderSettings": {
+          "type": "object",
+          "description": "Settings for automated approval reminders. Default frequency is daily.",
+          "properties": {
+            "frequency": {
+              "type": "string",
+              "enum": [
+                "daily",
+                "weekly",
+                "off"
+              ]
+            },
+            "lastSent": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
         }
       }
     },
@@ -632,6 +692,18 @@
         "forecasts",
         "yearTotal"
       ]
+    },
+    "company": {
+        "title": "Company",
+        "description": "Represents a company or legal entity.",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the company."
+            }
+        },
+        "required": ["name"]
     }
   },
   "auth": {
@@ -658,6 +730,12 @@
         "$ref": "#/entities/department"
       },
       "description": "Collection of all departments."
+    },
+    "/companies/{companyId}": {
+        "schema": {
+            "$ref": "#/entities/company"
+        },
+        "description": "Collection of all companies."
     },
     "/roles/{roleId}": {
       "schema": {
