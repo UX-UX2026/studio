@@ -51,7 +51,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 type WorkflowStage = {
     id: string;
     name: string;
-    role: UserRole;
+    role?: UserRole;
+    approvalGroupId?: string;
     permissions: string[];
     useAlternateEmail?: boolean;
     alternateEmail?: string;
@@ -64,6 +65,12 @@ type Department = {
   workflow?: WorkflowStage[];
   budgetHeaders?: string[];
   budgetYear?: number;
+};
+
+type ApprovalGroup = {
+    id: string;
+    name: string;
+    memberIds: string[];
 };
 
 type BudgetItem = {
@@ -345,6 +352,9 @@ export default function ApprovalsPage() {
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
     const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
+    const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
+    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
     
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
@@ -382,7 +392,7 @@ export default function ApprovalsPage() {
         departments
     );
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || (!!activeRequest && budgetsLoading) || (!!activeRequest && auditLogsLoading);
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || groupsLoading || (!!activeRequest && budgetsLoading) || (!!activeRequest && auditLogsLoading);
 
     const filteredRequests = useMemo(() => {
         if (!approvals) return [];
@@ -414,25 +424,49 @@ export default function ApprovalsPage() {
     }, [activeRequest]);
 
     const canApprove = useMemo(() => {
-        if (!activeRequest || !role || !user || !allUsers) return false;
+        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups) return false;
+        
         const { status } = activeRequest;
-        
+
+        // Admins can approve most pending stages
         if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
-        if (role === 'Manager' && (status === 'Pending Manager Approval' || status === 'Queries Raised')) return true;
+
+        // Find the department and its workflow
+        const department = departments.find(d => d.id === activeRequest.departmentId);
+        if (!department?.workflow) return false;
         
-        // Executive approval check
-        if (status === 'Pending Executive' || status === 'Pending Manager Approval' || status === 'Queries Raised') {
-            // Direct executive can approve
-            if (role === 'Executive') return true;
-            // Delegate can approve
-            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
-            if (isDelegateForExecutive) return true;
+        // Find the current pending stage in the request's timeline
+        const pendingTimelineStage = activeRequest.timeline.find(t => t.status === 'pending');
+        if (!pendingTimelineStage) {
+            // If nothing is pending, maybe it's just 'Approved' and waiting for Procurement Officer
+            if (status === 'Approved' && role === 'Procurement Officer') return true;
+            return false;
+        }
+        
+        // Find the configuration for that stage
+        const stageConfig = department.workflow.find(w => w.name === pendingTimelineStage.stage);
+        if (!stageConfig) return false;
+
+        // Check 1: Group-based approval
+        if (stageConfig.approvalGroupId) {
+            const group = approvalGroups.find(g => g.id === stageConfig.approvalGroupId);
+            if (group && group.memberIds?.includes(user.uid)) {
+                return true;
+            }
         }
 
-        if (role === 'Procurement Officer' && status === 'Approved') return true;
+        // Check 2: Role-based approval
+        if (stageConfig.role) {
+            // Direct role match
+            if (role === stageConfig.role) return true;
+
+            // Delegation check
+            const isDelegateForStageRole = allUsers.some(u => u.role === stageConfig.role && u.delegatedToId === user.uid);
+            if (isDelegateForStageRole) return true;
+        }
         
         return false;
-    }, [activeRequest, role, user, allUsers]);
+    }, [activeRequest, role, user, allUsers, departments, approvalGroups]);
 
     const canRejectOrQuery = useMemo(() => {
         if (!activeRequest || !role || !user || !allUsers) return false;
@@ -566,7 +600,7 @@ export default function ApprovalsPage() {
             newStatus = 'Pending Executive';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
-        } else if (role === 'Executive' || isDelegateForExecutive) {
+        } else if (canApprove) { // Using the new canApprove logic
             if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
@@ -687,24 +721,36 @@ export default function ApprovalsPage() {
                     
                     if (workflowStageConfig) {
                         const usersCollectionRef = collection(firestore, 'users');
-                        const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
-                        const querySnapshot = await getDocs(q);
-                        
-                        const primaryRecipients: string[] = [];
-                        querySnapshot.forEach(doc => {
-                            const userProfile = doc.data();
-                            if (userProfile.email) primaryRecipients.push(userProfile.email);
-                        });
+                        let recipients: string[] = [];
+
+                        if (workflowStageConfig.approvalGroupId && approvalGroups) {
+                            const group = approvalGroups.find(g => g.id === workflowStageConfig.approvalGroupId);
+                            if (group?.memberIds && group.memberIds.length > 0) {
+                                const groupUsersQuery = query(usersCollectionRef, where('__name__', 'in', group.memberIds));
+                                const querySnapshot = await getDocs(groupUsersQuery);
+                                querySnapshot.forEach(doc => {
+                                    const userProfile = doc.data();
+                                    if (userProfile.email) recipients.push(userProfile.email);
+                                });
+                            }
+                        } else if (workflowStageConfig.role) {
+                            const q = query(usersCollectionRef, where('role', '==', workflowStageConfig.role));
+                            const querySnapshot = await getDocs(q);
+                            querySnapshot.forEach(doc => {
+                                const userProfile = doc.data();
+                                if (userProfile.email) recipients.push(userProfile.email);
+                            });
+                        }
 
                         let finalRecipients: string[] = [];
                         if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
                             if (workflowStageConfig.sendToBoth) {
-                                finalRecipients = [...primaryRecipients, workflowStageConfig.alternateEmail];
+                                finalRecipients = [...recipients, workflowStageConfig.alternateEmail];
                             } else {
                                 finalRecipients = [workflowStageConfig.alternateEmail];
                             }
                         } else {
-                            finalRecipients = primaryRecipients;
+                            finalRecipients = recipients;
                         }
                         
                         const uniqueRecipients = [...new Set(finalRecipients)];

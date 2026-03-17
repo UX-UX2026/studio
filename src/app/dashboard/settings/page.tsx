@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase, Users2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -41,6 +41,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/departments', label: 'Departments', description: 'Manage departments, assign managers, and set budgets.', icon: Building, iconClass: "text-orange-500" },
         { href: '/dashboard/settings/companies', label: 'Companies', description: 'Manage the companies or legal entities in your organization.', icon: Briefcase, iconClass: "text-green-500" },
         { href: '/dashboard/settings/roles', label: 'User Roles', description: 'Define and manage the roles and permissions for users in the application.', icon: Shield, iconClass: "text-purple-500" },
+        { href: '/dashboard/settings/approval-groups', label: 'Approval Groups', description: 'Create groups of users that can collectively approve requests.', icon: Users2, iconClass: "text-cyan-500" },
         { href: '/dashboard/settings/budget', label: 'Budget Integration', description: 'Import, view, and manage budget data from an external sheet.', icon: Banknote, iconClass: "text-green-500" },
         { href: '/dashboard/settings/integrations', label: 'Integrations', description: 'Connect to external accounting platforms like Odoo.', icon: Layers, iconClass: "text-violet-500" },
         { href: '/dashboard/settings/email', label: 'Email & Notifications', description: 'Configure email settings and templates.', icon: Mail, iconClass: "text-pink-500" },

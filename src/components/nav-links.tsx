@@ -27,6 +27,7 @@ import {
   Mail,
   LifeBuoy,
   Layers,
+  Users2,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -74,6 +75,7 @@ const allLinks = [
         { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow', iconClass: "text-blue-500" },
         { href: '/dashboard/settings/departments', label: 'Departments', icon: Building, permission: 'settings:departments', iconClass: "text-orange-500" },
         { href: '/dashboard/settings/roles', label: 'Roles', icon: Shield, permission: 'settings:roles', iconClass: "text-purple-500" },
+        { href: '/dashboard/settings/approval-groups', label: 'Approval Groups', icon: Users2, permission: 'settings:workflow', iconClass: "text-cyan-500" },
         { href: '/dashboard/settings/budget', label: 'Budget', icon: Banknote, permission: 'settings:budget', iconClass: "text-green-500" },
         { href: '/dashboard/settings/integrations', label: 'Integrations', icon: Layers, permission: 'settings:integrations', iconClass: "text-violet-500" },
         { href: '/dashboard/settings/email', label: 'Email & Notifications', icon: Mail, permission: 'settings:email', iconClass: "text-pink-500" },

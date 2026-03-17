@@ -307,6 +307,14 @@
               "role": {
                 "type": "string"
               },
+              "approvalGroupId": {
+                "type": "string",
+                "description": "The ID of the approval group assigned to this stage."
+              },
+              "approvalGroupName": {
+                "type": "string",
+                "description": "The name of the approval group assigned to this stage."
+              },
               "permissions": {
                 "type": "array",
                 "items": {
@@ -340,7 +348,6 @@
             "required": [
               "id",
               "name",
-              "role",
               "permissions"
             ]
           }
@@ -704,6 +711,25 @@
             }
         },
         "required": ["name"]
+    },
+    "approvalGroup": {
+        "title": "Approval Group",
+        "description": "A group of users who can collectively approve requests at a workflow stage.",
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the approval group."
+            },
+            "memberIds": {
+                "type": "array",
+                "description": "An array of user IDs who are members of this group.",
+                "items": {
+                    "type": "string"
+                }
+            }
+        },
+        "required": ["name", "memberIds"]
     }
   },
   "auth": {
@@ -742,6 +768,12 @@
         "$ref": "#/entities/role"
       },
       "description": "Collection of all user roles."
+    },
+    "/approvalGroups/{groupId}": {
+        "schema": {
+            "$ref": "#/entities/approvalGroup"
+        },
+        "description": "Collection of approval groups for workflow stages."
     },
     "/procurementRequests/{procurementRequestId}": {
       "schema": {

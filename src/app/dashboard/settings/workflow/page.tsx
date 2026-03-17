@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { useRoles } from "@/lib/roles-provider";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, setDoc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, setDoc, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { workflowTestTemplate } from "@/lib/email-templates";
 
@@ -39,6 +39,8 @@ type WorkflowStage = {
     id: string;
     name: string;
     role: UserRole;
+    approvalGroupId?: string;
+    approvalGroupName?: string;
     permissions: string[];
     useAlternateEmail?: boolean;
     alternateEmail?: string;
@@ -56,6 +58,12 @@ type UserProfile = {
     displayName: string;
     email: string;
     role: string;
+};
+
+type ApprovalGroup = {
+    id: string;
+    name: string;
+    memberIds: string[];
 };
 
 const initialWorkflow: WorkflowStage[] = [
@@ -77,6 +85,9 @@ export default function WorkflowPage() {
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
     const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
+    const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
+    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [workflow, setWorkflow] = useState<WorkflowStage[]>([]);
@@ -109,7 +120,7 @@ export default function WorkflowPage() {
         }
     }, [selectedDepartmentId, departments]);
     
-    const loading = userLoading || deptsLoading || usersLoading;
+    const loading = userLoading || deptsLoading || usersLoading || groupsLoading;
     
     if (loading || !user || adminRole !== 'Administrator') {
         return (
@@ -168,7 +179,7 @@ export default function WorkflowPage() {
     };
 
     const handleTestNotification = async (stageId: string) => {
-        if (!firestore || !users || !user) return;
+        if (!firestore || !users || !user || !approvalGroups) return;
     
         const stage = workflow.find(s => s.id === stageId);
         if (!stage) {
@@ -179,7 +190,17 @@ export default function WorkflowPage() {
         setIsTesting(stageId);
     
         try {
-            const primaryRecipients = users.filter(u => u.role === stage.role).map(u => u.email).filter(Boolean);
+            let primaryRecipients: string[] = [];
+
+            if (stage.approvalGroupId) {
+                const group = approvalGroups.find(g => g.id === stage.approvalGroupId);
+                if (group?.memberIds) {
+                    const groupUsers = users.filter(u => group.memberIds.includes(u.id));
+                    primaryRecipients = groupUsers.map(u => u.email).filter(Boolean);
+                }
+            } else if (stage.role) {
+                primaryRecipients = users.filter(u => u.role === stage.role).map(u => u.email).filter(Boolean);
+            }
     
             let finalRecipients: string[] = [];
             if (stage.useAlternateEmail && stage.alternateEmail) {
@@ -201,7 +222,7 @@ export default function WorkflowPage() {
                 toast({
                     variant: 'destructive',
                     title: 'No Recipients Found',
-                    description: `No users with role "${stage.role}" or an alternate email is configured.`,
+                    description: `No users found for this stage configuration.`,
                 });
                 setIsTesting(null);
                 return;
@@ -342,7 +363,8 @@ export default function WorkflowPage() {
                                 <TableRow>
                                     <TableHead className="w-[60px]"></TableHead>
                                     <TableHead>Stage Name</TableHead>
-                                    <TableHead className="w-[200px]">Assigned Role</TableHead>
+                                    <TableHead className="w-[180px]">Assignment Type</TableHead>
+                                    <TableHead className="w-[220px]">Assigned To</TableHead>
                                     <TableHead>Permissions</TableHead>
                                     <TableHead>Notifications</TableHead>
                                     <TableHead className="text-right w-[160px]">Actions</TableHead>
@@ -362,14 +384,55 @@ export default function WorkflowPage() {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value)}>
+                                            <Select
+                                                value={stage.approvalGroupId ? 'group' : 'role'}
+                                                onValueChange={(type) => {
+                                                    if (type === 'role') {
+                                                        handleUpdateStage(stage.id, 'approvalGroupId', null);
+                                                        handleUpdateStage(stage.id, 'approvalGroupName', null);
+                                                    } else {
+                                                        handleUpdateStage(stage.id, 'role', null);
+                                                    }
+                                                }}
+                                            >
                                                 <SelectTrigger>
-                                                    <SelectValue placeholder="Select a role" />
+                                                    <SelectValue />
                                                 </SelectTrigger>
                                                 <SelectContent>
-                                                    {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                    <SelectItem value="role">Role</SelectItem>
+                                                    <SelectItem value="group">Approval Group</SelectItem>
                                                 </SelectContent>
                                             </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            {stage.approvalGroupId || !stage.role ? (
+                                                <Select
+                                                    value={stage.approvalGroupId || ''}
+                                                    onValueChange={(value) => {
+                                                        const group = approvalGroups?.find(g => g.id === value);
+                                                        handleUpdateStage(stage.id, 'approvalGroupId', value);
+                                                        handleUpdateStage(stage.id, 'approvalGroupName', group?.name || '');
+                                                    }}
+                                                >
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select a group" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {approvalGroups?.map(g => (
+                                                            <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value)}>
+                                                    <SelectTrigger>
+                                                        <SelectValue placeholder="Select a role" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {allRoles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                    </SelectContent>
+                                                </Select>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <Popover>
@@ -494,5 +557,3 @@ export default function WorkflowPage() {
         </Card>
     );
 }
-
-    
