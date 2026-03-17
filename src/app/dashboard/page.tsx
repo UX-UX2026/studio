@@ -34,7 +34,7 @@ import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
 import { useFirestore, useCollection, useUser } from '@/firebase';
-import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp, getDocs, type Firestore } from 'firebase/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
@@ -94,6 +94,19 @@ type BudgetItem = {
     category: string;
     forecasts: number[];
     yearTotal: number;
+};
+
+type AuditEvent = {
+    id: string;
+    userId: string;
+    userName: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
+    entity?: {
+        type: string;
+        id: string;
+    };
 };
 
 const stageToStatusMap: { [key: string]: string } = {
@@ -366,7 +379,7 @@ export default function DashboardPage() {
         }
     }
     
-    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf', firestore: Firestore) => {
         const summaryData = (() => {
             const budgetItemsForRequest = allBudgetItems?.filter(b => b.departmentId === request.departmentId) || [];
             if (!allDepartments || !request) {
@@ -418,6 +431,16 @@ export default function DashboardPage() {
         if (format === 'pdf') {
             const { default: jsPDF } = await import('jspdf');
             await import('jspdf-autotable');
+
+            // Fetch audit logs for the request
+            const auditLogsQuery = query(
+                collection(firestore, 'auditLogs'), 
+                where('entity.id', '==', request.id),
+                orderBy('timestamp', 'asc')
+            );
+            const auditLogsSnapshot = await getDocs(auditLogsQuery);
+            const auditLogs = auditLogsSnapshot.docs.map(doc => doc.data() as AuditEvent);
+
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
             if (logo && logo.imageUrl.startsWith('data:image')) {
@@ -488,7 +511,7 @@ export default function DashboardPage() {
             
             const timelineData = request.timeline.map(step => [
                 step.stage,
-                step.actor,
+                step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
                 step.status,
                 step.date || 'N/A',
             ]);
@@ -498,6 +521,26 @@ export default function DashboardPage() {
                 body: timelineData,
                 headStyles: { fillColor: [201, 115, 83] },
             });
+            
+            if (auditLogs && auditLogs.length > 0) {
+                const emailLog = auditLogs
+                    .filter(log => log.action === 'notification.sent')
+                    .map(log => ({
+                        timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                        details: log.details,
+                    }));
+            
+                if (emailLog.length > 0) {
+                    (doc as any).autoTable({
+                        startY: (doc as any).lastAutoTable.finalY + 10,
+                        head: [['Notification Email History']],
+                        body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                        theme: 'striped',
+                        headStyles: { fillColor: [201, 115, 83] },
+                        styles: { fontSize: 8 },
+                    });
+                }
+            }
 
             doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
             return;
@@ -542,7 +585,7 @@ export default function DashboardPage() {
 
         const timelineData = request.timeline.map(step => ({
             'Stage': step.stage,
-            'Actor': step.actor,
+            'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
             'Status': step.status,
             'Date': step.date || 'N/A',
         }));
@@ -765,10 +808,10 @@ export default function DashboardPage() {
                                               </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx')}>
+                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx', firestore)}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf')}>
+                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore)}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
