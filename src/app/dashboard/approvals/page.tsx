@@ -106,7 +106,7 @@ const formatCurrency = (amount: number) => {
 const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
     if (format === 'pdf') {
         const { default: jsPDF } = await import('jspdf');
-        await import('jspdf-autotable');
+        const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
         if (logo && logo.imageUrl.startsWith('data:image')) {
@@ -131,7 +131,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             ["Status", request.status],
         ];
 
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: 42,
             head: [['Request Details', '']],
             body: detailsData,
@@ -147,7 +147,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             formatCurrency(item.unitPrice),
             formatCurrency(item.qty * item.unitPrice),
         ]);
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
@@ -160,7 +160,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             formatCurrency(line.forecastTotal),
             formatCurrency(line.variance),
         ]);
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
             body: summaryTableData,
@@ -181,7 +181,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             step.status,
             step.date || 'N/A',
         ]);
-        (doc as any).autoTable({
+        autoTable(doc, {
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
@@ -203,7 +203,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 }));
         
             if (emailLog.length > 0) {
-                (doc as any).autoTable({
+                autoTable(doc, {
                     startY: (doc as any).lastAutoTable.finalY + 10,
                     head: [['Notification Email History']],
                     body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),

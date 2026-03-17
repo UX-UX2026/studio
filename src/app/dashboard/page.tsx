@@ -430,7 +430,7 @@ export default function DashboardPage() {
         
         if (format === 'pdf') {
             const { default: jsPDF } = await import('jspdf');
-            await import('jspdf-autotable');
+            const { default: autoTable } = await import('jspdf-autotable');
 
             // Fetch audit logs for the request
             const auditLogsQuery = query(
@@ -465,7 +465,7 @@ export default function DashboardPage() {
                 ["Status", request.status],
             ];
 
-            (doc as any).autoTable({
+            autoTable(doc, {
                 startY: 42,
                 head: [['Request Details', '']],
                 body: detailsData,
@@ -481,7 +481,7 @@ export default function DashboardPage() {
                 formatCurrency(item.unitPrice),
                 formatCurrency(item.qty * item.unitPrice),
             ]);
-            (doc as any).autoTable({
+            autoTable(doc, {
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
                 body: itemsData,
@@ -494,7 +494,7 @@ export default function DashboardPage() {
                 formatCurrency(line.forecastTotal),
                 formatCurrency(line.variance),
             ]);
-            (doc as any).autoTable({
+            autoTable(doc, {
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
                 body: summaryTableData,
@@ -515,7 +515,7 @@ export default function DashboardPage() {
                 step.status,
                 step.date || 'N/A',
             ]);
-            (doc as any).autoTable({
+            autoTable(doc, {
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Stage', 'Actor', 'Status', 'Date']],
                 body: timelineData,
@@ -537,7 +537,7 @@ export default function DashboardPage() {
                     }));
             
                 if (emailLog.length > 0) {
-                    (doc as any).autoTable({
+                    autoTable(doc, {
                         startY: (doc as any).lastAutoTable.finalY + 10,
                         head: [['Notification Email History']],
                         body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
