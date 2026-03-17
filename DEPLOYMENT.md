@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide provides the steps to save your code changes to GitHub and deploy your application to Firebase Hosting.
+This guide provides the steps to save your code changes to GitHub and deploy your application to Vercel.
 
 ## 1. Saving Changes to GitHub
 
@@ -16,7 +16,7 @@ git add .
 
 ### Step 2: Commit the Changes
 
-This saves a snapshot of your files. Replace `"Your descriptive message here"` with a summary of the changes you've made (e.g., "Add company linking and update PDF headers").
+This saves a snapshot of your files. Replace `"Your descriptive message here"` with a summary of the changes you've made (e.g., "Add Vercel deployment config").
 
 ```bash
 git commit -m "Your descriptive message here"
@@ -32,28 +32,29 @@ git push origin main
 
 After these steps, your code will be up-to-date on GitHub.
 
-## 2. Deploying to Firebase
+## 2. Deploying to Vercel
 
-This project is set up for Firebase App Hosting.
+This project is configured for seamless deployment to [Vercel](https://vercel.com/), the creators of Next.js.
 
-### Step 1: Build the Project
+### Step 1: Import Your Project in Vercel
 
-First, you need to build the application for production.
+1.  Go to your [Vercel dashboard](https://vercel.com/dashboard).
+2.  Click the "Add New..." button and select "Project".
+3.  Find your GitHub repository (`UX-UX2026/studio`) and click "Import".
 
-```bash
-npm run build
-```
+Vercel will automatically detect that you are using Next.js and configure the build settings for you.
 
-### Step 2: Deploy to Firebase
+### Step 2: Configure Environment Variables
 
-Use the Firebase CLI to deploy your built application.
+For your live, deployed application to connect to Firebase and other services, you **MUST** provide your credentials as **Environment Variables** in the Vercel project settings.
 
-```bash
-firebase deploy
-```
+1.  During the import process, expand the "Environment Variables" section.
+2.  Copy all the variables and their values from your local `.env` file and paste them into the Vercel dashboard.
 
-The CLI will provide a URL to your live, deployed application once it's finished.
+### Step 3: Deploy
+
+Click the "Deploy" button. Vercel will build your application and deploy it. Once finished, you will be given a live URL for your project.
 
 ---
 
-**Remember:** For your live application to work, you must set your Firebase configuration (from your `.env` file) as environment variables in the Firebase App Hosting settings in the Firebase Console.
+**Remember:** Any time you push new changes to your GitHub repository's `main` branch, Vercel will automatically trigger a new deployment for you.
