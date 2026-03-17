@@ -417,7 +417,8 @@ export default function DashboardPage() {
         
         if (format === 'pdf') {
             const { default: jsPDF } = await import('jspdf');
-            const { default: autoTable } = await import('jspdf-autotable');
+            const autoTableModule = await import('jspdf-autotable');
+            const autoTable = autoTableModule.default;
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
             if (logo && logo.imageUrl.startsWith('data:image')) {
