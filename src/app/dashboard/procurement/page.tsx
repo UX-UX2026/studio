@@ -38,8 +38,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
 import * as XLSX from 'xlsx';
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 
 const formatCurrency = (amount: number) => {
@@ -136,8 +134,10 @@ type AuditEvent = {
     };
 };
 
-const generateApprovalReport = (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
+const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
     if (format === 'pdf') {
+        const { default: jsPDF } = await import('jspdf');
+        const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
         const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
         if (logo && logo.imageUrl.startsWith('data:image')) {
@@ -1647,4 +1647,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-

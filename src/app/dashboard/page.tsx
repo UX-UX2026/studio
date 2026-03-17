@@ -57,8 +57,6 @@ import { logErrorToFirestore } from '@/lib/error-logger';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import * as XLSX from 'xlsx';
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -368,7 +366,7 @@ export default function DashboardPage() {
         }
     }
     
-    const generateApprovalReport = (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
         const summaryData = (() => {
             const budgetItemsForRequest = allBudgetItems?.filter(b => b.departmentId === request.departmentId) || [];
             if (!allDepartments || !request) {
@@ -418,6 +416,8 @@ export default function DashboardPage() {
         })();
         
         if (format === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
             if (logo && logo.imageUrl.startsWith('data:image')) {
