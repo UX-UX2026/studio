@@ -417,8 +417,7 @@ export default function DashboardPage() {
         
         if (format === 'pdf') {
             const { default: jsPDF } = await import('jspdf');
-            const autoTableModule = await import('jspdf-autotable');
-            const autoTable = autoTableModule.default;
+            await import('jspdf-autotable');
             const doc = new jsPDF();
             const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
             if (logo && logo.imageUrl.startsWith('data:image')) {
@@ -443,7 +442,7 @@ export default function DashboardPage() {
                 ["Status", request.status],
             ];
 
-            autoTable(doc, {
+            (doc as any).autoTable({
                 startY: 42,
                 head: [['Request Details', '']],
                 body: detailsData,
@@ -459,7 +458,7 @@ export default function DashboardPage() {
                 formatCurrency(item.unitPrice),
                 formatCurrency(item.qty * item.unitPrice),
             ]);
-            autoTable(doc, {
+            (doc as any).autoTable({
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
                 body: itemsData,
@@ -472,7 +471,7 @@ export default function DashboardPage() {
                 formatCurrency(line.forecastTotal),
                 formatCurrency(line.variance),
             ]);
-            autoTable(doc, {
+            (doc as any).autoTable({
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
                 body: summaryTableData,
@@ -493,7 +492,7 @@ export default function DashboardPage() {
                 step.status,
                 step.date || 'N/A',
             ]);
-            autoTable(doc, {
+            (doc as any).autoTable({
                 startY: (doc as any).lastAutoTable.finalY + 10,
                 head: [['Stage', 'Actor', 'Status', 'Date']],
                 body: timelineData,
