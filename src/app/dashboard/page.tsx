@@ -520,6 +520,12 @@ export default function DashboardPage() {
                 head: [['Stage', 'Actor', 'Status', 'Date']],
                 body: timelineData,
                 headStyles: { fillColor: [201, 115, 83] },
+                columnStyles: {
+                    0: { cellWidth: 40 },
+                    1: { cellWidth: 'auto' },
+                    2: { cellWidth: 25 },
+                    3: { cellWidth: 25 }
+                }
             });
             
             if (auditLogs && auditLogs.length > 0) {
