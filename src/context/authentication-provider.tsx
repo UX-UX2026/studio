@@ -55,37 +55,47 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initialize = async () => {
-      const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
-      if (!isConfigValid) {
-        throw new Error("Firebase configuration is missing or incomplete. For local development, please update your .env file. For production (e.g., Vercel), set the required environment variables in your project settings. Then, restart your development server or redeploy.");
-      }
-
-      const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-      const auth = getAuth(app);
-      const firestore = getFirestore(app);
-      
       try {
-        await enableIndexedDbPersistence(firestore);
-        console.log("Firestore offline persistence enabled.");
-      } catch (err: any) {
-        if (err.code === 'failed-precondition') {
-          console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
-        } else if (err.code === 'unimplemented') {
-          console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
+        const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
+        if (!isConfigValid) {
+          setInitError("Firebase configuration is missing or incomplete. For local development, please update your .env file. For production (e.g., Vercel), set the required environment variables in your project settings. Then, restart your development server or redeploy.");
+          setIsLoading(false); // Stop loading, show error
+          return;
         }
-      }
-      
-      setFirebaseServices({ app, auth, firestore });
-    };
 
-    initialize().catch(err => {
+        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        const auth = getAuth(app);
+        const firestore = getFirestore(app);
+        
+        try {
+          await enableIndexedDbPersistence(firestore);
+          console.log("Firestore offline persistence enabled.");
+        } catch (err: any) {
+          if (err.code === 'failed-precondition') {
+            console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
+          } else if (err.code === 'unimplemented') {
+            console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
+          }
+        }
+        
+        setFirebaseServices({ app, auth, firestore });
+      } catch (err) {
         console.error("Fatal: Firebase Initialization Error", err);
         setInitError((err as Error).message || "An unknown error occurred during Firebase setup.");
-    });
+        setIsLoading(false); // Stop loading, show error
+      }
+    };
+
+    initialize();
   }, []);
 
   useEffect(() => {
-    if (!firebaseServices) return;
+    if (!firebaseServices) {
+      if (!isLoading) {
+          // The error UI will be shown by the initError check
+      }
+      return;
+    }
     
     const { auth } = firebaseServices;
 
@@ -97,7 +107,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [firebaseServices]);
+  }, [firebaseServices, isLoading]);
 
   useEffect(() => {
     if (isLoading) return; 
@@ -108,19 +118,19 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
-    } else {
+    } else if (!initError) { // Don't redirect if there's an init error
       if (!isAuthPage) {
         router.replace('/login');
       }
     }
-  }, [isLoading, user, pathname, router]);
+  }, [isLoading, user, pathname, router, initError]);
 
   if (initError) {
       return (
           <div className="flex h-screen w-full items-center justify-center bg-background p-8">
               <div className="flex max-w-lg flex-col items-center gap-4 rounded-lg border border-destructive bg-destructive/5 p-6 text-center text-destructive">
                   <AlertTriangle className="h-10 w-10" />
-                  <h1 className="text-xl font-bold">Firebase Error</h1>
+                  <h1 className="text-xl font-bold">Firebase Configuration Error</h1>
                   <p className="text-sm">{initError}</p>
               </div>
           </div>
