@@ -55,6 +55,17 @@ For your live, deployed application to connect to Firebase and other services, y
 
 Click the "Deploy" button. Vercel will build your application and deploy it. Once finished, you will be given a live URL for your project.
 
+### Step 4: Authorize Your Vercel Domain
+
+For Firebase Authentication (like Google Sign-In) to work on your live site, you **MUST** add your Vercel URL to Firebase's list of authorized domains.
+
+1.  After your first successful deployment, Vercel will provide you with one or more URLs for your project (e.g., `your-app-name.vercel.app`). Copy the main URL.
+2.  Go to the [Firebase Console](https://console.firebase.google.com/) and select your project.
+3.  Navigate to **Authentication** from the left-hand menu.
+4.  Go to the **Settings** tab.
+5.  Under the **Authorized domains** section, click **Add domain**.
+6.  Paste your Vercel URL and click **Add**.
+
 ---
 
 **Remember:** Any time you push new changes to your GitHub repository's `main` branch, Vercel will automatically trigger a new deployment for you.
