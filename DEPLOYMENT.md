@@ -69,3 +69,29 @@ For Firebase Authentication (like Google Sign-In) to work on your live site, you
 ---
 
 **Remember:** Any time you push new changes to your GitHub repository's `main` branch, Vercel will automatically trigger a new deployment for you.
+
+## Common Issues & Troubleshooting
+
+### Google Sign-In Fails on Vercel (But Works Locally)
+
+**Problem:** After deploying to Vercel, you click the "Sign in with Google" button, but the popup closes or you get an error message like "unauthorized-domain".
+
+This issue is typically caused by one of two things:
+
+**1. Vercel Environment Variables Are Missing**
+
+**Solution:** Your live Vercel site cannot access your local `.env` file. You **must** copy your Firebase credentials into your Vercel project's settings.
+
+**Fix:**
+*   Go to your project in the [Vercel Dashboard](https://vercel.com/dashboard).
+*   Navigate to the **Settings** tab and then **Environment Variables**.
+*   Add all the `NEXT_PUBLIC_FIREBASE_...` variables from your `.env` file, ensuring the values are correct.
+*   After adding the variables, you may need to redeploy your project for the changes to take effect. Go to the **Deployments** tab, select the latest deployment, click the "..." menu, and choose **Redeploy**.
+
+**2. Your Vercel Domain Is Not Authorized in Firebase**
+
+**Solution:** Firebase needs to be told that it's safe to accept login requests from your Vercel URL.
+
+**Fix:**
+*   Follow **Step 4** of the deployment guide above to add your Vercel URL to the "Authorized domains" list in your Firebase project's Authentication settings.
+*   **Important:** Vercel provides multiple URLs. Your main production URL might be `your-app.vercel.app`, but preview deployments for different branches will have unique URLs (e.g., `your-app-git-main-your-team.vercel.app`). Make sure you add the **exact URL** you are using to access the site. It's often a good idea to add both your main production domain and your team's base preview domain.

@@ -47,12 +47,19 @@ export default function LoginPage() {
             // will handle the user state and navigation.
         } catch (error: any) {
             console.error("Google Sign-In Error:", error);
-            let description = "An unexpected error occurred. Please try again.";
-            if (error.code === 'auth/account-exists-with-different-credential') {
+            let description = `An unexpected error occurred. Code: ${error.code}. Please check the console for more details.`;
+
+            if (error.code === 'auth/unauthorized-domain') {
+                description = "This domain is not authorized for sign-in. Please ensure you have added the correct URL to your Firebase project's 'Authorized domains' list and have correctly set up your Vercel environment variables.";
+            } else if (error.code === 'auth/account-exists-with-different-credential') {
                 description = "An account already exists with the same email address but different sign-in credentials. Try signing in with the original method.";
             } else if (error.code === 'auth/popup-closed-by-user') {
                 description = "The sign-in window was closed before completion.";
             }
+             else if (error.code === 'auth/network-request-failed') {
+                description = "A network error occurred. Please check your internet connection and ensure your Firebase Environment Variables are correctly set on Vercel.";
+            }
+
             toast({
                 variant: "destructive",
                 title: "Google Sign-In Failed",
