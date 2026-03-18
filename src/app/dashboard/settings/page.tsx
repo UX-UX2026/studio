@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase, Users2 } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase, Users2, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -47,6 +47,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/email', label: 'Email & Notifications', description: 'Configure email settings and templates.', icon: Mail, iconClass: "text-pink-500" },
         { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', description: 'Lock and unlock submission periods for each department.', icon: CalendarClock, iconClass: "text-teal-500" },
         { href: '/dashboard/settings/procurement-rules', label: 'Procurement Rules', description: 'Set application-wide rules for procurement submissions.', icon: Scale, iconClass: "text-rose-500" },
+        { href: '/dashboard/settings/security', label: 'Security', description: 'Manage session timeouts and other security policies.', icon: ShieldCheck, iconClass: "text-red-500" },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', description: 'A log of all significant write operations performed on the database.', icon: History, iconClass: "text-indigo-500" },
         { href: '/dashboard/settings/recycle-bin', label: 'Recycle Bin', description: 'Restore or permanently delete archived procurement requests.', icon: Recycle, iconClass: "text-lime-600" },
         { href: '/dashboard/settings/data-management', label: 'Backup & Data', description: 'Export all submissions or perform destructive data operations.', icon: HardDriveDownload, iconClass: "text-red-500" },

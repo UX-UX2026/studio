@@ -28,6 +28,7 @@ import {
   LifeBuoy,
   Layers,
   Users2,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -81,6 +82,7 @@ const allLinks = [
         { href: '/dashboard/settings/email', label: 'Email & Notifications', icon: Mail, permission: 'settings:email', iconClass: "text-pink-500" },
         { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', icon: CalendarClock, permission: 'settings:procurement-periods', iconClass: "text-teal-500" },
         { href: '/dashboard/settings/procurement-rules', label: 'Procurement Rules', icon: Scale, permission: 'settings:general', iconClass: "text-rose-500" },
+        { href: '/dashboard/settings/security', label: 'Security', icon: ShieldCheck, permission: 'settings:general', iconClass: "text-red-500" },
         { href: '/dashboard/settings/audit-log', label: 'Audit Log', icon: History, permission: 'settings:auditlog', iconClass: "text-indigo-500" },
         { href: '/dashboard/settings/recycle-bin', label: 'Recycle Bin', icon: Recycle, permission: 'settings:data', iconClass: "text-lime-600" },
         { href: '/dashboard/settings/data-management', label: 'Data Management', icon: Eraser, permission: 'settings:data', iconClass: "text-red-500" },

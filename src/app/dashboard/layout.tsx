@@ -1,7 +1,7 @@
 
 'use client';
 
-import { type ReactNode } from "react";
+import { type ReactNode, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { AppHeader } from "@/components/app-header";
 import { NavLinks } from "@/components/nav-links";
@@ -17,7 +17,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser, useAuth, useFirestore, useDoc } from "@/firebase";
 import { Loader, LogOut } from "lucide-react";
 import {
   DropdownMenu,
@@ -25,27 +25,39 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuth } from "@/firebase";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import useInactivityTimeout from "@/hooks/use-inactivity-timeout";
+import type { AppMetadata } from '@/app/dashboard/settings/security/page';
+import { doc } from "firebase/firestore";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const userAvatar = PlaceHolderImages.find((img) => img.id === "avatar-1");
-  // The useUser hook now gets its data from the robust AuthenticationProvider
   const { user, profile, loading, role } = useUser();
   const auth = useAuth();
+  const firestore = useFirestore();
   const { toast } = useToast();
 
-  const handleSignOut = async () => {
+  const appMetadataRef = useMemo(() => {
+    if (!firestore) return null;
+    return doc(firestore, 'app', 'metadata');
+  }, [firestore]);
+  const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
+
+  const handleSignOut = useCallback(async (isTimeout = false) => {
     if (!auth) {
       toast({ variant: 'destructive', title: 'Sign Out Failed', description: 'Authentication service not available.' });
       return;
     }
     try {
       await signOut(auth);
-      toast({ title: 'Signed Out', description: 'You have been successfully signed out.' });
+      if (isTimeout) {
+        toast({ title: 'Session Timed Out', description: 'You have been logged out due to inactivity.' });
+      } else {
+        toast({ title: 'Signed Out', description: 'You have been successfully signed out.' });
+      }
       // The AuthenticationProvider will handle redirecting the user on sign out.
     } catch (error: any) {
       console.error("Sign Out Error:", error);
@@ -55,11 +67,18 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         description: error.message || 'An unexpected error occurred during sign out.',
       });
     }
-  };
+  }, [auth, toast]);
 
-  // The main loading state is now handled by the AuthenticationProvider itself,
-  // which shows a full-screen loader. We only need to handle the case where
-  // data might still be loading inside the dashboard layout itself.
+  const onTimeout = useCallback(() => {
+    handleSignOut(true);
+  }, [handleSignOut]);
+
+  const timeoutMinutes = appMetadata?.securitySettings?.autoLogoutEnabled
+    ? appMetadata.securitySettings.inactivityTimeoutMinutes || 0
+    : 0;
+
+  useInactivityTimeout(onTimeout, timeoutMinutes);
+
   if (loading || !user || !profile) {
     return (
       <div className="flex h-screen items-center justify-center">
@@ -118,7 +137,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
-                <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
+                <DropdownMenuItem onClick={() => handleSignOut(false)} className="cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
                 </DropdownMenuItem>

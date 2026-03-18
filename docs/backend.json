@@ -532,6 +532,20 @@
               "format": "date-time"
             }
           }
+        },
+        "securitySettings": {
+            "type": "object",
+            "description": "Settings for application security.",
+            "properties": {
+                "autoLogoutEnabled": {
+                    "type": "boolean",
+                    "description": "If true, users will be logged out after a period of inactivity."
+                },
+                "inactivityTimeoutMinutes": {
+                    "type": "number",
+                    "description": "The number of minutes of inactivity before a user is logged out."
+                }
+            }
         }
       }
     },
