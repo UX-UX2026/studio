@@ -21,6 +21,7 @@ const featuresData = [
     { feature: "Approval Workflow", description: "A multi-stage approval pipeline (e.g., Manager Review -> Executive Approval). Approvers can review line items, see request history, and add comments or queries." },
     { feature: "Fulfillment Management", description: "A dedicated dashboard for procurement officers to manage approved requests, track item status (Sourcing, Quoted, Ordered, Completed), and log received quantities." },
     { feature: "System Administration", description: "A suite of tools for Administrators to manage users, departments, budgets, workflows, and view system logs." },
+    { feature: "Digital Fingerprints", description: "Every approval and rejection is secured with a unique SHA-256 cryptographic hash of the request data. This 'digital fingerprint' provides a tamper-evident audit trail, ensuring data integrity throughout the workflow." },
 ];
 
 const techStack = [

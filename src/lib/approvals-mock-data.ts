@@ -33,6 +33,7 @@ export type ApprovalRequest = {
         status: 'completed' | 'pending' | 'waiting' | 'rejected';
         delegatedById?: string;
         delegatedByName?: string;
+        fingerprint?: string;
     }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: ApprovalItem[];

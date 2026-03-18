@@ -57,6 +57,7 @@ The application's functionality is dictated by the user's assigned role. The pri
 *   **Real-time Data:** The UI updates instantly for all users as data changes in the backend.
 *   **Offline Capability:** The app works offline, syncing any changes once a connection is restored.
 *   **Dynamic Theming:** Switch between modern Light, Dark, and "Classic" themes.
+*   **Data Integrity with Digital Fingerprints:** Every approval or rejection action generates a unique cryptographic fingerprint (a SHA-256 hash) of the entire request data at that moment. This fingerprint is stored with the action and included in PDF exports, providing a verifiable, tamper-evident audit trail.
 
 ---
 

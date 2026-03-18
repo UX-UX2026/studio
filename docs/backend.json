@@ -95,6 +95,10 @@
               "delegatedByName": {
                   "type": "string",
                   "description": "If approved by a delegate, the name of the user who delegated the authority."
+              },
+              "fingerprint": {
+                "type": "string",
+                "description": "A SHA-256 hash of the request data at the time of this action, ensuring data integrity."
               }
             }
           }
@@ -587,6 +591,10 @@
         "details": {
           "type": "string",
           "description": "A human-readable description of the action."
+        },
+        "fingerprint": {
+          "type": "string",
+          "description": "A SHA-256 hash of the associated entity data at the time of the event."
         }
       },
       "required": [
