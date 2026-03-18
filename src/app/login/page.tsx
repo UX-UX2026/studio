@@ -50,7 +50,9 @@ export default function LoginPage() {
             let description = `An unexpected error occurred. Code: ${error.code}. Please check the console for more details.`;
 
             if (error.code === 'auth/unauthorized-domain') {
-                description = "This domain is not authorized for sign-in. Please ensure you have added the correct URL to your Firebase project's 'Authorized domains' list and have correctly set up your Vercel environment variables.";
+                description = "This domain is not authorized for sign-in. Please ensure you have added the correct URL to your Firebase project's 'Authorized domains' list.";
+            } else if (error.code === 'auth/auth-domain-config-required') {
+                description = "The Firebase Auth Domain is not configured. Please ensure the 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN' environment variable is correctly set in your Vercel project settings. This value should be 'your-project-id.firebaseapp.com'.";
             } else if (error.code === 'auth/account-exists-with-different-credential') {
                 description = "An account already exists with the same email address but different sign-in credentials. Try signing in with the original method.";
             } else if (error.code === 'auth/popup-closed-by-user') {
