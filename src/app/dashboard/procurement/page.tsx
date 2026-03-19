@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, Fragment } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell, X } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -974,9 +974,9 @@ export default function ProcurementQuickSubmitPage() {
             });
 
             const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
-            const userDocSnap = await getDocs(query(collection(firestore, 'users'), where('id', '==', activeRequest.submittedById)));
-            if (!userDocSnap.empty) {
-                const submitterProfile = userDocSnap.docs[0].data();
+            const userDocSnap = await getDoc(userDocRef);
+            if (userDocSnap.exists()) {
+                const submitterProfile = userDocSnap.data() as UserProfileData;
                 if (submitterProfile.email) {
                     const link = `${window.location.origin}/dashboard/approvals?id=${editingRequestId}`;
                     const emailHtml = requestRejectedTemplate(activeRequest, commentData, link);
