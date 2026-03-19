@@ -49,7 +49,7 @@ export default function RecurringItemsPage() {
           </div>
         </CardHeader>
         <CardContent>
-            <RecurringClient role={role}/>
+            <RecurringClient />
         </CardContent>
        </Card>
     </div>

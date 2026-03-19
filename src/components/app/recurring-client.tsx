@@ -10,7 +10,7 @@ import { LayoutGrid, List, Plus, Trash2, Upload, Download, Loader } from "lucide
 import { Input } from "../ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useUser, type UserRole } from "@/firebase";
-import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
+import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp, query, orderBy, where } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { procurementCategories } from "@/lib/procurement-categories";
@@ -23,6 +23,8 @@ type RecurringItem = {
     nextLoad: string;
     active: boolean;
     frequency: string;
+    departmentId?: string;
+    departmentName?: string;
 };
 
 const formatCurrency = (amount: number) => {
@@ -32,10 +34,23 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-export function RecurringClient({ role }: { role: UserRole }) {
+export function RecurringClient() {
     const firestore = useFirestore();
-    const { user } = useUser();
-    const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), orderBy('name')), [firestore]);
+    const { user, role, department: userDepartment, departmentId: userDepartmentId } = useUser();
+    
+    const recurringItemsQuery = useMemo(() => {
+        if (!firestore) return null;
+        const q = collection(firestore, 'recurringItems');
+        if (role === 'Administrator' || role === 'Procurement Officer') {
+            return query(q, orderBy('name'));
+        }
+        if (userDepartmentId) {
+            return query(q, where('departmentId', '==', userDepartmentId), orderBy('name'));
+        }
+        // For users without a department, return nothing.
+        return query(q, where('departmentId', '==', 'non-existent-id'));
+    }, [firestore, role, userDepartmentId]);
+    
     const { data: items, loading } = useCollection<RecurringItem>(recurringItemsQuery);
     
     const [view, setView] = useState<'grid' | 'list'>('list');
@@ -81,7 +96,14 @@ export function RecurringClient({ role }: { role: UserRole }) {
     };
 
     const handleAddItem = async () => {
-        if (!user || !firestore) return;
+        if (!user || !firestore || !userDepartment || !userDepartmentId) {
+            toast({
+                variant: 'destructive',
+                title: 'Cannot Add Item',
+                description: 'Your user profile is not assigned to a department.',
+            });
+            return;
+        }
         const newItem: Omit<RecurringItem, 'id'> = {
           name: "New Item",
           category: "Uncategorized",
@@ -89,6 +111,8 @@ export function RecurringClient({ role }: { role: UserRole }) {
           nextLoad: "TBD",
           frequency: "Monthly",
           active: true,
+          departmentId: userDepartmentId,
+          departmentName: userDepartment,
         };
         const recurringItemsCollectionRef = collection(firestore, 'recurringItems');
         const action = 'recurringItem.create';

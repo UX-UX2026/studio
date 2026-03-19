@@ -96,6 +96,8 @@ type RecurringItem = {
     name: string;
     amount: number;
     active: boolean;
+    departmentId?: string;
+    departmentName?: string;
 };
 
 type Item = {
@@ -391,7 +393,21 @@ export default function ProcurementQuickSubmitPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
 
-    const recurringItemsQuery = useMemo(() => query(collection(firestore, 'recurringItems'), where('active', '==', true)), [firestore]);
+    const recurringItemsQuery = useMemo(() => {
+        if (!firestore) return null;
+        const q = collection(firestore, 'recurringItems');
+        // Admins and POs see all active items for adding to any submission.
+        if (role === 'Administrator' || role === 'Procurement Officer') {
+            return query(q, where('active', '==', true));
+        }
+        // Other roles (Manager, Requester) only see items for their own department.
+        const userDept = departments?.find(d => d.name === userDepartment);
+        if (userDept) {
+            return query(q, where('active', '==', true), where('departmentId', '==', userDept.id));
+        }
+        // If user has no department, they see no recurring items.
+        return query(q, where('active', '==', true), where('departmentId', '==', 'non-existent-id'));
+    }, [firestore, role, userDepartment, departments]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
     
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
@@ -463,7 +479,7 @@ export default function ProcurementQuickSubmitPage() {
     // Set default department based on user role and data
     useEffect(() => {
         if (deptsLoading || !departments) return;
-        if (role === 'Manager' && userDepartment) {
+        if (role === 'Manager' || role === 'Requester') {
             const userDept = departments.find(d => d.name === userDepartment);
             if (userDept) {
                 setSelectedDepartmentId(userDept.id);
@@ -1227,7 +1243,7 @@ export default function ProcurementQuickSubmitPage() {
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
                         <div className="grid items-center gap-1.5">
                             <Label htmlFor="department">Department</Label>
-                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role === 'Manager' && !!userDepartment)}>
+                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || ((role === 'Manager' || role === 'Requester') && !!userDepartment)}>
                                 <SelectTrigger id="department">
                                     <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                                 </SelectTrigger>
@@ -1360,7 +1376,7 @@ export default function ProcurementQuickSubmitPage() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                         <CardContent className="border-t pt-5">
-                            <RecurringClient role={role} />
+                            <RecurringClient />
                         </CardContent>
                     </CollapsibleContent>
                 </Collapsible>
@@ -1602,7 +1618,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
