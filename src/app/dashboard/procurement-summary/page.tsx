@@ -73,7 +73,7 @@ export default function ProcurementSummaryPage() {
     // Set default department based on user role and data
     useEffect(() => {
         if (deptsLoading || !departments) return;
-        if ((role === 'Manager' || role === 'Requester') && userDepartment) {
+        if (role !== 'Administrator' && userDepartment) {
             const userDept = departments.find(d => d.name === userDepartment);
             if (userDept) {
                 setSelectedDepartmentId(userDept.id);
@@ -131,12 +131,12 @@ export default function ProcurementSummaryPage() {
             <div className="flex flex-wrap items-end gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
                 <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
                     <Label htmlFor="department">Department</Label>
-                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || ((role === 'Manager' || role === 'Requester') && !!userDepartment)}>
+                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role !== 'Administrator' && !!userDepartment)}>
                         <SelectTrigger id="department">
                             <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                         </SelectTrigger>
                         <SelectContent>
-                            {role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer' ? (
+                            {role === 'Administrator' ? (
                                 departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)
                             ) : (
                                 <SelectItem value={selectedDepartmentId}>{departments?.find(d => d.id === selectedDepartmentId)?.name}</SelectItem>
@@ -263,8 +263,3 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
-
-    
-
-
-    
