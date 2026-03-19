@@ -6,6 +6,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/firebase/auth/use-user";
 import { LifeBuoy } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 // Data extracted from README.md and project structure
 const rolesData = [
@@ -63,9 +64,11 @@ export default function HelpPage() {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="user-guide">
-                    <TabsList className="grid w-full grid-cols-2">
+                    <TabsList className={cn("grid w-full", role === 'Administrator' ? "grid-cols-2" : "grid-cols-1")}>
                         <TabsTrigger value="user-guide">User Guide</TabsTrigger>
-                        <TabsTrigger value="system-guide" disabled={role !== 'Administrator'}>System & Admin Guide</TabsTrigger>
+                        {role === 'Administrator' && (
+                            <TabsTrigger value="system-guide">System & Admin Guide</TabsTrigger>
+                        )}
                     </TabsList>
                     
                     <TabsContent value="user-guide" className="pt-6">
@@ -100,59 +103,61 @@ export default function HelpPage() {
                             </AccordionItem>
                         </Accordion>
                     </TabsContent>
-
-                    <TabsContent value="system-guide" className="pt-6">
-                         <Accordion type="multiple" defaultValue={['item-3', 'item-4']} className="w-full space-y-4">
-                            <AccordionItem value="item-3">
-                                <AccordionTrigger className="text-lg font-semibold">Technical Stack</AccordionTrigger>
-                                <AccordionContent>
-                                    <p className="mb-4 text-muted-foreground">The application is built on the following modern technologies.</p>
-                                    <div className="overflow-auto rounded-lg border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Component</TableHead>
-                                                    <TableHead>Technology</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {techStack.map(t => (
-                                                    <TableRow key={t.item}>
-                                                        <TableCell className="font-medium">{t.item}</TableCell>
-                                                        <TableCell>{t.value}</TableCell>
+                    
+                    {role === 'Administrator' && (
+                        <TabsContent value="system-guide" className="pt-6">
+                            <Accordion type="multiple" defaultValue={['item-3', 'item-4']} className="w-full space-y-4">
+                                <AccordionItem value="item-3">
+                                    <AccordionTrigger className="text-lg font-semibold">Technical Stack</AccordionTrigger>
+                                    <AccordionContent>
+                                        <p className="mb-4 text-muted-foreground">The application is built on the following modern technologies.</p>
+                                        <div className="overflow-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Component</TableHead>
+                                                        <TableHead>Technology</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                            <AccordionItem value="item-4">
-                                <AccordionTrigger className="text-lg font-semibold">Database Schema</AccordionTrigger>
-                                <AccordionContent>
-                                     <p className="mb-4 text-muted-foreground">The Firestore database is structured into several top-level collections.</p>
-                                    <div className="overflow-auto rounded-lg border">
-                                        <Table>
-                                            <TableHeader>
-                                                <TableRow>
-                                                    <TableHead>Collection Path</TableHead>
-                                                    <TableHead>Description</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {dbSchema.map(s => (
-                                                    <TableRow key={s.path}>
-                                                        <TableCell className="font-medium font-mono text-sm">{s.path}</TableCell>
-                                                        <TableCell>{s.description}</TableCell>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {techStack.map(t => (
+                                                        <TableRow key={t.item}>
+                                                            <TableCell className="font-medium">{t.item}</TableCell>
+                                                            <TableCell>{t.value}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                                <AccordionItem value="item-4">
+                                    <AccordionTrigger className="text-lg font-semibold">Database Schema</AccordionTrigger>
+                                    <AccordionContent>
+                                        <p className="mb-4 text-muted-foreground">The Firestore database is structured into several top-level collections.</p>
+                                        <div className="overflow-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Collection Path</TableHead>
+                                                        <TableHead>Description</TableHead>
                                                     </TableRow>
-                                                ))}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
-                                </AccordionContent>
-                            </AccordionItem>
-                        </Accordion>
-                    </TabsContent>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {dbSchema.map(s => (
+                                                        <TableRow key={s.path}>
+                                                            <TableCell className="font-medium font-mono text-sm">{s.path}</TableCell>
+                                                            <TableCell>{s.description}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                    </AccordionContent>
+                                </AccordionItem>
+                            </Accordion>
+                        </TabsContent>
+                    )}
                 </Tabs>
             </CardContent>
         </Card>
