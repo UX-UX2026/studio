@@ -1618,7 +1618,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
