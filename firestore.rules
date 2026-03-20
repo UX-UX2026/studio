@@ -5,81 +5,96 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // Helper functions
-    function getUserRole() {
-      return request.auth.token.role;
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+    
+    function getUserRole(userId) {
+      // Read role from the user's profile document instead of custom claims
+      if (exists(/databases/$(database)/documents/users/$(userId))) {
+        return getUserData(userId).role;
+      }
+      return null;
     }
 
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
-    function isAdmin() {
-      return getUserRole() == 'Administrator';
+    function isAdmin(userId) {
+      return getUserRole(userId) == 'Administrator';
     }
 
-    function isManager() {
-      return getUserRole() == 'Manager';
+    function isManager(userId) {
+      return getUserRole(userId) == 'Manager';
     }
 
-    function isExecutive() {
-      return getUserRole() == 'Executive';
+    function isExecutive(userId) {
+      return getUserRole(userId) == 'Executive';
     }
     
-    function isExecutiveWithPermission(departmentId) {
-      let userProfile = getUserData(request.auth.uid);
+    function isExecutiveWithPermission(userId, departmentId) {
+      let userProfile = getUserData(userId);
       // Allow if approvableDepartmentIds does not exist, is null, or is an empty map (approves all).
       // Or, if the request's departmentId is a key in the map.
-      return isExecutive() &&
+      return isExecutive(userId) &&
              (!('approvableDepartmentIds' in userProfile) ||
               userProfile.approvableDepartmentIds == null ||
               userProfile.approvableDepartmentIds.keys().size() == 0 ||
               departmentId in userProfile.approvableDepartmentIds);
     }
 
-    function isProcurementOfficer() {
-      return getUserRole() == 'Procurement Officer' || getUserRole() == 'Procurement Assistant';
+    function isProcurementOfficer(userId) {
+      let role = getUserRole(userId);
+      return role == 'Procurement Officer' || role == 'Procurement Assistant';
     }
     
-    function isRequester() {
-      return getUserRole() == 'Requester';
+    function isRequester(userId) {
+      return getUserRole(userId) == 'Requester';
     }
     
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-    
-    // Users can read their own profile. Admins can read/write any profile.
+    // User Profiles
     match /users/{userId} {
-      allow read: if isOwner(userId) || isAdmin();
-      allow write: if isAdmin();
-      // Allow creation for new sign-ups or admin invitations
-      allow create: if request.auth != null; 
+      // Any authenticated user can read public profile data (needed for names, roles etc.)
+      allow read: if request.auth != null;
+      
+      // A user can create their own profile.
+      allow create: if isOwner(userId);
+      
+      // A user can update their own profile, or an admin can update any profile.
+      allow update: if isOwner(userId) || isAdmin(request.auth.uid);
+      
+      // Only admins can delete profiles.
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
     match /roles/{roleId} {
-      allow read, write: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if isAdmin(request.auth.uid);
     }
     
     match /companies/{companyId} {
-      allow read, write: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if isAdmin(request.auth.uid);
     }
     
     match /approvalGroups/{groupId} {
-      allow read, write: if isAdmin();
+      allow read: if request.auth != null;
+      allow write: if isAdmin(request.auth.uid);
     }
 
     match /app/metadata {
       // All authenticated users can read metadata (e.g. for security settings)
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
     
     // Departments can be read by any authenticated user (needed for dropdowns etc.)
     // but only written by Admins.
     match /departments/{departmentId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
 
     // Procurement Requests have complex rules
@@ -90,59 +105,60 @@ service cloud.firestore {
       // - A manager of the same department.
       // - Executives.
       // - Procurement Officers.
-      allow read: if isAdmin() || isProcurementOfficer() || isExecutive()
+      allow read: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isExecutive(request.auth.uid)
                   || resource.data.submittedById == request.auth.uid
-                  || (isManager() && resource.data.department == getUserData(request.auth.uid).department);
+                  || (isManager(request.auth.uid) && resource.data.department == getUserData(request.auth.uid).department);
       
       // Who can create?
-      // Any authenticated user can create a draft.
-      allow create: if request.auth != null && request.resource.data.status == 'Draft';
+      // Any authenticated user can create a draft for themselves.
+      allow create: if request.auth != null && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       // Who can update?
       // - Admins can always update.
       // - The owner can update if it's still a draft.
       // - The assigned approver can update at the correct stage.
-      allow update: if isAdmin() 
+      allow update: if isAdmin(request.auth.uid) 
                     || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid) // Saving or submitting a draft
-                    || (isManager() && resource.data.department == getUserData(request.auth.uid).department && resource.data.status == 'Pending Manager Approval') // Manager action
-                    || (isExecutiveWithPermission(resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval')) // Executive action
-                    || (isProcurementOfficer() && resource.data.status == 'Approved'); // PO action
+                    || (isManager(request.auth.uid) && resource.data.department == getUserData(request.auth.uid).department && resource.data.status == 'Pending Manager Approval') // Manager action
+                    || (isExecutiveWithPermission(request.auth.uid, resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval')) // Executive action
+                    || (isProcurementOfficer(request.auth.uid) && resource.data.status == 'Approved'); // PO action
 
       // Who can delete? (Only admins can permanently delete)
-      allow delete: if isAdmin();
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Recurring Items
-    // Any authenticated user can read them, but only POs, Managers, and Admins can manage them.
+    // Any authenticated user can read them.
+    // POs, Admins, Managers, and Requesters can create/edit/delete.
     match /recurringItems/{itemId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin() || isProcurementOfficer() || isManager() || isRequester();
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
     // Any authenticated user can read them, but only POs and Admins can manage them.
     match /vendors/{vendorId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin() || isProcurementOfficer();
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
     // Only Admins and POs can manage budget data.
     match /budgetUploads/{uploadId} {
-      allow read, write: if isAdmin() || isProcurementOfficer();
+      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
-      allow read, write: if isAdmin() || isProcurementOfficer();
+      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin(request.auth.uid);
       allow create: if request.auth != null;
     }
     
     match /errorLogs/{errorLogId} {
-      allow read: if isAdmin();
+      allow read: if isAdmin(request.auth.uid);
       allow create: if request.auth != null;
     }
     
