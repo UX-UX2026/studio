@@ -263,6 +263,13 @@
         "delegatedToName": {
           "type": "string",
           "description": "The display name of the user this user has delegated approval authority to."
+        },
+        "approvableDepartmentIds": {
+            "type": "object",
+            "description": "For Executive roles, a map of department IDs they are permitted to approve requests for. The key is the department ID, the value is true.",
+            "additionalProperties": {
+                "type": "boolean"
+            }
         }
       },
       "required": [

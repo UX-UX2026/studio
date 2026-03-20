@@ -1,3 +1,4 @@
+
 rules_version = '2';
 
 service cloud.firestore {
@@ -22,6 +23,17 @@ service cloud.firestore {
 
     function isExecutive() {
       return getUserRole() == 'Executive';
+    }
+    
+    function isExecutiveWithPermission(departmentId) {
+      let userProfile = getUserData(request.auth.uid);
+      // Allow if approvableDepartmentIds does not exist, is null, or is an empty map (approves all).
+      // Or, if the request's departmentId is a key in the map.
+      return isExecutive() &&
+             (!('approvableDepartmentIds' in userProfile) ||
+              userProfile.approvableDepartmentIds == null ||
+              userProfile.approvableDepartmentIds.keys().size() == 0 ||
+              departmentId in userProfile.approvableDepartmentIds);
     }
 
     function isProcurementOfficer() {
@@ -78,7 +90,8 @@ service cloud.firestore {
       // - A manager of the same department.
       // - Executives.
       // - Procurement Officers.
-      allow read: if isAdmin() || isExecutive() || isProcurementOfficer()
+      allow read: if isAdmin() || isProcurementOfficer()
+                  || (isExecutive() && isExecutiveWithPermission(resource.data.departmentId))
                   || resource.data.submittedById == request.auth.uid
                   || (isManager() && resource.data.department == getUserData(request.auth.uid).department);
       
@@ -93,7 +106,7 @@ service cloud.firestore {
       allow update: if isAdmin() 
                     || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid) // Saving or submitting a draft
                     || (isManager() && resource.data.department == getUserData(request.auth.uid).department && resource.data.status == 'Pending Manager Approval') // Manager action
-                    || (isExecutive() && resource.data.status == 'Pending Executive') // Executive action
+                    || (isExecutiveWithPermission(resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval')) // Executive action
                     || (isProcurementOfficer() && resource.data.status == 'Approved'); // PO action
 
       // Who can delete? (Only admins can permanently delete)

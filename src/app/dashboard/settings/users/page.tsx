@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Edit, Plus } from "lucide-react";
+import { Loader, Shield, Trash2, Edit, Plus, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -18,6 +19,14 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuCheckboxItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRoles } from "@/lib/roles-provider";
@@ -40,6 +49,7 @@ type UserProfile = {
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
     delegatedToId?: string;
     delegatedToName?: string;
+    approvableDepartmentIds?: Record<string, boolean>;
 };
 
 type Department = {
@@ -72,6 +82,7 @@ export default function UsersPage() {
     const [department, setDepartment] = useState('');
     const [alternateEmail, setAlternateEmail] = useState('');
     const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
+    const [approvableDepartmentIds, setApprovableDepartmentIds] = useState<string[]>([]);
     
     const { toast } = useToast();
     
@@ -83,6 +94,7 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
+            setApprovableDepartmentIds(editingUser.approvableDepartmentIds ? Object.keys(editingUser.approvableDepartmentIds) : []);
         } else if (isDialogOpen && !editingUser) {
             // Reset form for new user
             setName('');
@@ -91,6 +103,7 @@ export default function UsersPage() {
             setDepartment('');
             setAlternateEmail('');
             setNotificationPreference('Primary');
+            setApprovableDepartmentIds([]);
         }
     }, [editingUser, isDialogOpen]);
 
@@ -130,6 +143,11 @@ export default function UsersPage() {
             return;
         }
 
+        const approvableDeptsMap = approvableDepartmentIds.reduce((acc, id) => {
+            acc[id] = true;
+            return acc;
+        }, {} as Record<string, boolean>);
+
         if (!editingUser) { // Handle "Add User"
             const action = 'user.create';
             try {
@@ -151,6 +169,7 @@ export default function UsersPage() {
                     status: 'Invited' as const,
                     alternateEmail: alternateEmail,
                     notificationPreference: notificationPreference,
+                    approvableDepartmentIds: userRole === 'Executive' ? approvableDeptsMap : {},
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -186,6 +205,7 @@ export default function UsersPage() {
                 status: editingUser.status,
                 alternateEmail: alternateEmail,
                 notificationPreference: notificationPreference,
+                approvableDepartmentIds: userRole === 'Executive' ? approvableDeptsMap : {},
             };
 
             const userRef = doc(firestore, 'users', editingUser.id);
@@ -382,6 +402,7 @@ export default function UsersPage() {
                                     <TableHead>Role</TableHead>
                                     <TableHead>Department</TableHead>
                                     <TableHead>Delegated To</TableHead>
+                                    <TableHead>Approvable Depts</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -449,6 +470,16 @@ export default function UsersPage() {
                                             )}
                                         </TableCell>
                                         <TableCell>
+                                            {u.role === 'Executive' ? (
+                                                <div className="flex flex-wrap gap-1 w-40">
+                                                    {(u.approvableDepartmentIds && Object.keys(u.approvableDepartmentIds).length > 0) ? Object.keys(u.approvableDepartmentIds).map(id => {
+                                                        const deptName = departments?.find(d => d.id === id)?.name;
+                                                        return <Badge key={id} variant="secondary" className="text-xs">{deptName || 'Unknown'}</Badge>
+                                                    }) : <Badge variant="outline">All Depts</Badge>}
+                                                </div>
+                                            ) : <span className="text-muted-foreground ml-3">N/A</span>}
+                                        </TableCell>
+                                        <TableCell>
                                             <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
                                                 <SelectTrigger className={cn(
                                                     "w-[120px] font-semibold border-none focus:ring-0",
@@ -508,6 +539,38 @@ export default function UsersPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+                         {userRole === 'Executive' && (
+                            <div className="grid grid-cols-4 items-start gap-4">
+                                <Label className="text-right pt-2">Approvable<br/>Depts</Label>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="col-span-3 text-left font-normal justify-between">
+                                            <span>{approvableDepartmentIds.length || '0'} selected</span>
+                                            <ChevronDown className="h-4 w-4 opacity-50" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-56">
+                                        <DropdownMenuLabel>Approvable Departments</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {departments?.map(dept => (
+                                            <DropdownMenuCheckboxItem
+                                                key={dept.id}
+                                                checked={approvableDepartmentIds.includes(dept.id)}
+                                                onCheckedChange={(checked) => {
+                                                    if (checked) {
+                                                        setApprovableDepartmentIds(prev => [...prev, dept.id]);
+                                                    } else {
+                                                        setApprovableDepartmentIds(prev => prev.filter(id => id !== dept.id));
+                                                    }
+                                                }}
+                                            >
+                                                {dept.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                        )}
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="department" className="text-right">Department</Label>
                             <Select value={department} onValueChange={setDepartment}>

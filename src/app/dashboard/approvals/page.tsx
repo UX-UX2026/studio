@@ -459,49 +459,81 @@ export default function ApprovalsPage() {
     }, [activeRequest]);
 
     const canApprove = useMemo(() => {
-        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups) return false;
+        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return false;
         
-        const { status } = activeRequest;
-
+        const { status, departmentId } = activeRequest;
+    
         // Admins can approve most pending stages
         if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
-
+    
         // Find the department and its workflow
-        const department = departments.find(d => d.id === activeRequest.departmentId);
+        const department = departments.find(d => d.id === departmentId);
         if (!department?.workflow) return false;
         
         // Find the current pending stage in the request's timeline
         const pendingTimelineStage = activeRequest.timeline.find(t => t.status === 'pending');
         if (!pendingTimelineStage) {
             // If nothing is pending, maybe it's just 'Approved' and waiting for Procurement Officer
-            if (status === 'Approved' && role === 'Procurement Officer') return true;
+            if (status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant')) return true;
             return false;
         }
         
         // Find the configuration for that stage
         const stageConfig = department.workflow.find(w => w.name === pendingTimelineStage.stage);
         if (!stageConfig) return false;
-
+    
+        // Function to check if an executive can approve for this department
+        const canExecutiveApproveDept = (execProfile: UserProfile) => {
+            if (!execProfile.approvableDepartmentIds || Object.keys(execProfile.approvableDepartmentIds).length === 0) {
+                return true; // No restrictions, can approve all
+            }
+            return !!execProfile.approvableDepartmentIds[departmentId];
+        };
+    
         // Check 1: Group-based approval
         if (stageConfig.approvalGroupId) {
             const group = approvalGroups.find(g => g.id === stageConfig.approvalGroupId);
             if (group && group.memberIds?.includes(user.uid)) {
-                return true;
+                // The current user is in the approval group for this stage.
+                // If the user is an executive, we must still check their department permissions.
+                if (role === 'Executive') {
+                    return canExecutiveApproveDept(profile);
+                }
+                return true; // Non-executives in the group can approve.
             }
         }
-
+    
         // Check 2: Role-based approval
         if (stageConfig.role) {
-            // Direct role match
-            if (role === stageConfig.role) return true;
-
-            // Delegation check
-            const isDelegateForStageRole = allUsers.some(u => u.role === stageConfig.role && u.delegatedToId === user.uid);
-            if (isDelegateForStageRole) return true;
+            // A) Direct role match
+            if (role === stageConfig.role) {
+                if (role === 'Executive') {
+                    return canExecutiveApproveDept(profile);
+                }
+                return true; // Direct role match for non-executives.
+            }
+    
+            // B) Delegation check
+            // Find users who could approve this stage and have delegated to the current user
+            const delegators = allUsers.filter(u => 
+                u.role === stageConfig.role && 
+                u.delegatedToId === user.uid
+            );
+    
+            // Check if any delegator could have approved this request
+            for (const delegator of delegators) {
+                if (delegator.role === 'Executive') {
+                    if (canExecutiveApproveDept(delegator)) {
+                        return true; // Delegate can approve if the delegating executive could.
+                    }
+                } else {
+                    return true; // For non-executive roles, delegation is enough.
+                }
+            }
         }
         
         return false;
-    }, [activeRequest, role, user, allUsers, departments, approvalGroups]);
+    }, [activeRequest, role, user, profile, allUsers, departments, approvalGroups]);
 
     const canRejectOrQuery = useMemo(() => {
         if (!activeRequest || !role || !user || !allUsers) return false;
