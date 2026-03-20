@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Palette, Save, Building } from "lucide-react";
+import { Loader, Palette, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +13,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
-import Image from "next/image";
+import Link from "next/link";
 
 type PdfSettings = {
-    companyName?: string;
-    logoUrl?: string;
     primaryColor?: string;
 };
 
@@ -38,8 +37,6 @@ export default function PdfDesignPage() {
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
     const [settings, setSettings] = useState<PdfSettings>({
-        companyName: '',
-        logoUrl: '',
         primaryColor: '#c97353' // default color from the app
     });
     const [isSaving, setIsSaving] = useState(false);
@@ -119,32 +116,12 @@ export default function PdfDesignPage() {
                     PDF & Export Design
                 </CardTitle>
                 <CardDescription>
-                    Customize the appearance of generated PDF reports. These settings will apply to all exported procurement requests.
+                    Customize the appearance of generated PDF reports. Company-specific details like name and logo are managed in the <Link href="/dashboard/settings/companies" className="underline font-semibold">Companies</Link> page.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-8">
                 <div className="grid md:grid-cols-2 gap-8">
                     <div className="space-y-6">
-                        <div className="grid gap-2">
-                            <Label htmlFor="companyName">Company Name</Label>
-                            <Input
-                                id="companyName"
-                                value={settings.companyName || ''}
-                                onChange={(e) => handleSettingChange('companyName', e.target.value)}
-                                placeholder="Your Company Name"
-                            />
-                            <p className="text-xs text-muted-foreground">This name will appear on the top right of the PDF report.</p>
-                        </div>
-                         <div className="grid gap-2">
-                            <Label htmlFor="logoUrl">Logo URL</Label>
-                            <Input
-                                id="logoUrl"
-                                value={settings.logoUrl || ''}
-                                onChange={(e) => handleSettingChange('logoUrl', e.target.value)}
-                                placeholder="https://example.com/logo.png"
-                            />
-                             <p className="text-xs text-muted-foreground">Provide a direct URL to your company logo.</p>
-                        </div>
                         <div className="grid gap-2">
                             <Label htmlFor="primaryColor">Primary Color</Label>
                             <div className="flex items-center gap-2">
@@ -168,12 +145,8 @@ export default function PdfDesignPage() {
                         <Label>Live Preview</Label>
                         <div className="border rounded-lg p-4">
                             <div className="flex justify-between items-start mb-4">
-                                 {settings.logoUrl ? (
-                                    <Image src={settings.logoUrl} alt="Company Logo Preview" width={120} height={30} className="object-contain" />
-                                 ) : (
-                                    <div className="h-[30px] w-[120px] bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">Logo Preview</div>
-                                 )}
-                                <h3 className="font-bold text-lg">{settings.companyName || 'Company Name'}</h3>
+                                 <div className="h-[30px] w-[120px] bg-muted rounded flex items-center justify-center text-xs text-muted-foreground">Company Logo</div>
+                                <h3 className="font-bold text-lg">Company Name</h3>
                             </div>
                             <div className="space-y-2">
                                  <div className="w-full h-8 rounded-t-md" style={{backgroundColor: settings.primaryColor || '#c97353' }}></div>

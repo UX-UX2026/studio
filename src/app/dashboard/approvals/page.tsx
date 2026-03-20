@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
 import type { ApprovalRequest } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
@@ -46,7 +46,18 @@ import * as XLSX from 'xlsx';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { type PdfSettings } from "../settings/pdf-design/page";
 
+type Company = {
+    id: string;
+    name: string;
+    logoUrl?: string;
+};
+
+type AppMetadata = {
+    id: string;
+    pdfSettings?: PdfSettings;
+};
 
 type WorkflowStage = {
     id: string;
@@ -103,14 +114,32 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
+const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
     if (format === 'pdf') {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
-        const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
-        if (logo && logo.imageUrl.startsWith('data:image')) {
-             doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+        
+        const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
+        const company = companies?.find(c => c.id === request.companyId);
+        const logoUrl = company?.logoUrl;
+        
+        if (logoUrl) {
+            try {
+                // jsPDF requires image data, not a URL. This is a simplification and might require CORS enabled on the image server.
+                doc.addImage(logoUrl, 'PNG', 14, 12, 50, 12);
+            } catch(e) {
+                console.error(`Failed to load company logo from ${logoUrl}. Falling back to default. Error:`, e);
+                const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
+                if (fallbackLogo) {
+                    doc.addImage(fallbackLogo.imageUrl, 'PNG', 14, 12, 50, 12);
+                }
+            }
+        } else {
+            const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
+            if (fallbackLogo) {
+                doc.addImage(fallbackLogo.imageUrl, 'PNG', 14, 12, 50, 12);
+            }
         }
         
         doc.setFontSize(14);
@@ -136,7 +165,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
         });
 
         const itemsData = request.items.map(item => [
@@ -151,7 +180,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
         });
         
         const summaryTableData = summaryData.lines.map(line => [
@@ -171,7 +200,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 formatCurrency(summaryData.totals.variance)
             ]],
             theme: 'grid',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
             footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
         });
         
@@ -185,7 +214,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
             columnStyles: {
                 0: { cellWidth: 40 },
                 1: { cellWidth: 'auto' },
@@ -208,7 +237,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                     head: [['Notification Email History']],
                     body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
                     theme: 'striped',
-                    headStyles: { fillColor: [201, 115, 83] },
+                    headStyles: { fillColor: primaryColor },
                     styles: { fontSize: 8 },
                 });
             }
@@ -356,6 +385,12 @@ export default function ApprovalsPage() {
     const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
     const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
     
+    const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
+    const { data: companies } = useCollection<Company>(companiesQuery);
+
+    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
+
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
     const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
@@ -645,7 +680,7 @@ export default function ApprovalsPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs);
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs, companies, appMetadata);
             }
 
             let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
@@ -1417,10 +1452,10 @@ export default function ApprovalsPage() {
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx', auditLogs)}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'xlsx', auditLogs, companies, appMetadata)}>
                                                             Export as Excel (.xlsx)
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf', auditLogs)}>
+                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, summaryData, 'pdf', auditLogs, companies, appMetadata)}>
                                                             Export as PDF (.pdf)
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>

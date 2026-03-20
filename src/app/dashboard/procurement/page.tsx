@@ -39,6 +39,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
 import * as XLSX from 'xlsx';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { type PdfSettings } from "../settings/pdf-design/page";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -74,12 +75,14 @@ type UserProfileData = {
 type Company = {
     id: string;
     name: string;
+    logoUrl?: string;
 };
 
 type AppMetadata = {
     id: string;
     adminIsSetUp?: boolean;
     limitToOneSubmissionPerPeriod?: boolean;
+    pdfSettings?: PdfSettings;
 }
 
 type BudgetItem = {
@@ -136,14 +139,32 @@ type AuditEvent = {
     };
 };
 
-const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null) => {
+const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
     if (format === 'pdf') {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
         const doc = new jsPDF();
-        const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
-        if (logo && logo.imageUrl.startsWith('data:image')) {
-            doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+        
+        const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
+        const company = companies?.find(c => c.id === request.companyId);
+        const logoUrl = company?.logoUrl;
+        
+        if (logoUrl) {
+             try {
+                // jsPDF requires image data, not a URL. This is a simplification and might require CORS enabled on the image server.
+                doc.addImage(logoUrl, 'PNG', 14, 12, 50, 12);
+            } catch(e) {
+                console.error(`Failed to load company logo from ${logoUrl}. Falling back to default. Error:`, e);
+                const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
+                if (fallbackLogo) {
+                    doc.addImage(fallbackLogo.imageUrl, 'PNG', 14, 12, 50, 12);
+                }
+            }
+        } else {
+            const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
+            if (fallbackLogo) {
+                doc.addImage(fallbackLogo.imageUrl, 'PNG', 14, 12, 50, 12);
+            }
         }
 
         doc.setFontSize(14);
@@ -169,7 +190,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
         });
 
         const itemsData = request.items.map(item => [
@@ -184,7 +205,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
             body: itemsData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
         });
         
         const summaryTableData = summaryData.lines.map(line => [
@@ -204,7 +225,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 formatCurrency(summaryData.totals.variance)
             ]],
             theme: 'grid',
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
             footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
         });
         
@@ -218,7 +239,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             startY: (doc as any).lastAutoTable.finalY + 10,
             head: [['Stage', 'Actor', 'Status', 'Date']],
             body: timelineData,
-            headStyles: { fillColor: [201, 115, 83] },
+            headStyles: { fillColor: primaryColor },
             columnStyles: {
                 0: { cellWidth: 40 },
                 1: { cellWidth: 'auto' },
@@ -241,7 +262,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                     head: [['Notification Email History']],
                     body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
                     theme: 'striped',
-                    headStyles: { fillColor: [201, 115, 83] },
+                    headStyles: { fillColor: primaryColor },
                     styles: { fontSize: 8 },
                 });
             }
@@ -845,7 +866,7 @@ export default function ProcurementQuickSubmitPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs);
+                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs, companies, appMetadata);
             }
 
             let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;

@@ -27,6 +27,7 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 type Company = {
     id: string;
     name: string;
+    logoUrl?: string;
 };
 
 export default function CompaniesPage() {
@@ -41,6 +42,7 @@ export default function CompaniesPage() {
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [name, setName] = useState('');
+    const [logoUrl, setLogoUrl] = useState('');
     
     const { toast } = useToast();
 
@@ -55,8 +57,10 @@ export default function CompaniesPage() {
         if (isDialogOpen) {
             if (editingCompany) {
                 setName(editingCompany.name);
+                setLogoUrl(editingCompany.logoUrl || '');
             } else {
                 setName('');
+                setLogoUrl('');
             }
         }
     }, [editingCompany, isDialogOpen]);
@@ -83,7 +87,7 @@ export default function CompaniesPage() {
         }
 
         setIsSaving(true);
-        const companyData = { name };
+        const companyData = { name, logoUrl };
         const action = editingCompany ? 'company.update' : 'company.create';
 
         try {
@@ -227,13 +231,17 @@ export default function CompaniesPage() {
                     <DialogHeader>
                         <DialogTitle>{editingCompany ? 'Edit' : 'Add'} Company</DialogTitle>
                         <DialogDescription>
-                            Enter the name for the company.
+                            Enter the name for the company and an optional logo URL.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">Name</Label>
                             <Input id="name" value={name} onChange={e => setName(e.target.value)} className="col-span-3" required />
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="logoUrl" className="text-right">Logo URL</Label>
+                            <Input id="logoUrl" value={logoUrl} onChange={e => setLogoUrl(e.target.value)} className="col-span-3" placeholder="https://example.com/logo.png" />
                         </div>
                     </div>
                     <DialogFooter>

@@ -563,15 +563,6 @@
             "type": "object",
             "description": "Settings for customizing generated PDF reports.",
             "properties": {
-                "companyName": {
-                    "type": "string",
-                    "description": "The company name to display on reports."
-                },
-                "logoUrl": {
-                    "type": "string",
-                    "format": "uri",
-                    "description": "The URL of the company logo to display on reports."
-                },
                 "primaryColor": {
                     "type": "string",
                     "description": "The primary color (hex code) for report headers."
@@ -757,6 +748,11 @@
             "name": {
                 "type": "string",
                 "description": "The name of the company."
+            },
+            "logoUrl": {
+                "type": "string",
+                "format": "uri",
+                "description": "URL for the company's logo."
             }
         },
         "required": ["name"]
