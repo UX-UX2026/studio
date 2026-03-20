@@ -105,6 +105,20 @@ type AuditEvent = {
     };
 };
 
+// Helper function to load an image with CORS handling
+const loadImage = (url: string): Promise<HTMLImageElement | null> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = (e) => {
+      console.error(`CORS or network error loading image: ${url}`, e);
+      resolve(null); // Resolve with null on any error
+    };
+    img.src = url;
+  });
+};
+
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
       style: "currency",
@@ -123,137 +137,126 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         const company = companies?.find(c => c.id === request.companyId);
         const logoUrl = company?.logoUrl;
         
-        const generatePdf = (logoData?: HTMLImageElement) => {
-            const doc = new jsPDF();
-            
-            if (logoData) {
-                try {
-                    doc.addImage(logoData, 14, 12, 50, 12);
-                } catch(e) {
-                    console.error("Failed to add image to PDF, continuing without it:", e);
-                }
-            }
-        
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
-
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
-
-            const detailsData: (string|number)[][] = [
-                ["Request ID", request.id],
-                ["Company", request.companyName || 'N/A'],
-                ["Department", request.department],
-                ["Period", request.period],
-                ["Submitted By", request.submittedBy || 'N/A'],
-                ["Total", formatCurrency(request.total)],
-                ["Status", request.status],
-            ];
-
-            autoTable(doc, {
-                startY: 42,
-                head: [['Request Details', '']],
-                body: detailsData,
-                theme: 'striped',
-                headStyles: { fillColor: primaryColor },
-            });
-
-            const itemsData = request.items.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: itemsData,
-                headStyles: { fillColor: primaryColor },
-            });
-            
-            const summaryTableData = summaryData.lines.map(line => [
-                line.category,
-                formatCurrency(line.procurementTotal),
-                formatCurrency(line.forecastTotal),
-                formatCurrency(line.variance),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: summaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.totals.procurement),
-                    formatCurrency(summaryData.totals.forecast),
-                    formatCurrency(summaryData.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: primaryColor },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-            
-            const timelineData = request.timeline.map(step => [
-                step.stage,
-                step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
-                step.status,
-                step.date || 'N/A',
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Stage', 'Actor', 'Status', 'Date']],
-                body: timelineData,
-                headStyles: { fillColor: primaryColor },
-                columnStyles: {
-                    0: { cellWidth: 40 },
-                    1: { cellWidth: 'auto' },
-                    2: { cellWidth: 25 },
-                    3: { cellWidth: 25 }
-                }
-            });
-
-            if (auditLogs && auditLogs.length > 0) {
-                const emailLog = auditLogs
-                    .filter(log => log.action === 'notification.sent')
-                    .map(log => ({
-                        timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
-                        details: log.details,
-                    }));
-            
-                if (emailLog.length > 0) {
-                    autoTable(doc, {
-                        startY: (doc as any).lastAutoTable.finalY + 10,
-                        head: [['Notification Email History']],
-                        body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
-                        theme: 'striped',
-                        headStyles: { fillColor: primaryColor },
-                        styles: { fontSize: 8 },
-                    });
-                }
-            }
-
-            doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
-        };
-        
         const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
         const finalLogoUrl = logoUrl || fallbackLogo?.imageUrl;
 
+        let logoData: HTMLImageElement | null = null;
         if (finalLogoUrl) {
-            const img = new Image();
-            img.crossOrigin = "Anonymous";
-            img.onload = () => generatePdf(img);
-            img.onerror = () => {
-                console.error("Failed to load logo, generating PDF without it.");
-                generatePdf();
+            logoData = await loadImage(finalLogoUrl);
+        }
+        
+        const doc = new jsPDF();
+        
+        if (logoData) {
+            try {
+                doc.addImage(logoData, 14, 12, 50, 12);
+            } catch(e) {
+                console.error("Failed to add image to PDF, continuing without it:", e);
             }
-            img.src = finalLogoUrl;
-        } else {
-            generatePdf();
+        }
+    
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
+
+        doc.setFontSize(18);
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
+
+        const detailsData: (string|number)[][] = [
+            ["Request ID", request.id],
+            ["Company", request.companyName || 'N/A'],
+            ["Department", request.department],
+            ["Period", request.period],
+            ["Submitted By", request.submittedBy || 'N/A'],
+            ["Total", formatCurrency(request.total)],
+            ["Status", request.status],
+        ];
+
+        autoTable(doc, {
+            startY: 42,
+            head: [['Request Details', '']],
+            body: detailsData,
+            theme: 'striped',
+            headStyles: { fillColor: primaryColor },
+        });
+
+        const itemsData = request.items.map(item => [
+            item.type,
+            item.description,
+            item.category,
+            item.qty,
+            formatCurrency(item.unitPrice),
+            formatCurrency(item.qty * item.unitPrice),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+            body: itemsData,
+            headStyles: { fillColor: primaryColor },
+        });
+        
+        const summaryTableData = summaryData.lines.map(line => [
+            line.category,
+            formatCurrency(line.procurementTotal),
+            formatCurrency(line.forecastTotal),
+            formatCurrency(line.variance),
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+            body: summaryTableData,
+            foot: [[
+                'Total',
+                formatCurrency(summaryData.totals.procurement),
+                formatCurrency(summaryData.totals.forecast),
+                formatCurrency(summaryData.totals.variance)
+            ]],
+            theme: 'grid',
+            headStyles: { fillColor: primaryColor },
+            footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+        });
+        
+        const timelineData = request.timeline.map(step => [
+            step.stage,
+            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+            step.status,
+            step.date || 'N/A',
+        ]);
+        autoTable(doc, {
+            startY: (doc as any).lastAutoTable.finalY + 10,
+            head: [['Stage', 'Actor', 'Status', 'Date']],
+            body: timelineData,
+            headStyles: { fillColor: primaryColor },
+            columnStyles: {
+                0: { cellWidth: 40 },
+                1: { cellWidth: 'auto' },
+                2: { cellWidth: 25 },
+                3: { cellWidth: 25 }
+            }
+        });
+
+        if (auditLogs && auditLogs.length > 0) {
+            const emailLog = auditLogs
+                .filter(log => log.action === 'notification.sent')
+                .map(log => ({
+                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                    details: log.details,
+                }));
+        
+            if (emailLog.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Notification Email History']],
+                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                    theme: 'striped',
+                    headStyles: { fillColor: primaryColor },
+                    styles: { fontSize: 8 },
+                });
+            }
         }
 
+        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
         return;
     }
 
