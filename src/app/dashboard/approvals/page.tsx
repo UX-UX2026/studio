@@ -366,7 +366,7 @@ export default function ApprovalsPage() {
     const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
 
     const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
-    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(groupsQuery);
+    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
     
     const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
     const { data: companies } = useCollection<Company>(companiesQuery);
