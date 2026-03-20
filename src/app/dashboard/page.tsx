@@ -33,7 +33,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
 import { type ApprovalRequest } from '@/lib/approvals-mock-data';
-import { useFirestore, useCollection, useUser } from '@/firebase';
+import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp, getDocs, type Firestore } from 'firebase/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
@@ -107,6 +107,17 @@ type AuditEvent = {
         type: string;
         id: string;
     };
+};
+
+type Company = {
+    id: string;
+    name: string;
+    logoUrl?: string;
+};
+
+type AppMetadata = {
+    id: string;
+    pdfSettings?: { primaryColor?: string; };
 };
 
 const stageToStatusMap: { [key: string]: string } = {
@@ -214,6 +225,12 @@ export default function DashboardPage() {
 
   const budgetsQuery = useMemo(() => collection(firestore, 'budgets'), [firestore]);
   const { data: allBudgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
+
+  const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
+  const { data: companies } = useCollection<Company>(companiesQuery);
+
+  const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+  const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
 
   const userDrafts = useMemo(() => {
     if (!user || !allDrafts) return [];
@@ -379,7 +396,7 @@ export default function DashboardPage() {
         }
     }
     
-    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf', firestore: Firestore) => {
+    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf', firestore: Firestore, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
         const summaryData = (() => {
             const budgetItemsForRequest = allBudgetItems?.filter(b => b.departmentId === request.departmentId) || [];
             if (!allDepartments || !request) {
@@ -441,114 +458,141 @@ export default function DashboardPage() {
             let auditLogs = auditLogsSnapshot.docs.map(doc => doc.data() as AuditEvent);
             auditLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
 
-            const doc = new jsPDF();
-            const logo = PlaceHolderImages.find((img) => img.id === "logo-1");
-            if (logo && logo.imageUrl.startsWith('data:image')) {
-                doc.addImage(logo.imageUrl, 'PNG', 14, 12, 50, 12);
+            const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
+            const company = companies?.find(c => c.id === request.companyId);
+            const logoUrl = company?.logoUrl;
+            
+            const generatePdf = (logoData?: HTMLImageElement) => {
+                const doc = new jsPDF();
+                
+                if (logoData) {
+                    try {
+                        doc.addImage(logoData, 'PNG', 14, 12, 50, 12);
+                    } catch(e) {
+                        console.error("Failed to add image to PDF:", e);
+                    }
+                }
+
+                doc.setFontSize(14);
+                doc.setFont('helvetica', 'bold');
+                doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
+    
+                doc.setFontSize(18);
+                doc.setFont('helvetica', 'normal');
+                doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
+    
+                const detailsData: (string|number)[][] = [
+                    ["Request ID", request.id],
+                    ["Company", request.companyName || 'N/A'],
+                    ["Department", request.department],
+                    ["Period", request.period],
+                    ["Submitted By", request.submittedBy || 'N/A'],
+                    ["Total", formatCurrency(request.total)],
+                    ["Status", request.status],
+                ];
+    
+                autoTable(doc, {
+                    startY: 42,
+                    head: [['Request Details', '']],
+                    body: detailsData,
+                    theme: 'striped',
+                    headStyles: { fillColor: primaryColor },
+                });
+    
+                const itemsData = request.items.map(item => [
+                    item.type,
+                    item.description,
+                    item.category,
+                    item.qty,
+                    formatCurrency(item.unitPrice),
+                    formatCurrency(item.qty * item.unitPrice),
+                ]);
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                    body: itemsData,
+                    headStyles: { fillColor: primaryColor },
+                });
+    
+                const summaryTableData = summaryData.lines.map((line: any) => [
+                    line.category,
+                    formatCurrency(line.procurementTotal),
+                    formatCurrency(line.forecastTotal),
+                    formatCurrency(line.variance),
+                ]);
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                    body: summaryTableData,
+                    foot: [[
+                        'Total',
+                        formatCurrency(summaryData.totals.procurement),
+                        formatCurrency(summaryData.totals.forecast),
+                        formatCurrency(summaryData.totals.variance)
+                    ]],
+                    theme: 'grid',
+                    headStyles: { fillColor: primaryColor },
+                    footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+                });
+                
+                const timelineData = request.timeline.map(step => [
+                    step.stage,
+                    step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+                    step.status,
+                    step.date || 'N/A',
+                ]);
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Stage', 'Actor', 'Status', 'Date']],
+                    body: timelineData,
+                    headStyles: { fillColor: primaryColor },
+                    columnStyles: {
+                        0: { cellWidth: 40 },
+                        1: { cellWidth: 'auto' },
+                        2: { cellWidth: 25 },
+                        3: { cellWidth: 25 }
+                    }
+                });
+                
+                if (auditLogs && auditLogs.length > 0) {
+                    const emailLog = auditLogs
+                        .filter(log => log.action === 'notification.sent')
+                        .map(log => ({
+                            timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                            details: log.details,
+                        }));
+                
+                    if (emailLog.length > 0) {
+                        autoTable(doc, {
+                            startY: (doc as any).lastAutoTable.finalY + 10,
+                            head: [['Notification Email History']],
+                            body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                            theme: 'striped',
+                            headStyles: { fillColor: primaryColor },
+                            styles: { fontSize: 8 },
+                        });
+                    }
+                }
+    
+                doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+            };
+
+            const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
+            const finalLogoUrl = logoUrl || fallbackLogo?.imageUrl;
+
+            if (finalLogoUrl) {
+                const img = new Image();
+                img.crossOrigin = "Anonymous";
+                img.onload = () => generatePdf(img);
+                img.onerror = () => {
+                    console.error("Failed to load logo, generating PDF without it.");
+                    generatePdf();
+                }
+                img.src = finalLogoUrl;
+            } else {
+                generatePdf();
             }
 
-            doc.setFontSize(14);
-            doc.setFont('helvetica', 'bold');
-            doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
-
-            doc.setFontSize(18);
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
-
-            const detailsData: (string|number)[][] = [
-                ["Request ID", request.id],
-                ["Company", request.companyName || 'N/A'],
-                ["Department", request.department],
-                ["Period", request.period],
-                ["Submitted By", request.submittedBy || 'N/A'],
-                ["Total", formatCurrency(request.total)],
-                ["Status", request.status],
-            ];
-
-            autoTable(doc, {
-                startY: 42,
-                head: [['Request Details', '']],
-                body: detailsData,
-                theme: 'striped',
-                headStyles: { fillColor: [201, 115, 83] },
-            });
-
-            const itemsData = request.items.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: itemsData,
-                headStyles: { fillColor: [201, 115, 83] },
-            });
-
-            const summaryTableData = summaryData.lines.map((line: any) => [
-                line.category,
-                formatCurrency(line.procurementTotal),
-                formatCurrency(line.forecastTotal),
-                formatCurrency(line.variance),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: summaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.totals.procurement),
-                    formatCurrency(summaryData.totals.forecast),
-                    formatCurrency(summaryData.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: [201, 115, 83] },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-            
-            const timelineData = request.timeline.map(step => [
-                step.stage,
-                step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
-                step.status,
-                step.date || 'N/A',
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Stage', 'Actor', 'Status', 'Date']],
-                body: timelineData,
-                headStyles: { fillColor: [201, 115, 83] },
-                columnStyles: {
-                    0: { cellWidth: 40 },
-                    1: { cellWidth: 'auto' },
-                    2: { cellWidth: 25 },
-                    3: { cellWidth: 25 }
-                }
-            });
-            
-            if (auditLogs && auditLogs.length > 0) {
-                const emailLog = auditLogs
-                    .filter(log => log.action === 'notification.sent')
-                    .map(log => ({
-                        timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
-                        details: log.details,
-                    }));
-            
-                if (emailLog.length > 0) {
-                    autoTable(doc, {
-                        startY: (doc as any).lastAutoTable.finalY + 10,
-                        head: [['Notification Email History']],
-                        body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
-                        theme: 'striped',
-                        headStyles: { fillColor: [201, 115, 83] },
-                        styles: { fontSize: 8 },
-                    });
-                }
-            }
-
-            doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
             return;
         }
 
@@ -817,7 +861,7 @@ export default function DashboardPage() {
                                               <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx', firestore)}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore)}>
+                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
