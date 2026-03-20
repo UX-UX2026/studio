@@ -1165,8 +1165,14 @@ export default function ProcurementQuickSubmitPage() {
                 throw new Error("No manager is assigned to this department.");
             }
     
-            const manager = allUsers.find(u => u.id === department.managerId);
-            if (!manager || !manager.email) {
+            const managerDocRef = doc(firestore, 'users', department.managerId);
+            const managerDocSnap = await getDoc(managerDocRef);
+            if (!managerDocSnap.exists()) {
+                throw new Error("Manager's profile could not be found.");
+            }
+            
+            const manager = managerDocSnap.data() as UserProfileData;
+            if (!manager.email) {
                 throw new Error("Manager's email address could not be found.");
             }
             
