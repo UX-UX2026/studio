@@ -522,24 +522,6 @@ export default function ApprovalsPage() {
                 }
                 return true; // Direct role match for non-executives.
             }
-    
-            // B) Delegation check
-            // Find users who could approve this stage and have delegated to the current user
-            const delegators = allUsers.filter(u => 
-                u.role === stageConfig.role && 
-                u.delegatedToId === user.uid
-            );
-    
-            // Check if any delegator could have approved this request
-            for (const delegator of delegators) {
-                if (delegator.role === 'Executive') {
-                    if (canExecutiveApproveDept(delegator)) {
-                        return true; // Delegate can approve if the delegating executive could.
-                    }
-                } else {
-                    return true; // For non-executive roles, delegation is enough.
-                }
-            }
         }
         
         return false;
@@ -557,11 +539,7 @@ export default function ApprovalsPage() {
             return status === 'Pending Manager Approval' || status === 'Queries Raised';
         }
         if (status === 'Pending Manager Approval' || status === 'Pending Executive' || status === 'Queries Raised') {
-            // Direct executive can reject/query
             if (role === 'Executive') return true;
-            // Delegate can reject/query
-            const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
-            if (isDelegateForExecutive) return true;
         }
         
         // Requesters and Procurement Officers cannot reject or raise queries through these buttons.
@@ -637,20 +615,11 @@ export default function ApprovalsPage() {
         const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
-        let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
-        const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
-
-        if (isDelegateForExecutive && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
-            const executive = allUsers.find(u => u.role === 'Executive' && u.delegatedToId === user.uid);
-            if (executive) {
-                delegationInfo = { delegatedById: executive.id, delegatedByName: executive.displayName };
-            }
-        }
 
         const timelineUpdater = (stepName: string, nextStageName: string) => {
             return (step: ApprovalRequest['timeline'][0]) => {
                 if (step.stage === stepName) {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: actorName, ...delegationInfo };
+                    return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
                 }
                 if (step.stage === nextStageName) {
                     return { ...step, status: 'pending' as const };
@@ -689,7 +658,7 @@ export default function ApprovalsPage() {
                     newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
                 }
                 if (execApprovalIndex > -1) {
-                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, ...delegationInfo };
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName };
                 }
                 const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
                 if (procurementProcessingIndex > -1) {
@@ -725,10 +694,7 @@ export default function ApprovalsPage() {
                 generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs, companies, appMetadata);
             }
 
-            let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
-            if (delegationInfo.delegatedByName) {
-                auditDetails = `Approved request ${activeRequest.id.substring(0,8)}... on behalf of ${delegationInfo.delegatedByName}, new status "${newStatus}"`;
-            }
+            const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
 
             const auditLogData = {
                 userId: user.uid,

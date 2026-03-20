@@ -825,17 +825,8 @@ export default function ProcurementQuickSubmitPage() {
         const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
-        let delegationInfo: { delegatedById?: string; delegatedByName?: string } = {};
-        const isDelegateForExecutive = allUsers.some(u => u.role === 'Executive' && u.delegatedToId === user.uid);
 
-        if (isDelegateForExecutive && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval')) {
-            const executive = allUsers.find(u => u.role === 'Executive' && u.delegatedToId === user.uid);
-            if (executive) {
-                delegationInfo = { delegatedById: executive.id, delegatedByName: executive.displayName };
-            }
-        }
-
-        if (role === 'Executive' || role === 'Administrator' || isDelegateForExecutive) {
+        if (role === 'Executive' || role === 'Administrator') {
             if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
@@ -847,7 +838,7 @@ export default function ProcurementQuickSubmitPage() {
                     newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
                 }
                 if (execApprovalIndex > -1) {
-                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, ...delegationInfo };
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName };
                 }
                 const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
                 if (procurementProcessingIndex > -1) {
@@ -879,10 +870,7 @@ export default function ProcurementQuickSubmitPage() {
                 generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs, companies, appMetadata);
             }
 
-            let auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
-            if (delegationInfo.delegatedByName) {
-                auditDetails = `Approved request ${activeRequest.id.substring(0,8)}... on behalf of ${delegationInfo.delegatedByName}, new status "${newStatus}"`;
-            }
+            const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
