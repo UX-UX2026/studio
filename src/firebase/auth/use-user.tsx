@@ -4,7 +4,7 @@
 import { useAuthentication, UserProfile } from '@/context/authentication-provider';
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 
 export type UserRole = string | null;
@@ -25,7 +25,7 @@ export function useUser() {
 
     const { data: profile, loading: profileIsLoading, error: profileError } = useDoc<UserProfile>(userDocRef);
     
-    const [creationAttempted, setCreationAttempted] = useState(false);
+    const creationAttempted = useRef(false);
 
     useEffect(() => {
         if (profileError) {
@@ -40,12 +40,12 @@ export function useUser() {
     useEffect(() => {
         // This effect's job is to ensure a user profile document exists in Firestore.
         // It runs a one-time check after the user is authenticated.
-        if (authIsLoading || !user || !firestore || creationAttempted) {
+        if (authIsLoading || !user || !firestore || creationAttempted.current) {
             return;
         }
 
-        // Mark that we're performing the check to prevent re-running on subsequent renders.
-        setCreationAttempted(true);
+        // Mark that we're performing the check to prevent re-running.
+        creationAttempted.current = true;
 
         const checkAndCreateProfile = async () => {
             const docRef = doc(firestore, 'users', user.uid);
@@ -89,7 +89,7 @@ export function useUser() {
 
         checkAndCreateProfile();
         
-    }, [user, firestore, authIsLoading, creationAttempted, toast]);
+    }, [user, firestore, authIsLoading, toast]);
     
     // The main loading state is true if either authentication or the initial profile fetch is in progress.
     const isLoading = authIsLoading || profileIsLoading;
