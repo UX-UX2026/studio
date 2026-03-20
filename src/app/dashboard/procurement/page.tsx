@@ -41,20 +41,6 @@ import * as XLSX from 'xlsx';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { type PdfSettings } from "../settings/pdf-design/page";
 
-// Helper function to load an image with CORS handling
-const loadImage = (url: string): Promise<HTMLImageElement | null> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "Anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = (e) => {
-      console.error(`CORS or network error loading image: ${url}`, e);
-      resolve(null); // Resolve with null on any error
-    };
-    img.src = url;
-  });
-};
-
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
         style: "currency",
@@ -160,33 +146,16 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         
         const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
         const company = companies?.find(c => c.id === request.companyId);
-        const logoUrl = company?.logoUrl;
-        
-        const fallbackLogo = PlaceHolderImages.find((img) => img.id === "logo-1");
-        const finalLogoUrl = logoUrl || fallbackLogo?.imageUrl;
-
-        let logoData: HTMLImageElement | null = null;
-        if (finalLogoUrl) {
-            logoData = await loadImage(finalLogoUrl);
-        }
         
         const doc = new jsPDF();
 
-        if (logoData) {
-            try {
-                doc.addImage(logoData, 14, 12, 50, 12);
-            } catch(e) {
-                console.error("Failed to add image to PDF, continuing without it:", e);
-            }
-        }
-    
-        doc.setFontSize(14);
+        doc.setFontSize(16);
         doc.setFont('helvetica', 'bold');
-        doc.text(request.companyName || 'N/A', doc.internal.pageSize.getWidth() - 14, 20, { align: 'right' });
+        doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
 
-        doc.setFontSize(18);
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'normal');
-        doc.text(`Procurement Request: ${request.id.substring(0, 8)}...`, 14, 35);
+        doc.text(`ID: ${request.id.substring(0, 8)}...`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
 
         const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
@@ -199,7 +168,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         ];
 
         autoTable(doc, {
-            startY: 42,
+            startY: 30,
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
