@@ -128,7 +128,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             
             if (logoData) {
                 try {
-                    doc.addImage(logoData, 14, 12, 50, 12);
+                    doc.addImage(logoData, 'PNG', 14, 12, 50, 12);
                 } catch(e) {
                     console.error("Failed to add image to PDF, continuing without it:", e);
                 }
@@ -468,64 +468,61 @@ export default function ApprovalsPage() {
         return ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
     }, [activeRequest]);
 
-    const canApprove = useMemo(() => {
-        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return false;
-        
-        const { status, departmentId } = activeRequest;
+    const canApproveResult = useMemo(() => {
+        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return { can: false, asDelegate: false, delegator: null };
     
-        // Admins can approve most pending stages
-        if (role === 'Administrator' && (status.startsWith('Pending') || status === 'Approved' || status === 'Queries Raised')) return true;
+        const { departmentId, timeline } = activeRequest;
     
-        // Find the department and its workflow
-        const department = departments.find(d => d.id === departmentId);
-        if (!department?.workflow) return false;
-        
-        // Find the current pending stage in the request's timeline
-        const pendingTimelineStage = activeRequest.timeline.find(t => t.status === 'pending');
+        const pendingTimelineStage = timeline.find(t => t.status === 'pending');
         if (!pendingTimelineStage) {
-            // If nothing is pending, maybe it's just 'Approved' and waiting for Procurement Officer
-            if (status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant')) return true;
-            return false;
+            const canAcknowledge = activeRequest.status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant' || role === 'Administrator');
+            return { can: canAcknowledge, asDelegate: false, delegator: null };
         }
-        
-        // Find the configuration for that stage
-        const stageConfig = department.workflow.find(w => w.name === pendingTimelineStage.stage);
-        if (!stageConfig) return false;
     
-        // Function to check if an executive can approve for this department
+        const department = departments.find(d => d.id === departmentId);
+        if (!department?.workflow) return { can: false, asDelegate: false, delegator: null };
+    
+        const stageConfig = department.workflow.find(w => w.name === pendingTimelineStage.stage);
+        if (!stageConfig) return { can: false, asDelegate: false, delegator: null };
+    
         const canExecutiveApproveDept = (execProfile: UserProfile) => {
-            if (!execProfile.approvableDepartmentIds || Object.keys(execProfile.approvableDepartmentIds).length === 0) {
-                return true; // No restrictions, can approve all
-            }
+            if (!execProfile.approvableDepartmentIds || Object.keys(execProfile.approvableDepartmentIds).length === 0) return true;
             return !!execProfile.approvableDepartmentIds[departmentId];
         };
+        
+        let potentialApprovers: UserProfile[] = [];
     
-        // Check 1: Group-based approval
         if (stageConfig.approvalGroupId) {
             const group = approvalGroups.find(g => g.id === stageConfig.approvalGroupId);
-            if (group && group.memberIds?.includes(user.uid)) {
-                // The current user is in the approval group for this stage.
-                // If the user is an executive, we must still check their department permissions.
-                if (role === 'Executive') {
-                    return canExecutiveApproveDept(profile);
-                }
-                return true; // Non-executives in the group can approve.
+            if (group?.memberIds) {
+                potentialApprovers = allUsers.filter(u => group.memberIds.includes(u.id));
+            }
+        } else if (stageConfig.role) {
+            potentialApprovers = allUsers.filter(u => u.role === stageConfig.role);
+        }
+    
+        if (role === 'Administrator') {
+            return { can: true, asDelegate: false, delegator: null };
+        }
+    
+        for (const approver of potentialApprovers) {
+            if (approver.id === user.uid) { // Direct approver
+                if (approver.role === 'Executive' && !canExecutiveApproveDept(approver)) continue;
+                return { can: true, asDelegate: false, delegator: null };
+            }
+    
+            if (approver.delegatedToId === user.uid) { // User is a delegate for this approver
+                if (approver.role === 'Executive' && !canExecutiveApproveDept(approver)) continue;
+                return { can: true, asDelegate: true, delegator: approver };
             }
         }
     
-        // Check 2: Role-based approval
-        if (stageConfig.role) {
-            // A) Direct role match
-            if (role === stageConfig.role) {
-                if (role === 'Executive') {
-                    return canExecutiveApproveDept(profile);
-                }
-                return true; // Direct role match for non-executives.
-            }
-        }
-        
-        return false;
+        return { can: false, asDelegate: false, delegator: null };
+    
     }, [activeRequest, role, user, profile, allUsers, departments, approvalGroups]);
+    
+    const canApprove = canApproveResult.can;
+
 
     const canRejectOrQuery = useMemo(() => {
         if (!activeRequest || !role || !user || !allUsers) return false;
@@ -612,14 +609,25 @@ export default function ApprovalsPage() {
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
         let toastMessage: {title: string, description: string} | null = null;
-        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
+        const { asDelegate, delegator } = canApproveResult;
+        
+        const actorName = profile?.displayName || user.email || 'User';
+        const actorId = user.uid;
 
         const timelineUpdater = (stepName: string, nextStageName: string) => {
             return (step: ApprovalRequest['timeline'][0]) => {
                 if (step.stage === stepName) {
-                    return { ...step, status: 'completed' as const, date: currentDate, actor: actorName };
+                    return { 
+                        ...step, 
+                        status: 'completed' as const, 
+                        date: currentDate, 
+                        actor: actorName,
+                        actorId: actorId,
+                        delegatedById: asDelegate ? delegator?.id : undefined,
+                        delegatedByName: asDelegate ? delegator?.displayName : undefined,
+                    };
                 }
                 if (step.stage === nextStageName) {
                     return { ...step, status: 'pending' as const };
@@ -655,17 +663,17 @@ export default function ApprovalsPage() {
                 const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
 
                 if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') {
-                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
+                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
                 }
                 if (execApprovalIndex > -1) {
-                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName };
+                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
                 }
                 const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
                 if (procurementProcessingIndex > -1) {
                         newTimeline[procurementProcessingIndex] = { ...newTimeline[procurementProcessingIndex], status: 'pending' };
                 }
             }
-        } else if (role === 'Procurement Officer' && activeRequest.status === 'Approved') {
+        } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
             newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
@@ -707,7 +715,7 @@ export default function ApprovalsPage() {
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
 
             // Special Notification for PO Acknowledgment to Procurement Assistant
-            if (role === 'Procurement Officer' && newStatus === 'In Fulfillment') {
+            if ((role === 'Procurement Officer' || role === 'Administrator') && newStatus === 'In Fulfillment') {
                 const assistantsQuery = query(collection(firestore, 'users'), where('role', '==', 'Procurement Assistant'));
                 const assistantsSnapshot = await getDocs(assistantsQuery);
                 const assistantEmails = assistantsSnapshot.docs.map(doc => doc.data().email).filter(Boolean);
@@ -892,6 +900,7 @@ export default function ApprovalsPage() {
                 ...newTimeline[currentStepIndex],
                 status: 'rejected',
                 actor: actorString,
+                actorId: user.uid,
                 date: currentDate,
             };
         }
@@ -1476,7 +1485,7 @@ export default function ApprovalsPage() {
                                                     <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
                                                         {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
                                                         <Check className="mr-2 h-4 w-4" />
-                                                        {role === 'Procurement Officer' ? 'Acknowledge & Process' : 'Approve'}
+                                                        {(role === 'Procurement Officer' || role === 'Procurement Assistant') ? 'Acknowledge & Process' : 'Approve'}
                                                     </Button>
                                                 </>
                                             )}

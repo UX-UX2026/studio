@@ -122,14 +122,13 @@ service cloud.firestore {
       // Who can update?
       // - Admins can always update.
       // - The owner can update if it's still a draft.
-      // - The assigned approver can update at the correct stage.
+      // - The assigned approver (or their delegate) can update at the correct stage.
       // - The owner can update if queries have been raised.
       allow update: if isAdmin(request.auth.uid) 
                     || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid)
-                    || (isManager(request.auth.uid) && resource.data.departmentId == getUserData(request.auth.uid).departmentId && (resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
-                    || (isExecutiveWithPermission(request.auth.uid, resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
+                    || ((isManager(request.auth.uid) || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
                     || (resource.data.status == 'Queries Raised' && resource.data.submittedById == request.auth.uid)
-                    || (isProcurementOfficer(request.auth.uid) && resource.data.status == 'Approved');
+                    || ((isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isExecutive(request.auth.uid)) && resource.data.status == 'Approved');
 
       // Who can delete? (Only admins can permanently delete)
       allow delete: if isAdmin(request.auth.uid);

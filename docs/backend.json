@@ -75,6 +75,10 @@
               "actor": {
                 "type": "string"
               },
+              "actorId": {
+                "type": "string",
+                "description": "The UID of the user who performed the action at this stage."
+              },
               "date": {
                 "type": "string",
                 "nullable": true
