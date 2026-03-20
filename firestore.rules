@@ -35,6 +35,9 @@ service cloud.firestore {
     
     function isExecutiveWithPermission(userId, departmentId) {
       let userProfile = getUserData(userId);
+       if (departmentId == null) {
+        return false;
+      }
       // Allow if approvableDepartmentIds does not exist, is null, or is an empty map (approves all).
       // Or, if the request's departmentId is a key in the map.
       return isExecutive(userId) &&
@@ -110,7 +113,7 @@ service cloud.firestore {
                   || isProcurementOfficer(request.auth.uid) 
                   || isExecutive(request.auth.uid)
                   || resource.data.submittedById == request.auth.uid
-                  || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.department == getUserData(request.auth.uid).department);
+                  || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getUserData(request.auth.uid).departmentId);
       
       // Who can create?
       // Any authenticated user can create a draft for themselves.
@@ -123,7 +126,7 @@ service cloud.firestore {
       // - The owner can update if queries have been raised.
       allow update: if isAdmin(request.auth.uid) 
                     || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid)
-                    || (isManager(request.auth.uid) && resource.data.department == getUserData(request.auth.uid).department && (resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
+                    || (isManager(request.auth.uid) && resource.data.departmentId == getUserData(request.auth.uid).departmentId && (resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
                     || (isExecutiveWithPermission(request.auth.uid, resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
                     || (resource.data.status == 'Queries Raised' && resource.data.submittedById == request.auth.uid)
                     || (isProcurementOfficer(request.auth.uid) && resource.data.status == 'Approved');

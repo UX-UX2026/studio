@@ -234,6 +234,10 @@
           "type": "string",
           "description": "The name of the department this user belongs to or manages."
         },
+        "departmentId": {
+          "type": "string",
+          "description": "The ID of the department this user belongs to."
+        },
         "status": {
           "type": "string",
           "enum": [

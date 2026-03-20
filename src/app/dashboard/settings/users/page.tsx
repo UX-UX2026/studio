@@ -43,6 +43,7 @@ type UserProfile = {
     email: string;
     role: string;
     department: string;
+    departmentId?: string;
     photoURL: string;
     status: 'Active' | 'Invited';
     alternateEmail?: string;
@@ -147,6 +148,8 @@ export default function UsersPage() {
             acc[id] = true;
             return acc;
         }, {} as Record<string, boolean>);
+        
+        const selectedDept = departments?.find(d => d.name === department);
 
         if (!editingUser) { // Handle "Add User"
             const action = 'user.create';
@@ -165,6 +168,7 @@ export default function UsersPage() {
                     email,
                     role: userRole,
                     department,
+                    departmentId: selectedDept?.id || null,
                     photoURL: `https://i.pravatar.cc/150?u=${email}`,
                     status: 'Invited' as const,
                     alternateEmail: alternateEmail,
@@ -201,6 +205,7 @@ export default function UsersPage() {
                 email,
                 role: userRole,
                 department,
+                departmentId: selectedDept?.id || null,
                 photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
                 status: editingUser.status,
                 alternateEmail: alternateEmail,
@@ -298,7 +303,15 @@ export default function UsersPage() {
         
         try {
             const userRef = doc(firestore, 'users', userId);
-            await setDoc(userRef, { [field]: value }, { merge: true });
+            
+            const updatePayload: Partial<UserProfile> = { [field]: value };
+
+            if (field === 'department') {
+                const selectedDept = departments?.find(d => d.name === value);
+                updatePayload.departmentId = selectedDept?.id || null;
+            }
+
+            await setDoc(userRef, updatePayload, { merge: true });
             
             toast({
                 title: "User Updated",
