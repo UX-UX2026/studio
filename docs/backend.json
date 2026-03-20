@@ -558,6 +558,25 @@
                     "description": "The number of minutes of inactivity before a user is logged out."
                 }
             }
+        },
+        "pdfSettings": {
+            "type": "object",
+            "description": "Settings for customizing generated PDF reports.",
+            "properties": {
+                "companyName": {
+                    "type": "string",
+                    "description": "The company name to display on reports."
+                },
+                "logoUrl": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "The URL of the company logo to display on reports."
+                },
+                "primaryColor": {
+                    "type": "string",
+                    "description": "The primary color (hex code) for report headers."
+                }
+            }
         }
       }
     },

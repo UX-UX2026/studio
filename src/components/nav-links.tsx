@@ -29,6 +29,7 @@ import {
   Layers,
   Users2,
   ShieldCheck,
+  Palette,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -80,6 +81,7 @@ const allLinks = [
         { href: '/dashboard/settings/budget', label: 'Budget', icon: Banknote, permission: 'settings:budget', iconClass: "text-green-500" },
         { href: '/dashboard/settings/integrations', label: 'Integrations', icon: Layers, permission: 'settings:integrations', iconClass: "text-violet-500" },
         { href: '/dashboard/settings/email', label: 'Email & Notifications', icon: Mail, permission: 'settings:email', iconClass: "text-pink-500" },
+        { href: '/dashboard/settings/pdf-design', label: 'PDF Design', icon: Palette, permission: 'settings:general', iconClass: "text-red-400" },
         { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', icon: CalendarClock, permission: 'settings:procurement-periods', iconClass: "text-teal-500" },
         { href: '/dashboard/settings/procurement-rules', label: 'Procurement Rules', icon: Scale, permission: 'settings:general', iconClass: "text-rose-500" },
         { href: '/dashboard/settings/security', label: 'Security', icon: ShieldCheck, permission: 'settings:general', iconClass: "text-red-500" },

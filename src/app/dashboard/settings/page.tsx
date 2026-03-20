@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase, Users2, ShieldCheck } from "lucide-react";
+import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, BrainCircuit, DatabaseZap, Banknote, CalendarClock, Eraser, Recycle, Scale, HardDriveDownload, Mail, Layers, Briefcase, Users2, ShieldCheck, Palette } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -45,6 +45,7 @@ export default function SettingsPage() {
         { href: '/dashboard/settings/budget', label: 'Budget Integration', description: 'Import, view, and manage budget data from an external sheet.', icon: Banknote, iconClass: "text-green-500" },
         { href: '/dashboard/settings/integrations', label: 'Integrations', description: 'Connect to external accounting platforms like Odoo.', icon: Layers, iconClass: "text-violet-500" },
         { href: '/dashboard/settings/email', label: 'Email & Notifications', description: 'Configure email settings and templates.', icon: Mail, iconClass: "text-pink-500" },
+        { href: '/dashboard/settings/pdf-design', label: 'PDF & Export Design', description: 'Customize the appearance of generated PDF reports.', icon: Palette, iconClass: "text-red-400" },
         { href: '/dashboard/settings/procurement-periods', label: 'Procurement Periods', description: 'Lock and unlock submission periods for each department.', icon: CalendarClock, iconClass: "text-teal-500" },
         { href: '/dashboard/settings/procurement-rules', label: 'Procurement Rules', description: 'Set application-wide rules for procurement submissions.', icon: Scale, iconClass: "text-rose-500" },
         { href: '/dashboard/settings/security', label: 'Security', description: 'Manage session timeouts and other security policies.', icon: ShieldCheck, iconClass: "text-red-500" },
