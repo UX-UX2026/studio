@@ -105,9 +105,12 @@ service cloud.firestore {
       // - A manager of the same department.
       // - Executives.
       // - Procurement Officers.
-      allow read: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isExecutive(request.auth.uid)
+      // - Requesters of the same department.
+      allow read: if isAdmin(request.auth.uid) 
+                  || isProcurementOfficer(request.auth.uid) 
+                  || isExecutive(request.auth.uid)
                   || resource.data.submittedById == request.auth.uid
-                  || (isManager(request.auth.uid) && resource.data.department == getUserData(request.auth.uid).department);
+                  || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.department == getUserData(request.auth.uid).department);
       
       // Who can create?
       // Any authenticated user can create a draft for themselves.
