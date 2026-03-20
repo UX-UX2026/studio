@@ -90,8 +90,7 @@ service cloud.firestore {
       // - A manager of the same department.
       // - Executives.
       // - Procurement Officers.
-      allow read: if isAdmin() || isProcurementOfficer()
-                  || (isExecutive() && isExecutiveWithPermission(resource.data.departmentId))
+      allow read: if isAdmin() || isProcurementOfficer() || isExecutive()
                   || resource.data.submittedById == request.auth.uid
                   || (isManager() && resource.data.department == getUserData(request.auth.uid).department);
       
