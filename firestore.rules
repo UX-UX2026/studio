@@ -120,15 +120,17 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       // Who can update?
-      // - Admins can always update.
-      // - The owner can update if it's still a draft.
-      // - The assigned approver (or their delegate) can update at the correct stage.
-      // - The owner can update if queries have been raised.
-      allow update: if isAdmin(request.auth.uid) 
-                    || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid)
-                    || ((isManager(request.auth.uid) || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Queries Raised'))
-                    || (resource.data.status == 'Queries Raised' && resource.data.submittedById == request.auth.uid)
-                    || ((isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isExecutive(request.auth.uid)) && resource.data.status == 'Approved');
+      allow update: if isAdmin(request.auth.uid)
+        // Submitter can edit their own draft
+        || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid)
+        // Manager can action items for their department that are pending or have queries. This includes the executive stage to allow for delegation.
+        || (isManager(request.auth.uid) && resource.data.departmentId == getUserData(request.auth.uid).departmentId && (resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Pending Executive' || resource.data.status == 'Queries Raised'))
+        // An Executive can action items for their permitted departments.
+        || (isExecutiveWithPermission(request.auth.uid, resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Queries Raised'))
+        // The original submitter can respond to queries.
+        || (resource.data.submittedById == request.auth.uid && resource.data.status == 'Queries Raised')
+        // Procurement Officers can update items that are approved or already in fulfillment.
+        || (isProcurementOfficer(request.auth.uid) && (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
 
       // Who can delete? (Only admins can permanently delete)
       allow delete: if isAdmin(request.auth.uid);

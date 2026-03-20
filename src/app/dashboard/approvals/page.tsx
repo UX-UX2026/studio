@@ -128,7 +128,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             
             if (logoData) {
                 try {
-                    doc.addImage(logoData, 'PNG', 14, 12, 50, 12);
+                    doc.addImage(logoData, 14, 12, 50, 12);
                 } catch(e) {
                     console.error("Failed to add image to PDF, continuing without it:", e);
                 }
