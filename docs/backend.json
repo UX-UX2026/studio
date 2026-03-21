@@ -199,6 +199,11 @@
               }
             }
           }
+        },
+        "delegatorIdForApproval": {
+            "type": "string",
+            "nullable": true,
+            "description": "A temporary field used by security rules to verify a delegated approval action."
         }
       },
       "required": [
@@ -885,3 +890,5 @@
     }
   }
 }
+
+    

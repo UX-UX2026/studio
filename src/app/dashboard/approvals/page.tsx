@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -697,7 +696,12 @@ export default function ApprovalsPage() {
         }
 
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
-        const updateData = { status: newStatus, timeline: newTimeline };
+        // Add the delegatorId to the payload if this is a delegated approval
+        const updateData: any = { 
+            status: newStatus, 
+            timeline: newTimeline,
+            delegatorIdForApproval: asDelegate ? delegator?.id : null,
+        };
         const action = 'request.approve';
 
         const finalToastMessage = toastMessage;
@@ -1571,3 +1575,5 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
+    

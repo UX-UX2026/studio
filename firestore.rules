@@ -10,7 +10,6 @@ service cloud.firestore {
     }
     
     function getUserRole(userId) {
-      // Read role from the user's profile document instead of custom claims
       if (exists(/databases/$(database)/documents/users/$(userId))) {
         return getUserData(userId).role;
       }
@@ -38,12 +37,10 @@ service cloud.firestore {
        if (departmentId == null) {
         return false;
       }
-      // Allow if approvableDepartmentIds does not exist, is null, or is an empty map (approves all).
-      // Or, if the request's departmentId is a key in the map.
       return isExecutive(userId) &&
              (!('approvableDepartmentIds' in userProfile) ||
               userProfile.approvableDepartmentIds == null ||
-              userProfile.approvableDepartmentIds.keys().size() == 0 ||
+              userProfile.approvableDepartmentIds.size() == 0 ||
               departmentId in userProfile.approvableDepartmentIds);
     }
 
@@ -55,19 +52,31 @@ service cloud.firestore {
     function isRequester(userId) {
       return getUserRole(userId) == 'Requester';
     }
+
+    // A function to check if a user is authorized to approve a given request,
+    // either directly or because they are a higher-level approver.
+    function isAllowedToApprove(userId, requestData) {
+      let userProfile = getUserData(userId);
+      let isRequestManager = isManager(userId) && userProfile.departmentId == requestData.departmentId;
+      let isRequestExecutive = isExecutiveWithPermission(userId, requestData.departmentId);
+
+      // An Executive can approve a request at the Manager stage.
+      if (requestData.status == 'Pending Manager Approval' || requestData.status == 'Queries Raised') {
+        return isRequestManager || isRequestExecutive;
+      }
+      // Only an Executive can approve at the Executive stage.
+      if (requestData.status == 'Pending Executive') {
+        return isRequestExecutive;
+      }
+      
+      return false;
+    }
     
     // User Profiles
     match /users/{userId} {
-      // Any authenticated user can read public profile data (needed for names, roles etc.)
       allow read: if request.auth != null;
-      
-      // A user can create their own profile.
       allow create: if isOwner(userId);
-      
-      // A user can update their own profile, or an admin can update any profile.
       allow update: if isOwner(userId) || isAdmin(request.auth.uid);
-      
-      // Only admins can delete profiles.
       allow delete: if isAdmin(request.auth.uid);
     }
 
@@ -88,13 +97,10 @@ service cloud.firestore {
     }
 
     match /app/metadata {
-      // All authenticated users can read metadata (e.g. for security settings)
       allow read: if request.auth != null;
       allow write: if isAdmin(request.auth.uid);
     }
     
-    // Departments can be read by any authenticated user (needed for dropdowns etc.)
-    // but only written by Admins.
     match /departments/{departmentId} {
       allow read: if request.auth != null;
       allow write: if isAdmin(request.auth.uid);
@@ -102,57 +108,51 @@ service cloud.firestore {
 
     // Procurement Requests have complex rules
     match /procurementRequests/{procurementRequestId} {
-      // Who can read?
-      // - The user who submitted it.
-      // - Admins.
-      // - A manager of the same department.
-      // - Executives.
-      // - Procurement Officers.
-      // - Requesters of the same department.
       allow read: if isAdmin(request.auth.uid) 
                   || isProcurementOfficer(request.auth.uid) 
                   || isExecutive(request.auth.uid)
                   || resource.data.submittedById == request.auth.uid
                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getUserData(request.auth.uid).departmentId);
       
-      // Who can create?
-      // Any authenticated user can create a draft for themselves.
       allow create: if request.auth != null && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
-      // Who can update?
-      allow update: if isAdmin(request.auth.uid)
-        // Submitter can edit their own draft
-        || (resource.data.status == 'Draft' && resource.data.submittedById == request.auth.uid)
-        // Manager can action items for their department that are pending or have queries. This includes the executive stage to allow for delegation.
-        || (isManager(request.auth.uid) && resource.data.departmentId == getUserData(request.auth.uid).departmentId && (resource.data.status == 'Pending Manager Approval' || resource.data.status == 'Pending Executive' || resource.data.status == 'Queries Raised'))
-        // An Executive can action items for their permitted departments.
-        || (isExecutiveWithPermission(request.auth.uid, resource.data.departmentId) && (resource.data.status == 'Pending Executive' || resource.data.status == 'Queries Raised'))
-        // The original submitter can respond to queries.
-        || (resource.data.submittedById == request.auth.uid && resource.data.status == 'Queries Raised')
-        // Procurement Officers can update items that are approved or already in fulfillment.
-        || (isProcurementOfficer(request.auth.uid) && (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
+      // Who can update? A user can update if any of the following are true:
+      allow update: if
+        // 1. User is an Administrator.
+        isAdmin(request.auth.uid)
 
-      // Who can delete? (Only admins can permanently delete)
+        // 2. User is the original submitter and the request is a Draft or has Queries.
+        || (resource.data.submittedById == request.auth.uid &&
+            (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
+
+        // 3. User is directly authorized to approve the current stage.
+        || isAllowedToApprove(request.auth.uid, resource.data)
+
+        // 4. User is acting as a delegate for an authorized approver.
+        || (request.resource.data.delegatorIdForApproval != null &&
+            getUserData(request.resource.data.delegatorIdForApproval).delegatedToId == request.auth.uid &&
+            isAllowedToApprove(request.resource.data.delegatorIdForApproval, resource.data))
+
+        // 5. User is a Procurement Officer and the request is in a fulfillment stage.
+        || (isProcurementOfficer(request.auth.uid) &&
+            (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
+
       allow delete: if isAdmin(request.auth.uid);
     }
 
     // Recurring Items
-    // Any authenticated user can read them.
-    // POs, Admins, Managers, and Requesters can create/edit/delete.
     match /recurringItems/{itemId} {
       allow read: if request.auth != null;
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
-    // Any authenticated user can read them, but only POs and Admins can manage them.
     match /vendors/{vendorId} {
       allow read: if request.auth != null;
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
-    // Only Admins and POs can manage budget data.
     match /budgetUploads/{uploadId} {
       allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
@@ -171,9 +171,10 @@ service cloud.firestore {
       allow create: if request.auth != null;
     }
     
-    // Allow any authenticated user to run diagnostics.
     match /_diagnostics/{docId} {
       allow write: if request.auth != null;
     }
   }
 }
+
+    
