@@ -869,11 +869,11 @@ export default function DashboardPage() {
                                                   <Download className="h-4 w-4" />
                                               </Button>
                                           </DropdownMenuTrigger>
-                                          <DropdownMenuContent onClick={(e) => e.stopPropagation()}>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx', firestore)}>
+                                          <DropdownMenuContent>
+                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
+                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
