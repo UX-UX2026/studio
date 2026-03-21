@@ -124,15 +124,54 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         
         const doc = new jsPDF();
         
-        // Header
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-
-        doc.setFontSize(12);
+        // --- Asynchronously load logo ---
+        let logoImage: HTMLImageElement | null = null;
+        if (company?.logoUrl) {
+            try {
+                logoImage = await new Promise((resolve) => {
+                    const img = new Image();
+                    img.crossOrigin = "Anonymous"; // Important for CORS
+                    img.onload = () => resolve(img);
+                    img.onerror = (err) => {
+                        console.error("PDF Logo Load Error:", err);
+                        resolve(null); // Resolve with null on error
+                    };
+                    img.src = company.logoUrl;
+                });
+            } catch (error) {
+                console.error("Error creating image promise for PDF:", error);
+                logoImage = null; // Ensure generation continues
+            }
+        }
+        
+        // --- Build Header ---
+        let tableStartY = 30; // Default start Y for tables if no logo
+        
         doc.setFont('helvetica', 'normal');
+        doc.setFontSize(12);
         doc.text(`ID: ${request.id.substring(0, 8)}...`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
-    
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        
+        if (logoImage) {
+            try {
+                const imgWidth = 30;
+                const imgHeight = (logoImage.height * imgWidth) / logoImage.width;
+                const imgY = 15;
+                doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
+                doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
+                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
+            } catch (e) {
+                console.error("Failed to add logo to PDF, falling back to text only.", e);
+                doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
+            }
+        } else {
+            doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
+        }
+
+        // --- End Header ---
+
         const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
             ["Company", request.companyName || 'N/A'],
@@ -144,7 +183,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         ];
 
         autoTable(doc, {
-            startY: 30,
+            startY: tableStartY,
             head: [['Request Details', '']],
             body: detailsData,
             theme: 'striped',
