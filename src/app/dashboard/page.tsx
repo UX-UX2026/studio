@@ -449,42 +449,31 @@ export default function DashboardPage() {
             const { default: jsPDF } = await import('jspdf');
             const { default: autoTable } = await import('jspdf-autotable');
 
-            // Fetch audit logs for the request
-            const auditLogsQuery = query(
-                collection(firestore, 'auditLogs'), 
-                where('entity.id', '==', request.id)
-            );
-            const auditLogsSnapshot = await getDocs(auditLogsQuery);
-            let auditLogs = auditLogsSnapshot.docs.map(doc => doc.data() as AuditEvent);
-            auditLogs.sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-
             const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
             const company = companies?.find(c => c.id === request.companyId);
             
             const doc = new jsPDF();
             
-            // --- Asynchronously load logo ---
             let logoImage: HTMLImageElement | null = null;
             if (company?.logoUrl) {
                 try {
                     logoImage = await new Promise((resolve) => {
                         const img = new Image();
-                        img.crossOrigin = "Anonymous"; // Important for CORS
+                        img.crossOrigin = "Anonymous";
                         img.onload = () => resolve(img);
                         img.onerror = (err) => {
                             console.error("PDF Logo Load Error:", err);
-                            resolve(null); // Resolve with null on error
+                            resolve(null);
                         };
                         img.src = company.logoUrl;
                     });
                 } catch (error) {
                     console.error("Error creating image promise for PDF:", error);
-                    logoImage = null; // Ensure generation continues
+                    logoImage = null;
                 }
             }
             
-            // --- Build Header ---
-            let tableStartY = 30; // Default start Y for tables if no logo
+            let tableStartY = 30;
             
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(12);
@@ -500,7 +489,7 @@ export default function DashboardPage() {
                     const imgY = 15;
                     doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
                     doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                    tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
+                    tableStartY = Math.max(tableStartY, imgY + imgHeight + 8);
                 } catch (e) {
                     console.error("Failed to add logo to PDF, falling back to text only.", e);
                     doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
@@ -509,8 +498,6 @@ export default function DashboardPage() {
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
             }
     
-            // --- End Header ---
-
             const detailsData: (string|number)[][] = [
                 ["Request ID", request.id],
                 ["Company", request.companyName || 'N/A'],
@@ -584,26 +571,6 @@ export default function DashboardPage() {
                 }
             });
             
-            if (auditLogs && auditLogs.length > 0) {
-                const emailLog = auditLogs
-                    .filter(log => log.action === 'notification.sent')
-                    .map(log => ({
-                        timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
-                        details: log.details,
-                    }));
-            
-                if (emailLog.length > 0) {
-                    autoTable(doc, {
-                        startY: (doc as any).lastAutoTable.finalY + 10,
-                        head: [['Notification Email History']],
-                        body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
-                        theme: 'striped',
-                        headStyles: { fillColor: primaryColor },
-                        styles: { fontSize: 8 },
-                    });
-                }
-            }
-
             doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
             return;
         }
