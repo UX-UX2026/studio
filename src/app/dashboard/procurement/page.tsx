@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -147,30 +148,28 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
         const company = companies?.find(c => c.id === request.companyId);
         
-        const doc = new jsPDF();
-        
-        // --- Asynchronously load logo ---
         let logoImage: HTMLImageElement | null = null;
         if (company?.logoUrl) {
             try {
                 logoImage = await new Promise((resolve) => {
                     const img = new Image();
-                    img.crossOrigin = "Anonymous"; // Important for CORS
+                    img.crossOrigin = "Anonymous";
                     img.onload = () => resolve(img);
                     img.onerror = (err) => {
                         console.error("PDF Logo Load Error:", err);
-                        resolve(null); // Resolve with null on error
+                        resolve(null);
                     };
                     img.src = company.logoUrl;
                 });
             } catch (error) {
                 console.error("Error creating image promise for PDF:", error);
-                logoImage = null; // Ensure generation continues
+                logoImage = null;
             }
         }
         
-        // --- Build Header ---
-        let tableStartY = 30; // Default start Y for tables if no logo
+        const doc = new jsPDF();
+        
+        let tableStartY = 30;
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
@@ -186,7 +185,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 const imgY = 15;
                 doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
+                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8);
             } catch (e) {
                 console.error("Failed to add logo to PDF, falling back to text only.", e);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
@@ -194,8 +193,6 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         } else {
             doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
         }
-
-        // --- End Header ---
 
         const detailsData: (string|number)[][] = [
             ["Request ID", request.id],
@@ -1655,7 +1652,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
