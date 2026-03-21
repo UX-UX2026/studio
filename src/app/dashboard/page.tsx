@@ -364,7 +364,7 @@ export default function DashboardPage() {
         return Object.entries(fulfillmentSummary).map(([name, value]) => ({ 
             name, 
             value, 
-            fill: `var(--color-${name})`
+            fill: `var(--color-${name})` 
         }));
     }, [fulfillmentSummary]);
     
@@ -851,9 +851,9 @@ export default function DashboardPage() {
                               </TableRow>
                           ) : sortedOpenRequests && sortedOpenRequests.length > 0 ? (
                             sortedOpenRequests.slice(0, 5).map((req) => (
-                              <TableRow key={req.id} className="cursor-pointer" onClick={() => router.push(`/dashboard/approvals?id=${req.id}`)}>
+                              <TableRow key={req.id}>
                                 <TableCell className="font-medium">
-                                  <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary">{req.id.substring(0,8)}...</Link>
+                                  <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id.substring(0,8)}...</Link>
                                 </TableCell>
                                 <TableCell>{req.period}</TableCell>
                                 <TableCell>{req.submittedBy || 'N/A'}</TableCell>
@@ -865,15 +865,15 @@ export default function DashboardPage() {
                                   {['Approved', 'In Fulfillment', 'Completed'].includes(req.status) && (
                                       <DropdownMenu>
                                           <DropdownMenuTrigger asChild>
-                                              <Button variant="ghost" size="icon" onClick={(e) => { e.stopPropagation(); }}>
+                                              <Button variant="ghost" size="icon">
                                                   <Download className="h-4 w-4" />
                                               </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent>
-                                              <DropdownMenuItem onSelect={async (e) => { e.preventDefault(); await generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}}>
+                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onSelect={async (e) => { e.preventDefault(); await generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}}>
+                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
@@ -1087,3 +1087,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
