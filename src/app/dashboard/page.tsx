@@ -870,10 +870,10 @@ export default function DashboardPage() {
                                               </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent>
-                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}>
+                                              <DropdownMenuItem onSelect={async (e) => { e.preventDefault(); await generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
+                                              <DropdownMenuItem onSelect={async (e) => { e.preventDefault(); await generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
