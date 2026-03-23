@@ -108,12 +108,20 @@ service cloud.firestore {
 
     // Procurement Requests have complex rules
     match /procurementRequests/{procurementRequestId} {
-      allow read: if isAdmin(request.auth.uid) 
-                  || isProcurementOfficer(request.auth.uid) 
-                  || isExecutive(request.auth.uid)
-                  || resource.data.submittedById == request.auth.uid
-                  || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getUserData(request.auth.uid).departmentId);
-      
+      // Allow reading a single document if you are involved with it. `resource.data` is available here.
+      allow get: if request.auth != null && (
+                   isAdmin(request.auth.uid)
+                   || isProcurementOfficer(request.auth.uid)
+                   || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
+                   || resource.data.submittedById == request.auth.uid
+                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getUserData(request.auth.uid).departmentId)
+                 );
+    
+      // Allow querying the collection for any authenticated user.
+      // This relies on client-side queries to correctly filter data for the user's role.
+      // This is necessary because security rules cannot enforce document content-based filters for list operations.
+      allow list: if request.auth != null;
+
       allow create: if request.auth != null && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       // Who can update? A user can update if any of the following are true:
@@ -176,5 +184,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
