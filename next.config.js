@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  serverComponentsExternalPackages: ['require-in-the-middle'],
   typescript: {
     ignoreBuildErrors: true,
   },
