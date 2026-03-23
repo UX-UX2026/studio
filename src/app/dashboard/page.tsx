@@ -396,7 +396,12 @@ export default function DashboardPage() {
         }
     }
     
-    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf', firestore: Firestore, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
+    const generateApprovalReport = async (request: ApprovalRequest, format: 'xlsx' | 'pdf') => {
+        if (!firestore) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Firestore not available' });
+            return;
+        }
+
         const summaryData = (() => {
             const budgetItemsForRequest = allBudgetItems?.filter(b => b.departmentId === request.departmentId) || [];
             if (!allDepartments || !request) {
@@ -837,10 +842,10 @@ export default function DashboardPage() {
                                               </Button>
                                           </DropdownMenuTrigger>
                                           <DropdownMenuContent>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'xlsx', firestore, companies, appMetadata)}>
+                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'xlsx')}>
                                                   Export as Excel (.xlsx)
                                               </DropdownMenuItem>
-                                              <DropdownMenuItem onClick={() => generateApprovalReport(req, 'pdf', firestore, companies, appMetadata)}>
+                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'pdf')}>
                                                   Export as PDF (.pdf)
                                               </DropdownMenuItem>
                                           </DropdownMenuContent>
@@ -1054,5 +1059,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
