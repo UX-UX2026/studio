@@ -21,12 +21,12 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuCheckboxItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuCheckboxItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +34,7 @@ import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 
@@ -365,10 +365,10 @@ export default function UsersPage() {
                                 <TableRow>
                                     <TableHead>User</TableHead>
                                     <TableHead>Role</TableHead>
-                                    <TableHead>Primary Department</TableHead>
-                                    <TableHead className="hidden md:table-cell">Reporting Depts</TableHead>
-                                    <TableHead className="hidden lg:table-cell">Delegated To</TableHead>
-                                    <TableHead className="hidden lg:table-cell w-[120px]">Status</TableHead>
+                                    <TableHead className="w-[120px]">Status</TableHead>
+                                    <TableHead>Reporting Depts</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Primary Department</TableHead>
+                                    <TableHead className="hidden md:table-cell">Delegated To</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -388,12 +388,14 @@ export default function UsersPage() {
                                         <TableCell>
                                             <Badge variant="secondary">{u.role}</Badge>
                                         </TableCell>
-                                        <TableCell>{u.department || 'Unassigned'}</TableCell>
-                                        <TableCell className="hidden md:table-cell">
+                                        <TableCell>
+                                            <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
+                                        </TableCell>
+                                        <TableCell>
                                             {u.role === 'Executive' ? (
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="outline" className="w-[150px] font-normal justify-between">
+                                                        <Button variant="outline" className="w-full sm:w-[150px] font-normal justify-between">
                                                             <span>{u.reportingDepartments?.length || 0} selected</span>
                                                             <ChevronDown className="h-4 w-4 opacity-50" />
                                                         </Button>
@@ -419,11 +421,9 @@ export default function UsersPage() {
                                                 <span className="text-muted-foreground ml-3">N/A</span>
                                             )}
                                         </TableCell>
-                                        <TableCell className="hidden lg:table-cell">
+                                        <TableCell className="hidden sm:table-cell">{u.department || 'Unassigned'}</TableCell>
+                                        <TableCell className="hidden md:table-cell">
                                             {getDelegateName(u)}
-                                        </TableCell>
-                                        <TableCell className="hidden lg:table-cell">
-                                            <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
@@ -520,4 +520,3 @@ export default function UsersPage() {
         </div>
     );
 }
-
