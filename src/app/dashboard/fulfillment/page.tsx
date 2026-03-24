@@ -18,20 +18,6 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
 import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
-  ChartContainer,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-  type ChartConfig
-} from "@/components/ui/chart";
 
 
 export type FulfillmentItem = ApprovalItem & {
@@ -120,31 +106,6 @@ export default function FulfillmentPage() {
         return stats;
     }, [fulfillmentItemsByDept]);
 
-    const fulfillmentStatusSummary = useMemo(() => {
-        if (!allFulfillmentItems) return { data: [], total: 0 };
-        const statusCounts = allFulfillmentItems.reduce((acc, item) => {
-            const status = item.fulfillmentStatus || 'Pending';
-            acc[status] = (acc[status] || 0) + 1;
-            return acc;
-        }, {} as Record<string, number>);
-        
-        const data = Object.entries(statusCounts).map(([name, value]) => ({ 
-            name, 
-            value,
-            fill: `var(--color-${name.replace(/ /g, "")})`
-        }));
-        
-        return { data, total: allFulfillmentItems.length };
-    }, [allFulfillmentItems]);
-
-    const fulfillmentStatusChartConfig = {
-        Sourcing: { label: "Sourcing", color: "hsl(var(--chart-1))" },
-        Quoted: { label: "Quoted", color: "hsl(var(--chart-2))" },
-        Ordered: { label: "Ordered", color: "hsl(var(--chart-3))" },
-        Completed: { label: "Completed", color: "hsl(var(--chart-4))" },
-        Pending: { label: "Pending", color: "hsl(var(--chart-5))" },
-    } satisfies ChartConfig;
-
     const departmentOrder = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
     
     const departmentsForUser = useMemo(() => {
@@ -166,35 +127,6 @@ export default function FulfillmentPage() {
 
   return (
     <div className="space-y-6">
-        <Card>
-            <CardHeader>
-                <CardTitle>Fulfillment Status Overview</CardTitle>
-                <CardDescription>
-                Breakdown of all fulfillment items by their current status.
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <ChartContainer config={fulfillmentStatusChartConfig} className="h-[250px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                    {fulfillmentStatusSummary.data.length > 0 ? (
-                    <PieChart>
-                        <Tooltip content={<ChartTooltipContent />} />
-                        <Pie data={fulfillmentStatusSummary.data} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
-                        {fulfillmentStatusSummary.data.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.fill} />
-                        ))}
-                        </Pie>
-                        <ChartLegend content={<ChartLegendContent nameKey="name" />} />
-                    </PieChart>
-                    ) : (
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                        No fulfillment items found.
-                    </div>
-                    )}
-                </ResponsiveContainer>
-                </ChartContainer>
-            </CardContent>
-        </Card>
         <Card>
         <CardHeader>
             <CardTitle>Procurement Fulfillment Details</CardTitle>
