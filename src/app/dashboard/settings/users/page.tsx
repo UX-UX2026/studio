@@ -84,6 +84,7 @@ export default function UsersPage() {
     const [department, setDepartment] = useState('');
     const [alternateEmail, setAlternateEmail] = useState('');
     const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
+    const [reportingDepartments, setReportingDepartments] = useState<string[]>([]);
     
     const { toast } = useToast();
     
@@ -95,6 +96,7 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
+            setReportingDepartments(editingUser.reportingDepartments || []);
         } else if (isDialogOpen && !editingUser) {
             // Reset form for new user
             setName('');
@@ -103,6 +105,7 @@ export default function UsersPage() {
             setDepartment('');
             setAlternateEmail('');
             setNotificationPreference('Primary');
+            setReportingDepartments([]);
         }
     }, [editingUser, isDialogOpen]);
 
@@ -149,7 +152,14 @@ export default function UsersPage() {
             email,
             alternateEmail: alternateEmail,
             notificationPreference: notificationPreference,
+            role: userRole || 'Requester',
+            department: department || 'Unassigned',
+            departmentId: selectedDept?.id || null,
         };
+
+        if (baseUserData.role === 'Executive') {
+            baseUserData.reportingDepartments = reportingDepartments;
+        }
 
         if (!editingUser) { // Handle "Add User"
             const action = 'user.create';
@@ -165,12 +175,8 @@ export default function UsersPage() {
 
                 const newUserData = {
                     ...baseUserData,
-                    role: userRole || 'Requester',
-                    department: department || 'Unassigned',
-                    departmentId: selectedDept?.id || null,
                     photoURL: `https://i.pravatar.cc/150?u=${email}`,
                     status: 'Invited' as const,
-                    reportingDepartments: [],
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -194,7 +200,7 @@ export default function UsersPage() {
             return;
         }
         
-        // Handle "Edit User" (now only for name, email, etc.)
+        // Handle "Edit User"
         const action = 'user.update';
         try {
             const userRef = doc(firestore, 'users', editingUser.id);
@@ -416,7 +422,7 @@ export default function UsersPage() {
                             </TableHeader>
                             <TableBody>
                                 {users && users.map((u) => (
-                                    <TableRow key={u.id}>
+                                    <TableRow key={u.id} className={cn(u.role === 'Executive' && 'bg-primary/5')}>
                                         <TableCell className="font-medium flex items-center gap-3">
                                             <Avatar>
                                                 <AvatarImage src={u.photoURL} />
@@ -429,7 +435,7 @@ export default function UsersPage() {
                                         </TableCell>
                                         <TableCell>
                                             <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
-                                                <SelectTrigger className="w-[180px]">
+                                                <SelectTrigger className="w-full sm:w-[180px]">
                                                     <SelectValue placeholder="Assign role" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -479,7 +485,7 @@ export default function UsersPage() {
                                         </TableCell>
                                         <TableCell className="hidden md:table-cell">
                                             <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
-                                                <SelectTrigger className="w-[180px]">
+                                                <SelectTrigger className="w-full sm:w-[180px]">
                                                     <SelectValue placeholder="Assign department" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -510,10 +516,10 @@ export default function UsersPage() {
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
-                        <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
+                        <DialogTitle>{editingUser ? 'Edit User Details' : 'Add New User'}</DialogTitle>
                         <DialogDescription>
                              {editingUser 
-                                ? "Edit the user's name and notification emails. Role and department are managed directly in the table."
+                                ? "You can edit the user's name and notification preferences here. Role and department assignments are managed directly in the table."
                                 : "Fill in the details to create a new user profile. They will appear as 'Invited' until they sign in for the first time."}
                         </DialogDescription>
                     </DialogHeader>
@@ -528,7 +534,7 @@ export default function UsersPage() {
                         </div>
 
                         {!editingUser && (
-                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                             <>
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="role-add">Role</Label>
                                     <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
@@ -540,6 +546,37 @@ export default function UsersPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                 {userRole === 'Executive' && (
+                                    <div className="grid w-full items-center gap-1.5">
+                                        <Label>Reporting Departments</Label>
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="outline" className="w-full font-normal justify-between">
+                                                    <span>{reportingDepartments.length || 0} selected</span>
+                                                    <ChevronDown className="h-4 w-4 opacity-50" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent className="w-full">
+                                                <DropdownMenuLabel>Select Departments</DropdownMenuLabel>
+                                                <DropdownMenuSeparator />
+                                                {departments?.map(dept => (
+                                                    <DropdownMenuCheckboxItem
+                                                        key={dept.id}
+                                                        checked={reportingDepartments.includes(dept.id)}
+                                                        onSelect={(e) => e.preventDefault()}
+                                                        onCheckedChange={(checked) => {
+                                                            setReportingDepartments(prev => 
+                                                                checked ? [...prev, dept.id] : prev.filter(id => id !== dept.id)
+                                                            );
+                                                        }}
+                                                    >
+                                                        {dept.name}
+                                                    </DropdownMenuCheckboxItem>
+                                                ))}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                )}
                                 <div className="grid w-full items-center gap-1.5">
                                     <Label htmlFor="department-add">Primary Department</Label>
                                     <Select value={department} onValueChange={setDepartment}>
@@ -552,9 +589,8 @@ export default function UsersPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                            </div>
+                            </>
                         )}
-
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="grid w-full items-center gap-1.5">
                                 <Label htmlFor="alt-email">Alternate Email</Label>
