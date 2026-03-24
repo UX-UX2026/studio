@@ -314,9 +314,8 @@ export default function UsersPage() {
                                     <TableHead>User</TableHead>
                                     <TableHead>Role</TableHead>
                                     <TableHead>Primary Department</TableHead>
-                                    <TableHead>Reporting Depts</TableHead>
-                                    <TableHead>Delegated To</TableHead>
-                                    <TableHead className="w-[120px]">Status</TableHead>
+                                    <TableHead className="hidden sm:table-cell">Delegated To</TableHead>
+                                    <TableHead className="hidden md:table-cell w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -337,15 +336,10 @@ export default function UsersPage() {
                                             <Badge variant="secondary">{u.role}</Badge>
                                         </TableCell>
                                         <TableCell>{u.department || 'Unassigned'}</TableCell>
-                                        <TableCell>
-                                            {(u.reportingDepartments && u.reportingDepartments.length > 0) 
-                                                ? `${u.reportingDepartments.length} Depts` 
-                                                : <span className="text-muted-foreground">N/A</span>}
-                                        </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden sm:table-cell">
                                             {getDelegateName(u)}
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="hidden md:table-cell">
                                             <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
@@ -375,18 +369,18 @@ export default function UsersPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-6 py-4">
-                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="name" className="text-right">Name</Label>
-                            <Input id="name" value={name} onChange={e => setName(e.target.value)} className="col-span-3" required />
+                         <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="name">Name</Label>
+                            <Input id="name" value={name} onChange={e => setName(e.target.value)} required />
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="email" className="text-right">Email</Label>
-                            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} className="col-span-3" required disabled={!!editingUser} />
+                        <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="email">Email</Label>
+                            <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!editingUser} />
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="role" className="text-right">Role</Label>
+                        <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="role">Role</Label>
                             <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
-                                <SelectTrigger className="col-span-3">
+                                <SelectTrigger>
                                     <SelectValue placeholder="Assign a role" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -394,28 +388,16 @@ export default function UsersPage() {
                                 </SelectContent>
                             </Select>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="department" className="text-right">Primary Dept</Label>
-                            <Select value={department} onValueChange={setDepartment}>
-                                <SelectTrigger className="col-span-3">
-                                    <SelectValue placeholder="Assign a department" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
-                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-
+                        
                         {userRole === 'Executive' && (
-                            <div className="grid grid-cols-4 items-start gap-4">
-                                <Label className="text-right pt-2">Reporting Depts</Label>
-                                <div className="col-span-3 rounded-md border p-4 max-h-48 overflow-y-auto">
+                            <div className="grid w-full items-center gap-1.5">
+                                <Label>Reporting Departments</Label>
+                                <div className="rounded-md border p-4 max-h-48 overflow-y-auto">
                                     <div className="space-y-2">
                                         {departments?.map(dept => (
                                             <div key={dept.id} className="flex items-center gap-2">
                                                 <Checkbox
-                                                    id={`dept-check-${dept.id}`}
+                                                    id={`dialog-dept-check-${dept.id}`}
                                                     checked={reportingDepartments.includes(dept.id)}
                                                     onCheckedChange={(checked) => {
                                                         const currentIds = reportingDepartments;
@@ -425,22 +407,36 @@ export default function UsersPage() {
                                                         setReportingDepartments(newIds);
                                                     }}
                                                 />
-                                                <Label htmlFor={`dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
+                                                <Label htmlFor={`dialog-dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
+                                <p className="text-xs text-muted-foreground">Select the departments this executive can approve requests for.</p>
                             </div>
                         )}
 
-                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="alt-email" className="text-right">Alt. Email</Label>
-                            <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} className="col-span-3" placeholder="optional.email@example.com" />
+                        <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="department">Primary Department</Label>
+                            <Select value={department} onValueChange={setDepartment}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Assign a department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="notification-pref" className="text-right">Notify</Label>
+
+                         <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="alt-email">Alternate Email</Label>
+                            <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} placeholder="optional.email@example.com" />
+                        </div>
+                        <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="notification-pref">Notify</Label>
                             <Select value={notificationPreference} onValueChange={(value: 'Primary' | 'Alternate' | 'Both') => setNotificationPreference(value)}>
-                                <SelectTrigger id="notification-pref" className="col-span-3">
+                                <SelectTrigger id="notification-pref">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -465,3 +461,4 @@ export default function UsersPage() {
         </div>
     );
 }
+
