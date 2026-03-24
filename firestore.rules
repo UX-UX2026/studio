@@ -34,7 +34,7 @@ service cloud.firestore {
     
     function isExecutiveWithPermission(userId, departmentId) {
       let userProfile = getUserData(userId);
-       if (departmentId == null) {
+      if (departmentId == null) {
         return false;
       }
       return isExecutive(userId) &&
@@ -184,5 +184,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
