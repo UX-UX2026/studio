@@ -1,0 +1,192 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===================================
+    //  HELPER FUNCTIONS
+    // ===================================
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // Safely gets a user's role, returning null if the user or role doesn't exist.
+    function getRole(userId) {
+      let userDoc = get(/databases/$(database)/documents/users/$(userId));
+      if (userDoc == null || !('role' in userDoc.data)) {
+        return null;
+      }
+      return userDoc.data.role;
+    }
+    
+    function isAdmin(userId) {
+      return getRole(userId) == 'Administrator';
+    }
+
+    function isManager(userId) {
+      return getRole(userId) == 'Manager';
+    }
+
+    function isExecutive(userId) {
+        return getRole(userId) == 'Executive';
+    }
+
+    function isProcurementOfficer(userId) {
+      let role = getRole(userId);
+      return role == 'Procurement Officer' || role == 'Procurement Assistant';
+    }
+    
+    function isRequester(userId) {
+      return getRole(userId) == 'Requester';
+    }
+
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+    
+    function getDepartmentIdForUser(userId) {
+        let userDoc = get(/databases/$(database)/documents/users/$(userId));
+        if (userDoc != null && 'departmentId' in userDoc.data) {
+            return userDoc.data.departmentId;
+        }
+        return null;
+    }
+    
+    function isExecutiveWithPermission(userId, departmentId) {
+      if (!isExecutive(userId) || departmentId == null) {
+        return false;
+      }
+      
+      let userProfile = get(/databases/$(database)/documents/users/$(userId)).data;
+      
+      // If 'reportingDepartments' field doesn't exist, is null, or is an empty list, they can approve all.
+      if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
+        return true;
+      }
+      
+      // Check if the departmentId is present in the reportingDepartments list.
+      return departmentId in userProfile.reportingDepartments;
+    }
+
+    function isAllowedToApprove(userId, requestData) {
+      if (!isAuth()) {
+        return false;
+      }
+      let userProfile = get(/databases/$(database)/documents/users/$(userId)).data;
+
+      let isRequestManager = isManager(userId) && 'departmentId' in userProfile && userProfile.departmentId == requestData.departmentId;
+      let isRequestExecutive = isExecutiveWithPermission(userId, requestData.departmentId);
+
+      if (requestData.status == 'Pending Manager Approval' || requestData.status == 'Queries Raised') {
+        return isRequestManager || isRequestExecutive;
+      }
+      if (requestData.status == 'Pending Executive') {
+        return isRequestExecutive;
+      }
+      
+      return false;
+    }
+    
+    // User Profiles
+    match /users/{userId} {
+      allow list: if isAdmin(request.auth.uid);
+      allow get: if isAuth();
+      allow create: if isAdmin(request.auth.uid);
+      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // Admins can manage roles, companies, approval groups, and app metadata
+    match /roles/{roleId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid);
+    }
+    
+    match /companies/{companyId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid);
+    }
+    
+    match /approvalGroups/{groupId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid);
+    }
+
+    match /app/metadata {
+      allow read: if isAuth();
+      allow write: if isAdmin(request.auth.uid);
+    }
+    
+    match /departments/{departmentId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid);
+    }
+
+    // Procurement Requests have complex rules
+    match /procurementRequests/{procurementRequestId} {
+      allow get: if isAuth() && (
+                   isAdmin(request.auth.uid)
+                   || isProcurementOfficer(request.auth.uid)
+                   || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
+                   || resource.data.submittedById == request.auth.uid
+                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getDepartmentIdForUser(request.auth.uid))
+                 );
+    
+      allow list: if isAuth();
+
+      allow create: if isAuth() && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
+
+      allow update: if
+        isAdmin(request.auth.uid)
+        || (resource.data.submittedById == request.auth.uid &&
+            (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
+        || isAllowedToApprove(request.auth.uid, resource.data)
+        || (request.resource.data.delegatorIdForApproval != null &&
+            exists(/databases/$(database)/documents/users/$(request.resource.data.delegatorIdForApproval)) &&
+            get(/databases/$(database)/documents/users/$(request.resource.data.delegatorIdForApproval)).data.delegatedToId == request.auth.uid &&
+            isAllowedToApprove(request.resource.data.delegatorIdForApproval, resource.data))
+        || (isProcurementOfficer(request.auth.uid) &&
+            (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
+
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // Recurring Items
+    match /recurringItems/{itemId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+    }
+
+    // Vendors
+    match /vendors/{vendorId} {
+      allow get, list: if isAuth();
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+    
+    // Budget Data
+    match /budgetUploads/{uploadId} {
+      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+    match /budgets/{budgetId} {
+      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+
+    // Logs can only be written by the app/user, and only read by Admins.
+    match /auditLogs/{logId} {
+      allow get, list: if isAdmin(request.auth.uid);
+      allow create: if isAuth();
+    }
+    
+    match /errorLogs/{errorLogId} {
+      allow get, list: if isAdmin(request.auth.uid);
+      allow create: if isAuth();
+    }
+    
+    match /_diagnostics/{docId} {
+      allow write: if isAuth();
+    }
+  }
+}

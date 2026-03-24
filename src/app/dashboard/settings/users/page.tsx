@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -206,7 +207,6 @@ export default function UsersPage() {
                 notificationPreference: notificationPreference,
             };
             
-            // This is crucial: Do not wipe reportingDepartments if the role is not changing away from Executive
             if (userRole === 'Executive') {
                 userData.reportingDepartments = editingUser.reportingDepartments || [];
             } else {
@@ -455,8 +455,8 @@ export default function UsersPage() {
                                     <TableHead>User</TableHead>
                                     <TableHead>Role</TableHead>
                                     <TableHead>Department</TableHead>
-                                    <TableHead>Delegated To</TableHead>
                                     <TableHead>Reporting Depts</TableHead>
+                                    <TableHead>Delegated To</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -497,41 +497,13 @@ export default function UsersPage() {
                                         </TableCell>
                                         <TableCell>
                                             {u.role === 'Executive' ? (
-                                                <Select
-                                                    value={u.delegatedToId || 'none'}
-                                                    onValueChange={(newDelegateId) => handleUpdateDelegate(u.id, newDelegateId === 'none' ? '' : newDelegateId)}
-                                                >
-                                                    <SelectTrigger className="w-[220px]">
-                                                        <SelectValue placeholder="Delegate approvals..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">None (Delegation Off)</SelectItem>
-                                                        {users.filter(delegate => delegate.id !== u.id).map(delegate => (
-                                                            <SelectItem key={delegate.id} value={delegate.id}>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Avatar className="h-6 w-6">
-                                                                        <AvatarImage src={delegate.photoURL} />
-                                                                        <AvatarFallback>{delegate.displayName?.charAt(0)}</AvatarFallback>
-                                                                    </Avatar>
-                                                                    {delegate.displayName}
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            ) : (
-                                                <span className="text-muted-foreground ml-3">N/A</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            {u.role === 'Executive' ? (
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
                                                         <Button variant="outline" className="w-[180px] justify-between">
                                                             <span>
                                                                 {(u.reportingDepartments && u.reportingDepartments.length > 0)
-                                                                    ? `${u.reportingDepartments.length} Dept(s)`
-                                                                    : 'All Departments'}
+                                                                    ? `${u.reportingDepartments.length} Dept(s) selected`
+                                                                    : 'Select Departments'}
                                                             </span>
                                                             <ChevronDown className="h-4 w-4" />
                                                         </Button>
@@ -558,6 +530,34 @@ export default function UsersPage() {
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
                                             ) : <span className="text-muted-foreground ml-3">N/A</span>}
+                                        </TableCell>
+                                        <TableCell>
+                                            {u.role === 'Executive' ? (
+                                                <Select
+                                                    value={u.delegatedToId || 'none'}
+                                                    onValueChange={(newDelegateId) => handleUpdateDelegate(u.id, newDelegateId === 'none' ? '' : newDelegateId)}
+                                                >
+                                                    <SelectTrigger className="w-[220px]">
+                                                        <SelectValue placeholder="Delegate approvals..." />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">None (Delegation Off)</SelectItem>
+                                                        {users.filter(delegate => delegate.id !== u.id).map(delegate => (
+                                                            <SelectItem key={delegate.id} value={delegate.id}>
+                                                                <div className="flex items-center gap-2">
+                                                                    <Avatar className="h-6 w-6">
+                                                                        <AvatarImage src={delegate.photoURL} />
+                                                                        <AvatarFallback>{delegate.displayName?.charAt(0)}</AvatarFallback>
+                                                                    </Avatar>
+                                                                    {delegate.displayName}
+                                                                </div>
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                            ) : (
+                                                <span className="text-muted-foreground ml-3">N/A</span>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
