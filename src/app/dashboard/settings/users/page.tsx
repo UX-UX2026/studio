@@ -20,6 +20,14 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRoles } from "@/lib/roles-provider";
@@ -29,7 +37,6 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
-import { Checkbox } from "@/components/ui/checkbox";
 
 type UserProfile = {
     id: string;
@@ -77,7 +84,6 @@ export default function UsersPage() {
     const [department, setDepartment] = useState('');
     const [alternateEmail, setAlternateEmail] = useState('');
     const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
-    const [reportingDepartments, setReportingDepartments] = useState<string[]>([]);
     
     const { toast } = useToast();
     
@@ -89,7 +95,6 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
-            setReportingDepartments(editingUser.reportingDepartments || []);
         } else if (isDialogOpen && !editingUser) {
             // Reset form for new user
             setName('');
@@ -98,7 +103,6 @@ export default function UsersPage() {
             setDepartment('');
             setAlternateEmail('');
             setNotificationPreference('Primary');
-            setReportingDepartments([]);
         }
     }, [editingUser, isDialogOpen]);
 
@@ -148,7 +152,6 @@ export default function UsersPage() {
             departmentId: selectedDept?.id || null,
             alternateEmail: alternateEmail,
             notificationPreference: notificationPreference,
-            reportingDepartments: userRole === 'Executive' ? reportingDepartments : [],
         };
 
         if (!editingUser) { // Handle "Add User"
@@ -167,6 +170,7 @@ export default function UsersPage() {
                     ...baseUserData,
                     photoURL: `https://i.pravatar.cc/150?u=${email}`,
                     status: 'Invited' as const,
+                    reportingDepartments: [],
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -231,6 +235,54 @@ export default function UsersPage() {
             });
         } finally {
             setIsSaving(false);
+        }
+    };
+    
+    const handleReportingDeptsChange = async (userId: string, departmentId: string, isChecked: boolean) => {
+        if (!adminUser || !firestore) return;
+
+        const userToUpdate = users?.find(u => u.id === userId);
+        if (!userToUpdate) return;
+
+        const currentReportingDepts = userToUpdate.reportingDepartments || [];
+        const newReportingDepts = isChecked
+            ? [...currentReportingDepts, departmentId]
+            : currentReportingDepts.filter(id => id !== departmentId);
+        
+        const userRef = doc(firestore, 'users', userId);
+        const action = 'user.update.reportingDepartments';
+
+        try {
+            await updateDoc(userRef, { reportingDepartments: newReportingDepts });
+            
+            toast({
+                title: "Reporting Departments Updated",
+                description: `Updated departments for ${userToUpdate.displayName}.`
+            });
+
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action: action,
+                details: `Updated reporting departments for ${userToUpdate.displayName}.`,
+                entity: { type: 'user', id: userId },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Reporting Depts Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update reporting departments.`,
+            });
+            await logErrorToFirestore(firestore, {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
         }
     };
 
@@ -314,8 +366,9 @@ export default function UsersPage() {
                                     <TableHead>User</TableHead>
                                     <TableHead>Role</TableHead>
                                     <TableHead>Primary Department</TableHead>
-                                    <TableHead className="hidden sm:table-cell">Delegated To</TableHead>
-                                    <TableHead className="hidden md:table-cell w-[120px]">Status</TableHead>
+                                    <TableHead className="hidden md:table-cell">Reporting Depts</TableHead>
+                                    <TableHead className="hidden lg:table-cell">Delegated To</TableHead>
+                                    <TableHead className="hidden lg:table-cell w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -336,10 +389,40 @@ export default function UsersPage() {
                                             <Badge variant="secondary">{u.role}</Badge>
                                         </TableCell>
                                         <TableCell>{u.department || 'Unassigned'}</TableCell>
-                                        <TableCell className="hidden sm:table-cell">
+                                        <TableCell className="hidden md:table-cell">
+                                            {u.role === 'Executive' ? (
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button variant="outline" className="w-[150px] font-normal justify-between">
+                                                            <span>{u.reportingDepartments?.length || 0} selected</span>
+                                                            <ChevronDown className="h-4 w-4 opacity-50" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent className="w-56">
+                                                        <DropdownMenuLabel>Select Departments</DropdownMenuLabel>
+                                                        <DropdownMenuSeparator />
+                                                        {departments?.map(dept => (
+                                                            <DropdownMenuCheckboxItem
+                                                                key={dept.id}
+                                                                checked={u.reportingDepartments?.includes(dept.id)}
+                                                                onSelect={(e) => e.preventDefault()} 
+                                                                onCheckedChange={(checked) => {
+                                                                    handleReportingDeptsChange(u.id, dept.id, !!checked);
+                                                                }}
+                                                            >
+                                                                {dept.name}
+                                                            </DropdownMenuCheckboxItem>
+                                                        ))}
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            ) : (
+                                                <span className="text-muted-foreground ml-3">N/A</span>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="hidden lg:table-cell">
                                             {getDelegateName(u)}
                                         </TableCell>
-                                        <TableCell className="hidden md:table-cell">
+                                        <TableCell className="hidden lg:table-cell">
                                             <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
@@ -359,7 +442,7 @@ export default function UsersPage() {
             </Card>
 
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
                         <DialogDescription>
@@ -377,74 +460,50 @@ export default function UsersPage() {
                             <Label htmlFor="email">Email</Label>
                             <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!editingUser} />
                         </div>
-                        <div className="grid w-full items-center gap-1.5">
-                            <Label htmlFor="role">Role</Label>
-                            <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Assign a role" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        
-                        {userRole === 'Executive' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="grid w-full items-center gap-1.5">
-                                <Label>Reporting Departments</Label>
-                                <div className="rounded-md border p-4 max-h-48 overflow-y-auto">
-                                    <div className="space-y-2">
-                                        {departments?.map(dept => (
-                                            <div key={dept.id} className="flex items-center gap-2">
-                                                <Checkbox
-                                                    id={`dialog-dept-check-${dept.id}`}
-                                                    checked={reportingDepartments.includes(dept.id)}
-                                                    onCheckedChange={(checked) => {
-                                                        const currentIds = reportingDepartments;
-                                                        const newIds = checked
-                                                            ? [...currentIds, dept.id]
-                                                            : currentIds.filter(id => id !== dept.id);
-                                                        setReportingDepartments(newIds);
-                                                    }}
-                                                />
-                                                <Label htmlFor={`dialog-dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                <p className="text-xs text-muted-foreground">Select the departments this executive can approve requests for.</p>
+                                <Label htmlFor="role">Role</Label>
+                                <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Assign a role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                        )}
-
-                        <div className="grid w-full items-center gap-1.5">
-                            <Label htmlFor="department">Primary Department</Label>
-                            <Select value={department} onValueChange={setDepartment}>
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Assign a department" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
-                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                             <div className="grid w-full items-center gap-1.5">
+                                <Label htmlFor="department">Primary Department</Label>
+                                <Select value={department} onValueChange={setDepartment}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Assign a department" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                        {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
 
-                         <div className="grid w-full items-center gap-1.5">
-                            <Label htmlFor="alt-email">Alternate Email</Label>
-                            <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} placeholder="optional.email@example.com" />
-                        </div>
-                        <div className="grid w-full items-center gap-1.5">
-                            <Label htmlFor="notification-pref">Notify</Label>
-                            <Select value={notificationPreference} onValueChange={(value: 'Primary' | 'Alternate' | 'Both') => setNotificationPreference(value)}>
-                                <SelectTrigger id="notification-pref">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Primary">Primary Email Only</SelectItem>
-                                    <SelectItem value="Alternate">Alternate Email Only</SelectItem>
-                                    <SelectItem value="Both">Both Emails</SelectItem>
-                                </SelectContent>
-                            </Select>
+                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="grid w-full items-center gap-1.5">
+                                <Label htmlFor="alt-email">Alternate Email</Label>
+                                <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} placeholder="optional.email@example.com" />
+                            </div>
+                            <div className="grid w-full items-center gap-1.5">
+                                <Label htmlFor="notification-pref">Notify</Label>
+                                <Select value={notificationPreference} onValueChange={(value: 'Primary' | 'Alternate' | 'Both') => setNotificationPreference(value)}>
+                                    <SelectTrigger id="notification-pref">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Primary">Primary Email Only</SelectItem>
+                                        <SelectItem value="Alternate">Alternate Email Only</SelectItem>
+                                        <SelectItem value="Both">Both Emails</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                         </div>
                     </div>
                     <DialogFooter>
