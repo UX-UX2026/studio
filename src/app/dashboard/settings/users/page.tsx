@@ -20,14 +20,6 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuCheckboxItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRoles } from "@/lib/roles-provider";
@@ -37,6 +29,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type UserProfile = {
     id: string;
@@ -65,10 +58,10 @@ export default function UsersPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const usersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
     const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
     
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const { roles, loading: rolesLoading } = useRoles();
@@ -84,6 +77,7 @@ export default function UsersPage() {
     const [department, setDepartment] = useState('');
     const [alternateEmail, setAlternateEmail] = useState('');
     const [notificationPreference, setNotificationPreference] = useState<'Primary' | 'Alternate' | 'Both'>('Primary');
+    const [reportingDepartments, setReportingDepartments] = useState<string[]>([]);
     
     const { toast } = useToast();
     
@@ -95,6 +89,7 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
+            setReportingDepartments(editingUser.reportingDepartments || []);
         } else if (isDialogOpen && !editingUser) {
             // Reset form for new user
             setName('');
@@ -103,6 +98,7 @@ export default function UsersPage() {
             setDepartment('');
             setAlternateEmail('');
             setNotificationPreference('Primary');
+            setReportingDepartments([]);
         }
     }, [editingUser, isDialogOpen]);
 
@@ -143,6 +139,17 @@ export default function UsersPage() {
         }
 
         const selectedDept = departments?.find(d => d.name === department);
+        
+        const baseUserData: any = {
+            displayName: name,
+            email,
+            role: userRole,
+            department: department || 'Unassigned',
+            departmentId: selectedDept?.id || null,
+            alternateEmail: alternateEmail,
+            notificationPreference: notificationPreference,
+            reportingDepartments: userRole === 'Executive' ? reportingDepartments : [],
+        };
 
         if (!editingUser) { // Handle "Add User"
             const action = 'user.create';
@@ -157,16 +164,9 @@ export default function UsersPage() {
                 }
 
                 const newUserData = {
-                    displayName: name,
-                    email,
-                    role: userRole,
-                    department,
-                    departmentId: selectedDept?.id || null,
+                    ...baseUserData,
                     photoURL: `https://i.pravatar.cc/150?u=${email}`,
                     status: 'Invited' as const,
-                    alternateEmail: alternateEmail,
-                    notificationPreference: notificationPreference,
-                    reportingDepartments: userRole === 'Executive' ? [] : [],
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -194,24 +194,13 @@ export default function UsersPage() {
         const action = 'user.update';
         try {
             const userRef = doc(firestore, 'users', editingUser.id);
-            
-            const userData: any = {
-                displayName: name,
-                email,
-                role: userRole,
-                department,
-                departmentId: selectedDept?.id || null,
+            const finalUserData = {
+                ...baseUserData,
                 photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
                 status: editingUser.status,
-                alternateEmail: alternateEmail,
-                notificationPreference: notificationPreference,
             };
-            
-            if (userRole !== 'Executive') {
-                userData.reportingDepartments = [];
-            }
 
-            await setDoc(userRef, userData, { merge: true });
+            await setDoc(userRef, finalUserData, { merge: true });
 
             toast({ title: "User Updated", description: "User details have been successfully updated." });
 
@@ -293,139 +282,11 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     };
     
-    const handleReportingDeptsChange = async (userId: string, newDeptIds: string[]) => {
-        if (!adminUser || !firestore) return;
-        const action = 'user.update.reportingDepts';
-        const user = users?.find(u => u.id === userId);
-    
-        try {
-            const userRef = doc(firestore, 'users', userId);
-            await updateDoc(userRef, {
-                reportingDepartments: newDeptIds
-            });
-            
-            toast({
-                title: "User Updated",
-                description: `Updated reporting departments for ${user?.displayName || 'user'}.`,
-            });
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                details: `Updated reporting departments for user ${user?.displayName || userId}`,
-                entity: { type: 'user', id: userId },
-                timestamp: serverTimestamp()
-            });
-    
-        } catch (error: any) {
-            console.error("Reporting Depts Update Error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Update Failed',
-                description: error.message || `Could not update reporting departments.`,
-            });
-            await logErrorToFirestore(firestore, {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
-    };
-
-    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
-        if (!adminUser || !firestore) return;
-        const action = `user.update.${field}`;
-        const user = users?.find(u => u.id === userId);
-        
-        try {
-            const userRef = doc(firestore, 'users', userId);
-            
-            const updatePayload: Partial<UserProfile> = { [field]: value };
-
-            if (field === 'department') {
-                const selectedDept = departments?.find(d => d.name === value);
-                updatePayload.departmentId = selectedDept?.id || null;
-            }
-
-            await setDoc(userRef, updatePayload, { merge: true });
-            
-            toast({
-                title: "User Updated",
-                description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
-            });
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                details: `Updated field '${String(field)}' to '${value}' for user ${user?.displayName || userId}`,
-                entity: { type: 'user', id: userId },
-                timestamp: serverTimestamp()
-            });
-
-        } catch (error: any) {
-            console.error("User Update Error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Update Failed',
-                description: error.message || `Could not update the user's ${String(field)}.`,
-            });
-            await logErrorToFirestore(firestore, {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack
-            });
-        }
-    };
-    
-    const handleUpdateDelegate = async (executiveUserId: string, delegateId: string) => {
-        if (!adminUser || !firestore || !users) return;
-    
-        const delegateUser = users.find(u => u.id === delegateId);
-        const delegateName = delegateUser ? delegateUser.displayName : '';
-        const executiveUser = users.find(u => u.id === executiveUserId);
-    
-        const action = 'user.update.delegation';
-        
-        try {
-            const userRef = doc(firestore, 'users', executiveUserId);
-            await setDoc(userRef, { delegatedToId: delegateId, delegatedToName: delegateName }, { merge: true });
-            
-            toast({
-                title: "Delegate Updated",
-                description: `${executiveUser?.displayName}'s approvals have been delegated to ${delegateName || 'no one'}.`,
-            });
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                details: `Updated delegate for ${executiveUser?.displayName} to ${delegateName || 'none'}`,
-                entity: { type: 'user', id: executiveUserId },
-                timestamp: serverTimestamp()
-            });
-    
-        } catch (error: any) {
-            console.error("Delegate Update Error:", error);
-            toast({
-                variant: 'destructive',
-                title: 'Update Failed',
-                description: error.message || `Could not update delegate.`,
-            });
-             await logErrorToFirestore(firestore, {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
-            });
-        }
-    };
+    const getDelegateName = (user: UserProfile) => {
+        if (user.delegatedToName) return user.delegatedToName;
+        if (user.delegatedToId) return 'Loading...';
+        return 'Not Set';
+    }
 
     return (
         <div className="space-y-6">
@@ -452,7 +313,7 @@ export default function UsersPage() {
                                 <TableRow>
                                     <TableHead>User</TableHead>
                                     <TableHead>Role</TableHead>
-                                    <TableHead>Department</TableHead>
+                                    <TableHead>Primary Department</TableHead>
                                     <TableHead>Reporting Depts</TableHead>
                                     <TableHead>Delegated To</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
@@ -473,103 +334,19 @@ export default function UsersPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
-                                                <SelectTrigger className="w-[180px]">
-                                                    <SelectValue placeholder="Assign role" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                            <Badge variant="secondary">{u.role}</Badge>
+                                        </TableCell>
+                                        <TableCell>{u.department || 'Unassigned'}</TableCell>
+                                        <TableCell>
+                                            {(u.reportingDepartments && u.reportingDepartments.length > 0) 
+                                                ? `${u.reportingDepartments.length} Depts` 
+                                                : <span className="text-muted-foreground">N/A</span>}
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
-                                                <SelectTrigger className="w-[180px]">
-                                                    <SelectValue placeholder="Assign department" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
-                                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                            {getDelegateName(u)}
                                         </TableCell>
                                         <TableCell>
-                                            {u.role === 'Executive' ? (
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="outline" className="w-[180px] justify-between">
-                                                            <span>
-                                                                {(u.reportingDepartments && u.reportingDepartments.length > 0)
-                                                                    ? `${u.reportingDepartments.length} Dept(s) selected`
-                                                                    : 'Select Departments'}
-                                                            </span>
-                                                            <ChevronDown className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent className="w-56">
-                                                        <DropdownMenuLabel>Reporting Departments</DropdownMenuLabel>
-                                                        <DropdownMenuSeparator />
-                                                        {departments?.map(dept => (
-                                                            <DropdownMenuCheckboxItem
-                                                                key={dept.id}
-                                                                checked={u.reportingDepartments?.includes(dept.id)}
-                                                                onCheckedChange={(checked) => {
-                                                                    const currentIds = u.reportingDepartments || [];
-                                                                    const newIds = checked
-                                                                        ? [...currentIds, dept.id]
-                                                                        : currentIds.filter(id => id !== dept.id);
-                                                                    handleReportingDeptsChange(u.id, newIds);
-                                                                }}
-                                                                onSelect={(e) => e.preventDefault()}
-                                                            >
-                                                                {dept.name}
-                                                            </DropdownMenuCheckboxItem>
-                                                        ))}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            ) : <span className="text-muted-foreground ml-3">N/A</span>}
-                                        </TableCell>
-                                        <TableCell>
-                                            {u.role === 'Executive' ? (
-                                                <Select
-                                                    value={u.delegatedToId || 'none'}
-                                                    onValueChange={(newDelegateId) => handleUpdateDelegate(u.id, newDelegateId === 'none' ? '' : newDelegateId)}
-                                                >
-                                                    <SelectTrigger className="w-[220px]">
-                                                        <SelectValue placeholder="Delegate approvals..." />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">None (Delegation Off)</SelectItem>
-                                                        {users.filter(delegate => delegate.id !== u.id).map(delegate => (
-                                                            <SelectItem key={delegate.id} value={delegate.id}>
-                                                                <div className="flex items-center gap-2">
-                                                                    <Avatar className="h-6 w-6">
-                                                                        <AvatarImage src={delegate.photoURL} />
-                                                                        <AvatarFallback>{delegate.displayName?.charAt(0)}</AvatarFallback>
-                                                                    </Avatar>
-                                                                    {delegate.displayName}
-                                                                </div>
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            ) : (
-                                                <span className="text-muted-foreground ml-3">N/A</span>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
-                                                <SelectTrigger className={cn(
-                                                    "w-[120px] font-semibold border-none focus:ring-0",
-                                                    u.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                                                )}>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="Active">Active</SelectItem>
-                                                    <SelectItem value="Invited">Invited</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                            <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(u)}>
@@ -588,7 +365,7 @@ export default function UsersPage() {
             </Card>
 
              <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                <DialogContent>
+                <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
                         <DialogDescription>
@@ -597,7 +374,7 @@ export default function UsersPage() {
                                 : "Fill in the details to create a new user profile. They will appear as 'Invited' until they sign in for the first time."}
                         </DialogDescription>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
+                    <div className="grid gap-6 py-4">
                          <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="name" className="text-right">Name</Label>
                             <Input id="name" value={name} onChange={e => setName(e.target.value)} className="col-span-3" required />
@@ -618,7 +395,7 @@ export default function UsersPage() {
                             </Select>
                         </div>
                         <div className="grid grid-cols-4 items-center gap-4">
-                            <Label htmlFor="department" className="text-right">Department</Label>
+                            <Label htmlFor="department" className="text-right">Primary Dept</Label>
                             <Select value={department} onValueChange={setDepartment}>
                                 <SelectTrigger className="col-span-3">
                                     <SelectValue placeholder="Assign a department" />
@@ -629,6 +406,33 @@ export default function UsersPage() {
                                 </SelectContent>
                             </Select>
                         </div>
+
+                        {userRole === 'Executive' && (
+                            <div className="grid grid-cols-4 items-start gap-4">
+                                <Label className="text-right pt-2">Reporting Depts</Label>
+                                <div className="col-span-3 rounded-md border p-4 max-h-48 overflow-y-auto">
+                                    <div className="space-y-2">
+                                        {departments?.map(dept => (
+                                            <div key={dept.id} className="flex items-center gap-2">
+                                                <Checkbox
+                                                    id={`dept-check-${dept.id}`}
+                                                    checked={reportingDepartments.includes(dept.id)}
+                                                    onCheckedChange={(checked) => {
+                                                        const currentIds = reportingDepartments;
+                                                        const newIds = checked
+                                                            ? [...currentIds, dept.id]
+                                                            : currentIds.filter(id => id !== dept.id);
+                                                        setReportingDepartments(newIds);
+                                                    }}
+                                                />
+                                                <Label htmlFor={`dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
                          <div className="grid grid-cols-4 items-center gap-4">
                             <Label htmlFor="alt-email" className="text-right">Alt. Email</Label>
                             <Input id="alt-email" type="email" value={alternateEmail} onChange={e => setAlternateEmail(e.target.value)} className="col-span-3" placeholder="optional.email@example.com" />
@@ -661,5 +465,3 @@ export default function UsersPage() {
         </div>
     );
 }
-
-    
