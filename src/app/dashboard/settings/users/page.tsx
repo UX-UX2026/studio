@@ -33,7 +33,7 @@ import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
+import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 
@@ -195,7 +195,10 @@ export default function UsersPage() {
         // Handle "Edit User"
         const action = 'user.update';
         try {
-            const userData = {
+            const userRef = doc(firestore, 'users', editingUser.id);
+            
+            // First, update the base user data
+            const baseUserData = {
                 displayName: name,
                 email,
                 role: userRole,
@@ -205,12 +208,15 @@ export default function UsersPage() {
                 status: editingUser.status,
                 alternateEmail: alternateEmail,
                 notificationPreference: notificationPreference,
+            };
+            await setDoc(userRef, baseUserData, { merge: true });
+
+            // Then, in a separate call, update the department assignments
+            const departmentData = {
                 approvableDepartmentIds: userRole === 'Executive' ? approvableDepartmentIds : [],
             };
+            await updateDoc(userRef, departmentData);
 
-            const userRef = doc(firestore, 'users', editingUser.id);
-            await setDoc(userRef, userData, { merge: true });
-            
             toast({ title: "User Updated", description: "User details have been successfully updated." });
 
             await addDoc(collection(firestore, 'auditLogs'), {
@@ -553,7 +559,7 @@ export default function UsersPage() {
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button variant="outline" className="col-span-3 text-left font-normal justify-between">
-                                            <span>{approvableDepartmentIds.length || '0'} selected</span>
+                                            <span>{approvableDepartmentIds.length > 0 ? `${approvableDepartmentIds.length} selected` : "All Departments"}</span>
                                             <ChevronDown className="h-4 w-4 opacity-50" />
                                         </Button>
                                     </DropdownMenuTrigger>
@@ -623,5 +629,3 @@ export default function UsersPage() {
         </div>
     );
 }
-
-    
