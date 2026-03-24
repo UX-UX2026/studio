@@ -40,7 +40,7 @@ export function useUser() {
     useEffect(() => {
         // This effect's job is to ensure a user profile document exists in Firestore.
         // It runs a one-time check after the user is authenticated.
-        if (authIsLoading || !user || !firestore || creationAttempted.current) {
+        if (authIsLoading || !user || !firestore || creationAttempted.current || profile !== null) {
             return;
         }
 
@@ -76,6 +76,12 @@ export function useUser() {
                         description: "Your user profile has been created.",
                     });
                     // The `useDoc` hook listening on this `docRef` will automatically update and provide the new profile.
+                } else {
+                    // Profile exists, let's just make sure their status is Active if they were invited.
+                    const existingProfile = docSnap.data();
+                    if (existingProfile.status === 'Invited') {
+                        await setDoc(docRef, { status: 'Active' }, { merge: true });
+                    }
                 }
             } catch (error) {
                 console.error("Failed to check or create user profile:", error);
@@ -89,7 +95,7 @@ export function useUser() {
 
         checkAndCreateProfile();
         
-    }, [user, firestore, authIsLoading, toast]);
+    }, [user, firestore, authIsLoading, toast, profile]);
     
     // The main loading state is true if either authentication or the initial profile fetch is in progress.
     const isLoading = authIsLoading || profileIsLoading;
@@ -99,6 +105,7 @@ export function useUser() {
         profile: profile || null,
         role: profile?.role || null,
         department: profile?.department || null,
+        departmentId: profile?.departmentId || null,
         status: profile?.status || null,
         loading: isLoading,
     };

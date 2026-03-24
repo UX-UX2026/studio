@@ -306,7 +306,7 @@ export default function UserProfilePage() {
 
                              <div className="space-y-1.5">
                                 <Label htmlFor="delegatedToId">Delegate Approvals To</Label>
-                                <Select value={delegatedToId} onValueChange={setDelegatedToId} disabled={userRole !== 'Executive'}>
+                                <Select value={delegatedToId} onValueChange={setDelegatedToId} disabled={userRole !== 'Executive' && userRole !== 'Manager'}>
                                     <SelectTrigger id="delegatedToId"><SelectValue placeholder="No delegation" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="">None (Delegation Off)</SelectItem>

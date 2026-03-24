@@ -91,8 +91,8 @@ service cloud.firestore {
       allow list: if isAdmin(request.auth.uid);
       // Any authenticated user can get any other user's profile.
       allow get: if isAuth();
-      // Only admins can create users.
-      allow create: if isAdmin(request.auth.uid);
+      // An admin can create a user, OR a user can create their own profile.
+      allow create: if isAdmin(request.auth.uid) || isOwner(userId);
       // An admin can update any profile. A user can update their own.
       allow update: if isAdmin(request.auth.uid) || isOwner(userId);
       // Only admins can delete users.
