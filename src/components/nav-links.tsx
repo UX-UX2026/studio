@@ -1,3 +1,4 @@
+
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -66,7 +67,7 @@ const allLinks = [
   { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, permission: 'fulfillment:view' },
   { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, permission: 'reports:view' },
   { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
-  { href: '/dashboard/users', label: 'User Management', icon: Users, permission: 'settings:users' },
+  { href: '/dashboard/settings/users', label: 'User Management', icon: Users, permission: 'settings:users' },
   { href: '/dashboard/help', label: 'Help', icon: LifeBuoy, permission: 'help:view' },
   { 
     label: 'Settings', 

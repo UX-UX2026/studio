@@ -37,6 +37,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type UserProfile = {
     id: string;
@@ -329,7 +330,7 @@ export default function UsersPage() {
                 userName: adminUser.displayName,
                 action,
                 errorMessage: error.message,
-                errorStack: error.stack
+                errorStack: error.stack,
             });
         }
     };
@@ -429,7 +430,9 @@ export default function UsersPage() {
                                                 <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div>
-                                                <div>{u.displayName || u.email}</div>
+                                                <Link href={`/dashboard/users/${u.id}`} className="hover:underline font-semibold">
+                                                    {u.displayName || u.email}
+                                                </Link>
                                                 <div className="text-xs text-muted-foreground">{u.email}</div>
                                             </div>
                                         </TableCell>
