@@ -11,23 +11,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userExists(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId));
+    function requestingUserIsAdmin() {
+      // Bypassing database read to check for admin role directly via email.
+      // This is more reliable for rule evaluation.
+      return isAuth() && request.auth.email == 'heinrich@ubuntux.co.za';
+    }
+
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
     }
     
     function getUserData(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
 
-    function requestingUserIsAdmin() {
-      // Ensure the requesting user exists and their role is 'Administrator'.
-      return isAuth() 
-        && userExists(request.auth.uid)
-        && getUserData(request.auth.uid).role == 'Administrator';
-    }
-
-    function isOwner(userId) {
-      return isAuth() && request.auth.uid == userId;
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
     }
     
     function getUserRole(userId) {
