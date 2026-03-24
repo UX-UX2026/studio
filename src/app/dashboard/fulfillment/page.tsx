@@ -129,11 +129,11 @@ export default function FulfillmentPage() {
         }
     
         if (role === 'Executive') {
-            if (!profile.approvableDepartmentIds || Object.keys(profile.approvableDepartmentIds).length === 0) {
+            if (!profile.approvableDepartmentIds || profile.approvableDepartmentIds.length === 0) {
                 return allDepartmentNames; // Can see all if not restricted
             }
             const approvableDeptNames = departments
-                .filter(d => profile.approvableDepartmentIds![d.id])
+                .filter(d => profile.approvableDepartmentIds!.includes(d.id))
                 .map(d => d.name);
             
             return allDepartmentNames.filter(deptName => approvableDeptNames.includes(deptName));

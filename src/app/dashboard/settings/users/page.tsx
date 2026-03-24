@@ -50,7 +50,7 @@ type UserProfile = {
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
     delegatedToId?: string;
     delegatedToName?: string;
-    approvableDepartmentIds?: Record<string, boolean>;
+    approvableDepartmentIds?: string[];
 };
 
 type Department = {
@@ -95,7 +95,7 @@ export default function UsersPage() {
             setDepartment(editingUser.department);
             setAlternateEmail(editingUser.alternateEmail || '');
             setNotificationPreference(editingUser.notificationPreference || 'Primary');
-            setApprovableDepartmentIds(editingUser.approvableDepartmentIds ? Object.keys(editingUser.approvableDepartmentIds) : []);
+            setApprovableDepartmentIds(editingUser.approvableDepartmentIds || []);
         } else if (isDialogOpen && !editingUser) {
             // Reset form for new user
             setName('');
@@ -144,11 +144,6 @@ export default function UsersPage() {
             return;
         }
 
-        const approvableDeptsMap = approvableDepartmentIds.reduce((acc, id) => {
-            acc[id] = true;
-            return acc;
-        }, {} as Record<string, boolean>);
-        
         const selectedDept = departments?.find(d => d.name === department);
 
         if (!editingUser) { // Handle "Add User"
@@ -173,7 +168,7 @@ export default function UsersPage() {
                     status: 'Invited' as const,
                     alternateEmail: alternateEmail,
                     notificationPreference: notificationPreference,
-                    approvableDepartmentIds: userRole === 'Executive' ? approvableDeptsMap : {},
+                    approvableDepartmentIds: userRole === 'Executive' ? approvableDepartmentIds : [],
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -210,7 +205,7 @@ export default function UsersPage() {
                 status: editingUser.status,
                 alternateEmail: alternateEmail,
                 notificationPreference: notificationPreference,
-                approvableDepartmentIds: userRole === 'Executive' ? approvableDeptsMap : {},
+                approvableDepartmentIds: userRole === 'Executive' ? approvableDepartmentIds : [],
             };
 
             const userRef = doc(firestore, 'users', editingUser.id);
@@ -485,7 +480,7 @@ export default function UsersPage() {
                                         <TableCell>
                                             {u.role === 'Executive' ? (
                                                 <div className="flex flex-wrap gap-1 w-40">
-                                                    {(u.approvableDepartmentIds && Object.keys(u.approvableDepartmentIds).length > 0) ? Object.keys(u.approvableDepartmentIds).map(id => {
+                                                    {(u.approvableDepartmentIds && u.approvableDepartmentIds.length > 0) ? u.approvableDepartmentIds.map(id => {
                                                         const deptName = departments?.find(d => d.id === id)?.name;
                                                         return <Badge key={id} variant="secondary" className="text-xs">{deptName || 'Unknown'}</Badge>
                                                     }) : <Badge variant="outline">All Depts</Badge>}

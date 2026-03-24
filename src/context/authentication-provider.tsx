@@ -25,7 +25,7 @@ export interface UserProfile {
     photoURL?: string;
     alternateEmail?: string;
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
-    approvableDepartmentIds?: Record<string, boolean>;
+    approvableDepartmentIds?: string[];
 }
 
 interface FirebaseServices {
@@ -167,3 +167,5 @@ export const useAuthentication = () => {
   }
   return context;
 };
+
+    

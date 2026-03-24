@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -497,8 +498,8 @@ export default function ApprovalsPage() {
         if (!stageConfig) return { can: false, asDelegate: false, delegator: null };
     
         const canExecutiveApproveDept = (execProfile: UserProfile) => {
-            if (!execProfile.approvableDepartmentIds || Object.keys(execProfile.approvableDepartmentIds).length === 0) return true;
-            return !!execProfile.approvableDepartmentIds[departmentId];
+            if (!execProfile.approvableDepartmentIds || execProfile.approvableDepartmentIds.length === 0) return true;
+            return execProfile.approvableDepartmentIds.includes(departmentId);
         };
         
         let potentialApprovers: UserProfile[] = [];
