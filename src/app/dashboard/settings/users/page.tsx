@@ -207,9 +207,7 @@ export default function UsersPage() {
                 notificationPreference: notificationPreference,
             };
             
-            if (userRole === 'Executive') {
-                userData.reportingDepartments = editingUser.reportingDepartments || [];
-            } else {
+            if (userRole !== 'Executive') {
                 userData.reportingDepartments = [];
             }
 
@@ -663,3 +661,4 @@ export default function UsersPage() {
         </div>
     );
 }
+
