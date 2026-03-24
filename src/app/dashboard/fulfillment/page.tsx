@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useUser, UserRole } from "@/firebase/auth/use-user";
+import { useUser, UserRole, UserProfile } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { Loader } from "lucide-react";
@@ -19,6 +20,10 @@ import { collection, query, where } from "firebase/firestore";
 import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 
+type Department = {
+  id: string;
+  name: string;
+};
 
 export type FulfillmentItem = ApprovalItem & {
   procurementRequestId: string;
@@ -30,7 +35,7 @@ export type FulfillmentItem = ApprovalItem & {
 };
 
 export default function FulfillmentPage() {
-    const { user, role, department, loading: userLoading } = useUser();
+    const { user, profile, role, department, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { roles, loading: rolesLoading } = useRoles();
@@ -38,13 +43,13 @@ export default function FulfillmentPage() {
     const fulfillmentQuery = useMemo(() => {
         if (!firestore) return null;
         const statuses = ['In Fulfillment', 'Completed'];
-        if (role === 'Requester' || role === 'Manager') {
-            return query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses), where('department', '==', department));
-        }
         return query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses));
-    }, [firestore, role, department]);
+    }, [firestore]);
 
     const { data: fulfillmentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
+    
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const allFulfillmentItems = useMemo(() => {
         if (!fulfillmentRequests) return [];
@@ -53,6 +58,7 @@ export default function FulfillmentPage() {
                 ...item,
                 procurementRequestId: req.id,
                 department: req.department,
+                departmentId: req.departmentId,
                 item: item.description,
                 submittedBy: req.submittedBy,
                 approvedOn: req.timeline.find(t => t.stage === 'Executive Approval')?.date || new Date().toISOString(),
@@ -105,17 +111,38 @@ export default function FulfillmentPage() {
         }
         return stats;
     }, [fulfillmentItemsByDept]);
+    
+    const allDepartmentNames = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
 
-    const departmentOrder = useMemo(() => Object.keys(fulfillmentItemsByDept).sort(), [fulfillmentItemsByDept]);
-    
     const departmentsForUser = useMemo(() => {
-        if ((role === 'Manager' || role === 'Requester') && department) {
-            return departmentOrder.filter(d => d === department);
+        if (!profile || !allDepartmentNames || !departments) return [];
+        
+        const role = profile.role;
+        const userDepartmentName = profile.department;
+        
+        if (role === 'Administrator' || role === 'Procurement Officer' || role === 'Procurement Assistant') {
+            return allDepartmentNames;
         }
-        return departmentOrder;
-    }, [role, department, departmentOrder]);
     
-    const loading = userLoading || requestsLoading || rolesLoading;
+        if (role === 'Manager' || role === 'Requester') {
+            return userDepartmentName ? allDepartmentNames.filter(d => d === userDepartmentName) : [];
+        }
+    
+        if (role === 'Executive') {
+            if (!profile.approvableDepartmentIds || Object.keys(profile.approvableDepartmentIds).length === 0) {
+                return allDepartmentNames; // Can see all if not restricted
+            }
+            const approvableDeptNames = departments
+                .filter(d => profile.approvableDepartmentIds![d.id])
+                .map(d => d.name);
+            
+            return allDepartmentNames.filter(deptName => approvableDeptNames.includes(deptName));
+        }
+    
+        return [];
+    }, [profile, allDepartmentNames, departments]);
+
+    const loading = userLoading || requestsLoading || rolesLoading || deptsLoading;
     
     if (loading || !user || !role) {
         return (
@@ -128,37 +155,43 @@ export default function FulfillmentPage() {
   return (
     <div className="space-y-6">
         <Card>
-        <CardHeader>
-            <CardTitle>Procurement Fulfillment Details</CardTitle>
-            <p className="text-sm text-muted-foreground">
-                Track and manage procurement items, grouped by department. View overall fulfillment and completion progress for each.
-            </p>
-        </CardHeader>
-        <CardContent>
-            <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentsForUser}>
-                {departmentsForUser.map(dept => (
-                    <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                        <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
-                            <div className="flex justify-between items-center w-full">
-                                <span className="font-semibold">{dept}</span>
-                                <div className="flex items-center gap-4 mr-4">
-                                    {fulfillmentStatsByDept[dept] && (
-                                        <div className="flex items-center gap-2 text-sm text-muted-foreground w-32">
-                                            <Progress value={fulfillmentStatsByDept[dept].percentage} className="w-full h-2" />
-                                            <span className="font-semibold text-foreground">{Math.round(fulfillmentStatsByDept[dept].percentage)}%</span>
+            <CardHeader>
+                <CardTitle>Procurement Fulfillment Details</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                    Track and manage procurement items, grouped by department. View overall fulfillment and completion progress for each.
+                </p>
+            </CardHeader>
+            <CardContent>
+                {departmentsForUser.length > 0 ? (
+                    <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentsForUser}>
+                        {departmentsForUser.map(dept => (
+                            <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
+                                <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                                    <div className="flex justify-between items-center w-full">
+                                        <span className="font-semibold">{dept}</span>
+                                        <div className="flex items-center gap-4 mr-4">
+                                            {fulfillmentStatsByDept[dept] && (
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground w-32">
+                                                    <Progress value={fulfillmentStatsByDept[dept].percentage} className="w-full h-2" />
+                                                    <span className="font-semibold text-foreground">{Math.round(fulfillmentStatsByDept[dept].percentage)}%</span>
+                                                </div>
+                                            )}
+                                            <Badge variant="secondary">{fulfillmentItemsByDept[dept].length}</Badge>
                                         </div>
-                                    )}
-                                    <Badge variant="secondary">{fulfillmentItemsByDept[dept].length}</Badge>
-                                </div>
-                            </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="p-2 pt-0">
-                            <FulfillmentClient items={fulfillmentItemsByDept[dept]} role={role}/>
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-        </CardContent>
+                                    </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="p-2 pt-0">
+                                    <FulfillmentClient items={fulfillmentItemsByDept[dept]} role={role}/>
+                                </AccordionContent>
+                            </AccordionItem>
+                        ))}
+                    </Accordion>
+                ) : (
+                    <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
+                        <p className="text-muted-foreground">No fulfillment items found for your assigned departments.</p>
+                    </div>
+                )}
+            </CardContent>
         </Card>
     </div>
   );

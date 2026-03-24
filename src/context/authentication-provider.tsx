@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -24,6 +25,7 @@ export interface UserProfile {
     photoURL?: string;
     alternateEmail?: string;
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
+    approvableDepartmentIds?: Record<string, boolean>;
 }
 
 interface FirebaseServices {
