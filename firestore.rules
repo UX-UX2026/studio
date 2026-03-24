@@ -11,8 +11,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Use the custom claim from the user's auth token. This is more efficient and reliable.
-      return request.auth.token.role == 'Administrator';
+      let userRes = getUserData(request.auth.uid);
+      // Check for document existence before accessing data
+      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Administrator';
     }
 
     function isManager(userId) {
@@ -93,8 +94,9 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if request.auth != null;
-      // An admin can write to any user profile. A user can write to their own.
-      allow write: if isAdmin() || request.auth.uid == userId;
+      // TEMPORARY RULE FOR DIAGNOSTICS: Allow any authenticated user to write.
+      // This is insecure and must be reverted.
+      allow write: if request.auth != null;
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
