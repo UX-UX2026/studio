@@ -136,8 +136,8 @@ export default function UsersPage() {
             return;
         }
 
-        if (!name.trim() || !email.trim() || !userRole) {
-            toast({ variant: 'destructive', title: 'Validation Error', description: 'Name, email, and role are required.' });
+        if (!name.trim() || !email.trim()) {
+            toast({ variant: 'destructive', title: 'Validation Error', description: 'Name and email are required.' });
             setIsSaving(false);
             return;
         }
@@ -147,9 +147,6 @@ export default function UsersPage() {
         const baseUserData: any = {
             displayName: name,
             email,
-            role: userRole,
-            department: department || 'Unassigned',
-            departmentId: selectedDept?.id || null,
             alternateEmail: alternateEmail,
             notificationPreference: notificationPreference,
         };
@@ -168,6 +165,9 @@ export default function UsersPage() {
 
                 const newUserData = {
                     ...baseUserData,
+                    role: userRole || 'Requester',
+                    department: department || 'Unassigned',
+                    departmentId: selectedDept?.id || null,
                     photoURL: `https://i.pravatar.cc/150?u=${email}`,
                     status: 'Invited' as const,
                     reportingDepartments: [],
@@ -194,17 +194,12 @@ export default function UsersPage() {
             return;
         }
         
-        // Handle "Edit User"
+        // Handle "Edit User" (now only for name, email, etc.)
         const action = 'user.update';
         try {
             const userRef = doc(firestore, 'users', editingUser.id);
-            const finalUserData = {
-                ...baseUserData,
-                photoURL: editingUser?.photoURL || `https://i.pravatar.cc/150?u=${email}`,
-                status: editingUser.status,
-            };
-
-            await setDoc(userRef, finalUserData, { merge: true });
+            
+            await setDoc(userRef, baseUserData, { merge: true });
 
             toast({ title: "User Updated", description: "User details have been successfully updated." });
 
@@ -212,7 +207,7 @@ export default function UsersPage() {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action,
-                details: `Updated user: ${email}`,
+                details: `Updated user details for: ${email}`,
                 entity: { type: 'user', id: editingUser.id },
                 timestamp: serverTimestamp()
             });
@@ -238,6 +233,53 @@ export default function UsersPage() {
         }
     };
     
+    const handleUserUpdate = async (userId: string, field: keyof UserProfile, value: any) => {
+        if (!adminUser || !firestore) return;
+        const action = `user.update.${field}`;
+        const user = users?.find(u => u.id === userId);
+        
+        try {
+            const userRef = doc(firestore, 'users', userId);
+            
+            const payload: any = { [field]: value };
+            if (field === 'department') {
+                const selectedDept = departments?.find(d => d.name === value);
+                payload['departmentId'] = selectedDept?.id || null;
+            }
+
+            await setDoc(userRef, payload, { merge: true });
+            
+            toast({
+                title: "User Updated",
+                description: `Successfully updated ${String(field)} for ${user?.displayName || 'user'}.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                details: `Updated field '${String(field)}' to '${value}' for user ${user?.displayName || userId}`,
+                entity: { type: 'user', id: userId },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("User Update Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Update Failed',
+                description: error.message || `Could not update the user's ${String(field)}.`,
+            });
+            await logErrorToFirestore(firestore, {
+                userId: adminUser.uid,
+                userName: adminUser.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack
+            });
+        }
+    };
+
     const handleReportingDeptsChange = async (userId: string, departmentId: string, isChecked: boolean) => {
         if (!adminUser || !firestore) return;
 
@@ -367,8 +409,8 @@ export default function UsersPage() {
                                     <TableHead>Role</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead>Reporting Depts</TableHead>
-                                    <TableHead className="hidden sm:table-cell">Primary Department</TableHead>
-                                    <TableHead className="hidden md:table-cell">Delegated To</TableHead>
+                                    <TableHead className="hidden md:table-cell">Primary Department</TableHead>
+                                    <TableHead className="hidden lg:table-cell">Delegated To</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -386,10 +428,28 @@ export default function UsersPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="secondary">{u.role}</Badge>
+                                            <Select value={u.role} onValueChange={(newRole) => handleUserUpdate(u.id, 'role', newRole)}>
+                                                <SelectTrigger className="w-[180px]">
+                                                    <SelectValue placeholder="Assign role" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
+                                            <Select value={u.status || 'Invited'} onValueChange={(newStatus) => handleUserUpdate(u.id, 'status', newStatus)}>
+                                                <SelectTrigger className={cn(
+                                                    "w-[120px] font-semibold border-none focus:ring-0",
+                                                    u.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                                                )}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Active">Active</SelectItem>
+                                                    <SelectItem value="Invited">Invited</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
                                             <DropdownMenu>
@@ -417,8 +477,18 @@ export default function UsersPage() {
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </TableCell>
-                                        <TableCell className="hidden sm:table-cell">{u.department || 'Unassigned'}</TableCell>
                                         <TableCell className="hidden md:table-cell">
+                                            <Select value={u.department} onValueChange={(newDept) => handleUserUpdate(u.id, 'department', newDept)}>
+                                                <SelectTrigger className="w-[180px]">
+                                                    <SelectValue placeholder="Assign department" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                     <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                                    {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell className="hidden lg:table-cell">
                                             {getDelegateName(u)}
                                         </TableCell>
                                         <TableCell className="text-right">
@@ -443,7 +513,7 @@ export default function UsersPage() {
                         <DialogTitle>{editingUser ? 'Edit User' : 'Add New User'}</DialogTitle>
                         <DialogDescription>
                              {editingUser 
-                                ? "Edit the user's details below."
+                                ? "Edit the user's name and notification emails. Role and department are managed directly in the table."
                                 : "Fill in the details to create a new user profile. They will appear as 'Invited' until they sign in for the first time."}
                         </DialogDescription>
                     </DialogHeader>
@@ -456,31 +526,34 @@ export default function UsersPage() {
                             <Label htmlFor="email">Email</Label>
                             <Input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required disabled={!!editingUser} />
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="grid w-full items-center gap-1.5">
-                                <Label htmlFor="role">Role</Label>
-                                <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Assign a role" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
+
+                        {!editingUser && (
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid w-full items-center gap-1.5">
+                                    <Label htmlFor="role-add">Role</Label>
+                                    <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
+                                        <SelectTrigger id="role-add">
+                                            <SelectValue placeholder="Assign a role" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid w-full items-center gap-1.5">
+                                    <Label htmlFor="department-add">Primary Department</Label>
+                                    <Select value={department} onValueChange={setDepartment}>
+                                        <SelectTrigger id="department-add">
+                                            <SelectValue placeholder="Assign a department" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                            {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
                             </div>
-                             <div className="grid w-full items-center gap-1.5">
-                                <Label htmlFor="department">Primary Department</Label>
-                                <Select value={department} onValueChange={setDepartment}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Assign a department" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Unassigned">Unassigned</SelectItem>
-                                        {departments?.map(d => <SelectItem key={d.id} value={d.name}>{d.name}</SelectItem>)}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                        </div>
+                        )}
 
                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="grid w-full items-center gap-1.5">
@@ -516,3 +589,4 @@ export default function UsersPage() {
         </div>
     );
 }
+
