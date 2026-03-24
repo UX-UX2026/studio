@@ -1,11 +1,10 @@
 
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Edit, Plus, ChevronDown } from "lucide-react";
+import { Loader, Shield, Trash2, Plus, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,7 +36,6 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
 
 type UserProfile = {
     id: string;
@@ -62,7 +60,7 @@ type Department = {
 
 
 export default function UsersPage() {
-    const { user: adminUser, profile: adminProfile, role: adminRole, loading: userLoading } = useUser();
+    const { user: adminUser, role: adminRole, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
 
@@ -74,25 +72,25 @@ export default function UsersPage() {
 
     const { roles, loading: rolesLoading } = useRoles();
 
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
     
     // Form state for dialog
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
-    const [userRole, setUserRole] = useState('');
-    const [department, setDepartment] = useState('');
+    const [newUserRole, setNewUserRole] = useState('');
+    const [newUserDepartment, setNewUserDepartment] = useState('');
     
     const { toast } = useToast();
     
     useEffect(() => {
-        if (isDialogOpen) {
+        if (isAddUserDialogOpen) {
             // Reset form for new user
             setName('');
             setEmail('');
-            setUserRole('');
-            setDepartment('');
+            setNewUserRole('');
+            setNewUserDepartment('');
         }
-    }, [isDialogOpen]);
+    }, [isAddUserDialogOpen]);
 
     const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
     
@@ -114,6 +112,68 @@ export default function UsersPage() {
             </div>
         );
     }
+
+    const handleUpdateUser = async (userId: string, field: keyof UserProfile, value: any) => {
+        if (!adminUser || !firestore) {
+          toast({ variant: 'destructive', title: 'Update Failed', description: 'Authentication or database service is not available.' });
+          return;
+        }
+      
+        const userToUpdate = users?.find(u => u.id === userId);
+        if (!userToUpdate) return;
+      
+        let updateData: Partial<UserProfile> = { [field]: value };
+        
+        // Special handling for combined fields
+        if (field === 'departmentId') {
+          const selectedDept = departments?.find(d => d.id === value);
+          updateData = {
+            departmentId: selectedDept?.id || '',
+            department: selectedDept?.name || 'Unassigned',
+          };
+        } else if (field === 'delegatedToId') {
+          const delegate = users?.find(u => u.id === value);
+          updateData = {
+            delegatedToId: delegate?.id || '',
+            delegatedToName: delegate?.displayName || '',
+          };
+        }
+      
+        const userRef = doc(firestore, 'users', userId);
+        const action = 'user.quick_edit';
+      
+        try {
+          await updateDoc(userRef, updateData);
+          toast({ title: 'User Updated', description: `${userToUpdate.displayName}'s profile has been updated.` });
+      
+          await addDoc(collection(firestore, 'auditLogs'), {
+            userId: adminUser.uid,
+            userName: adminUser.displayName,
+            action,
+            details: `Quick-edited ${Object.keys(updateData).join(', ')} for user: ${userToUpdate.displayName}`,
+            entity: { type: 'user', id: userId },
+            timestamp: serverTimestamp()
+          });
+      
+        } catch (error: any) {
+          console.error("User Update Error:", error);
+          toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
+          await logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
+        }
+    };
+      
+    const handleReportingDeptsChange = async (userId: string, departmentId: string, isChecked: boolean) => {
+        const userToUpdate = users?.find(u => u.id === userId);
+        if (!userToUpdate) return;
+    
+        const currentDepts = userToUpdate.reportingDepartments || [];
+        const newDepts = isChecked
+            ? [...new Set([...currentDepts, departmentId])]
+            : currentDepts.filter(id => id !== departmentId);
+    
+        await handleUpdateUser(userId, 'reportingDepartments', newDepts);
+    };
+
     
     const handleAddUser = async () => {
         if (!adminUser || !firestore) {
@@ -126,7 +186,7 @@ export default function UsersPage() {
             return;
         }
 
-        const selectedDept = departments?.find(d => d.name === department);
+        const selectedDept = departments?.find(d => d.name === newUserDepartment);
         const action = 'user.create';
 
         try {
@@ -141,8 +201,8 @@ export default function UsersPage() {
             const newUserData = {
                 displayName: name,
                 email,
-                role: userRole || 'Requester',
-                department: department || 'Unassigned',
+                role: newUserRole || 'Requester',
+                department: newUserDepartment || 'Unassigned',
                 departmentId: selectedDept?.id || null,
                 photoURL: `https://i.pravatar.cc/150?u=${email}`,
                 status: 'Invited' as const,
@@ -159,23 +219,13 @@ export default function UsersPage() {
                 timestamp: serverTimestamp()
             });
             
-            setIsDialogOpen(false);
+            setIsAddUserDialogOpen(false);
         } catch(error: any) {
             logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
             toast({ variant: 'destructive', title: 'Invitation Failed', description: error.message });
         }
     };
     
-    const openAddDialog = () => {
-        setIsDialogOpen(true);
-    };
-    
-    const getDelegateName = (user: UserProfile) => {
-        if (user.delegatedToName) return user.delegatedToName;
-        if (user.delegatedToId) return 'Loading...';
-        return 'Not Set';
-    }
-
     return (
         <div className="space-y-6">
             <Card>
@@ -186,10 +236,10 @@ export default function UsersPage() {
                             User & Permission Management
                         </CardTitle>
                         <CardDescription>
-                            View and manage all users in the system. Click a user's name to view and edit their full profile.
+                            Quickly edit user roles, departments, and permissions directly from this table.
                         </CardDescription>
                     </div>
-                    <Button onClick={openAddDialog}>
+                    <Button onClick={() => setIsAddUserDialogOpen(true)}>
                         <Plus className="h-4 w-4 mr-2" />
                         Add User
                     </Button>
@@ -199,11 +249,13 @@ export default function UsersPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>User</TableHead>
-                                    <TableHead>Role</TableHead>
-                                    <TableHead>Department</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="hidden lg:table-cell">Delegated To</TableHead>
+                                    <TableHead className="min-w-[250px]">User</TableHead>
+                                    <TableHead className="w-[200px]">Role</TableHead>
+                                    <TableHead className="w-[150px]">Status</TableHead>
+                                    <TableHead className="w-[200px]">Department</TableHead>
+                                    <TableHead className="w-[220px]">Reporting Depts</TableHead>
+                                    <TableHead className="w-[200px] hidden md:table-cell">Delegated To</TableHead>
+                                    <TableHead className="text-right w-[80px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -215,25 +267,76 @@ export default function UsersPage() {
                                                 <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div>
-                                                <Link href={`/dashboard/users/${u.id}`} className="hover:underline font-semibold text-primary">
-                                                    {u.displayName || u.email}
-                                                </Link>
+                                                <div className="font-semibold text-foreground">{u.displayName || u.email}</div>
                                                 <div className="text-xs text-muted-foreground">{u.email}</div>
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="outline">{u.role}</Badge>
+                                            <Select value={u.role} onValueChange={(value) => handleUpdateUser(u.id, 'role', value)}>
+                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                                <SelectContent>
+                                                    {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                         <TableCell>
+                                            <Select value={u.status} onValueChange={(value) => handleUpdateUser(u.id, 'status', value)}>
+                                                <SelectTrigger className={cn(u.status === 'Active' ? 'text-green-800 border-green-300' : 'text-gray-600')}>
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="Active">Active</SelectItem>
+                                                    <SelectItem value="Invited">Invited</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
-                                            {u.department}
+                                            <Select value={u.departmentId || ''} onValueChange={(value) => handleUpdateUser(u.id, 'departmentId', value)}>
+                                                <SelectTrigger><SelectValue placeholder="Unassigned"/></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="">Unassigned</SelectItem>
+                                                    {departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
-                                            <Badge className={cn(u.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300')}>
-                                                {u.status}
-                                            </Badge>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" className="w-full justify-between">
+                                                        <span>{u.reportingDepartments?.length || 0} departments</span>
+                                                        <ChevronDown className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent className="w-56">
+                                                    <DropdownMenuLabel>Select Reporting Departments</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    {departments?.map(dept => (
+                                                        <DropdownMenuCheckboxItem
+                                                            key={dept.id}
+                                                            checked={u.reportingDepartments?.includes(dept.id)}
+                                                            onCheckedChange={(checked) => handleReportingDeptsChange(u.id, dept.id, !!checked)}
+                                                        >
+                                                            {dept.name}
+                                                        </DropdownMenuCheckboxItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </TableCell>
-                                        <TableCell className="hidden lg:table-cell">
-                                            {getDelegateName(u)}
+                                        <TableCell className="hidden md:table-cell">
+                                            <Select value={u.delegatedToId || ''} onValueChange={(value) => handleUpdateUser(u.id, 'delegatedToId', value)}>
+                                                <SelectTrigger><SelectValue placeholder="Not Set"/></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="">None</SelectItem>
+                                                    {users.filter(usr => usr.id !== u.id).map(delegate => (
+                                                        <SelectItem key={delegate.id} value={delegate.id}>{delegate.displayName}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(firestore, 'users', u.id))}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -243,7 +346,7 @@ export default function UsersPage() {
                 </CardContent>
             </Card>
 
-             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+             <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
                 <DialogContent className="sm:max-w-xl">
                     <DialogHeader>
                         <DialogTitle>Add New User</DialogTitle>
@@ -262,7 +365,7 @@ export default function UsersPage() {
                         </div>
                         <div className="grid w-full items-center gap-1.5">
                             <Label htmlFor="role-add">Role</Label>
-                            <Select value={userRole || ''} onValueChange={(value) => setUserRole(value)}>
+                            <Select value={newUserRole || ''} onValueChange={(value) => setNewUserRole(value)}>
                                 <SelectTrigger id="role-add">
                                     <SelectValue placeholder="Assign a role" />
                                 </SelectTrigger>
@@ -273,7 +376,7 @@ export default function UsersPage() {
                         </div>
                         <div className="grid w-full items-center gap-1.5">
                             <Label htmlFor="department-add">Primary Department</Label>
-                            <Select value={department} onValueChange={setDepartment}>
+                            <Select value={newUserDepartment} onValueChange={setNewUserDepartment}>
                                 <SelectTrigger id="department-add">
                                     <SelectValue placeholder="Assign a department" />
                                 </SelectTrigger>
