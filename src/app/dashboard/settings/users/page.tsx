@@ -197,8 +197,7 @@ export default function UsersPage() {
         try {
             const userRef = doc(firestore, 'users', editingUser.id);
             
-            // First, update the base user data
-            const baseUserData = {
+            const userData = {
                 displayName: name,
                 email,
                 role: userRole,
@@ -208,14 +207,9 @@ export default function UsersPage() {
                 status: editingUser.status,
                 alternateEmail: alternateEmail,
                 notificationPreference: notificationPreference,
-            };
-            await setDoc(userRef, baseUserData, { merge: true });
-
-            // Then, in a separate call, update the department assignments
-            const departmentData = {
                 approvableDepartmentIds: userRole === 'Executive' ? approvableDepartmentIds : [],
             };
-            await updateDoc(userRef, departmentData);
+            await setDoc(userRef, userData, { merge: true });
 
             toast({ title: "User Updated", description: "User details have been successfully updated." });
 
