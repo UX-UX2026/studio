@@ -41,9 +41,9 @@ service cloud.firestore {
     }
 
     function isProcurementOfficer(userId) {
-      let role = get(/databases/$(database)/documents/users/$(userId)).data.role;
+      let userProfile = getUserData(userId);
       return exists(/databases/$(database)/documents/users/$(userId)) &&
-             (role == 'Procurement Officer' || role == 'Procurement Assistant');
+             (userProfile.role == 'Procurement Officer' || userProfile.role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
@@ -73,8 +73,20 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if request.auth != null;
-      // An admin can manage any user profile. A user can manage their own profile.
-      allow write: if isAdmin(request.auth.uid) || isOwner(userId);
+
+      function isRequestingUserAdmin() {
+        return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator';
+      }
+      
+      function isRequestingUserOwner() {
+        return request.auth.uid == userId;
+      }
+      
+      // Explicitly define create, update, delete for clarity and to resolve permission issues.
+      allow create: if isRequestingUserAdmin();
+      allow update: if isRequestingUserAdmin() || isRequestingUserOwner();
+      allow delete: if isRequestingUserAdmin();
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
