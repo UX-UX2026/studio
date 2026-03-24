@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverComponentsExternalPackages: ['require-in-the-middle', '@opentelemetry/instrumentation'],
   typescript: {
     ignoreBuildErrors: true,
   },
