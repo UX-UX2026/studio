@@ -75,8 +75,11 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow create: if isOwner(userId);
-      allow update: if isOwner(userId) || isAdmin(request.auth.uid);
+      // An admin can invite a user, and a user can create their own profile on first sign-in.
+      allow create: if isAdmin(request.auth.uid) || isOwner(userId);
+      // An admin can update any user, and a user can update their own profile.
+      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      // Only an admin can delete a user profile.
       allow delete: if isAdmin(request.auth.uid);
     }
 
