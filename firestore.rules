@@ -11,59 +11,36 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function requestingUserIsAdmin() {
-      // Bypassing database read to check for admin role directly via email.
-      // This is more reliable for rule evaluation.
-      return isAuth() && request.auth.email == 'heinrich@ubuntux.co.za';
+    function userExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+    
+    function isAdmin(userId) {
+      return isAuth() && userExists(userId) && getUserData(userId).role == 'Administrator';
+    }
+
+    function isManager(userId) {
+      return isAuth() && userExists(userId) && getUserData(userId).role == 'Manager';
+    }
+
+    function isExecutive(userId) {
+      return isAuth() && userExists(userId) && getUserData(userId).role == 'Executive';
+    }
+
+    function isProcurementOfficer(userId) {
+      return isAuth() && userExists(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
+    }
+    
+    function isRequester(userId) {
+      return isAuth() && userExists(userId) && getUserData(userId).role == 'Requester';
     }
 
     function isOwner(userId) {
       return isAuth() && request.auth.uid == userId;
-    }
-    
-    function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
-    }
-
-    function userExists(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId));
-    }
-    
-    function getUserRole(userId) {
-        if (!userExists(userId)) { return ''; }
-        return getUserData(userId).role;
-    }
-
-    function isManager(userId) {
-      return isAuth() && userExists(userId) && getUserRole(userId) == 'Manager';
-    }
-
-    function isExecutive(userId) {
-      return isAuth() && userExists(userId) && getUserRole(userId) == 'Executive';
-    }
-
-    function isExecutiveWithPermission(userId, departmentId) {
-      if (!isExecutive(userId) || departmentId == null) {
-        return false;
-      }
-      
-      let userProfile = getUserData(userId);
-      
-      // If approvableDepartmentIds is not set or is empty, they can approve all.
-      if (!('approvableDepartmentIds' in userProfile) || userProfile.approvableDepartmentIds == null || userProfile.approvableDepartmentIds.size() == 0) {
-        return true;
-      }
-      
-      // If the array exists and is not empty, check if the departmentId is in it.
-      return departmentId in userProfile.approvableDepartmentIds;
-    }
-
-    function isProcurementOfficer(userId) {
-      return isAuth() && userExists(userId) && (getUserRole(userId) == 'Procurement Officer' || getUserRole(userId) == 'Procurement Assistant');
-    }
-    
-    function isRequester(userId) {
-      return isAuth() && userExists(userId) && getUserRole(userId) == 'Requester';
     }
     
     function getDepartmentIdForUser(userId) {
@@ -71,6 +48,20 @@ service cloud.firestore {
             return getUserData(userId).departmentId;
         }
         return null;
+    }
+    
+    function isExecutiveWithPermission(userId, departmentId) {
+      if (!isExecutive(userId) || departmentId == null) {
+        return false;
+      }
+      
+      let userProfile = getUserData(userId);
+      
+      if (!('approvableDepartmentIds' in userProfile) || userProfile.approvableDepartmentIds == null || userProfile.approvableDepartmentIds.size() == 0) {
+        return true; // No restrictions means they can approve all
+      }
+      
+      return departmentId in userProfile.approvableDepartmentIds;
     }
 
     function isAllowedToApprove(userId, requestData) {
@@ -95,41 +86,41 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if isAuth();
-      allow create: if requestingUserIsAdmin();
-      allow update: if requestingUserIsAdmin() || isOwner(userId);
-      allow delete: if requestingUserIsAdmin();
+      allow create: if isAdmin(request.auth.uid);
+      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
     match /roles/{roleId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
     
     match /companies/{companyId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
     
     match /approvalGroups/{groupId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
 
     match /app/metadata {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
     
     match /departments/{departmentId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin();
+      allow write: if isAdmin(request.auth.uid);
     }
 
     // Procurement Requests have complex rules
     match /procurementRequests/{procurementRequestId} {
       allow get: if isAuth() && (
-                   requestingUserIsAdmin()
+                   isAdmin(request.auth.uid)
                    || isProcurementOfficer(request.auth.uid)
                    || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
                    || resource.data.submittedById == request.auth.uid
@@ -141,7 +132,7 @@ service cloud.firestore {
       allow create: if isAuth() && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       allow update: if
-        requestingUserIsAdmin()
+        isAdmin(request.auth.uid)
         || (resource.data.submittedById == request.auth.uid &&
             (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
         || isAllowedToApprove(request.auth.uid, resource.data)
@@ -152,37 +143,37 @@ service cloud.firestore {
         || (isProcurementOfficer(request.auth.uid) &&
             (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
 
-      allow delete: if requestingUserIsAdmin();
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Recurring Items
     match /recurringItems/{itemId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin() || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
     match /vendors/{vendorId} {
       allow read: if isAuth();
-      allow write: if requestingUserIsAdmin() || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow read, write: if requestingUserIsAdmin() || isProcurementOfficer(request.auth.uid);
+      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
-      allow read, write: if requestingUserIsAdmin() || isProcurementOfficer(request.auth.uid);
+      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow read: if requestingUserIsAdmin();
+      allow read: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
     match /errorLogs/{errorLogId} {
-      allow read: if requestingUserIsAdmin();
+      allow read: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
