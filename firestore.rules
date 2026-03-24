@@ -85,7 +85,8 @@ service cloud.firestore {
     
     // User Profiles
     match /users/{userId} {
-      allow read: if isAuth();
+      allow get: if isAuth();
+      allow list: if isAdmin(request.auth.uid);
       allow create: if isAdmin(request.auth.uid);
       allow update: if isAdmin(request.auth.uid) || isOwner(userId);
       allow delete: if isAdmin(request.auth.uid);
@@ -93,17 +94,17 @@ service cloud.firestore {
 
     // Admins can manage roles, companies, approval groups, and app metadata
     match /roles/{roleId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
     
     match /companies/{companyId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
     
     match /approvalGroups/{groupId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
 
@@ -113,7 +114,7 @@ service cloud.firestore {
     }
     
     match /departments/{departmentId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
 
@@ -148,32 +149,34 @@ service cloud.firestore {
 
     // Recurring Items
     match /recurringItems/{itemId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
     match /vendors/{vendorId} {
-      allow read: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
-      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow read: if isAdmin(request.auth.uid);
+      allow get, list: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
     match /errorLogs/{errorLogId} {
-      allow read: if isAdmin(request.auth.uid);
+      allow get, list: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
