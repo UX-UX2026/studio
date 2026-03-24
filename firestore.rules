@@ -20,23 +20,23 @@ service cloud.firestore {
     }
     
     function isAdmin(userId) {
-      return isAuth() && userExists(userId) && getUserData(userId).role == 'Administrator';
+      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Administrator';
     }
 
     function isManager(userId) {
-      return isAuth() && userExists(userId) && getUserData(userId).role == 'Manager';
+      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Manager';
     }
 
     function isExecutive(userId) {
-      return isAuth() && userExists(userId) && getUserData(userId).role == 'Executive';
+      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Executive';
     }
 
     function isProcurementOfficer(userId) {
-      return isAuth() && userExists(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
+      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
-      return isAuth() && userExists(userId) && getUserData(userId).role == 'Requester';
+      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Requester';
     }
 
     function isOwner(userId) {
@@ -57,10 +57,12 @@ service cloud.firestore {
       
       let userProfile = getUserData(userId);
       
+      // If 'reportingDepartments' field doesn't exist, is null, or is an empty list, they can approve all.
       if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
-        return true; // No restrictions means they can approve all
+        return true;
       }
       
+      // Check if the departmentId is present in the reportingDepartments list.
       return departmentId in userProfile.reportingDepartments;
     }
 
@@ -70,7 +72,7 @@ service cloud.firestore {
       }
       let userProfile = getUserData(userId);
 
-      let isRequestManager = userProfile.role == 'Manager' && userProfile.departmentId == requestData.departmentId;
+      let isRequestManager = 'role' in userProfile && userProfile.role == 'Manager' && 'departmentId' in userProfile && userProfile.departmentId == requestData.departmentId;
       let isRequestExecutive = isExecutiveWithPermission(userId, requestData.departmentId);
 
       if (requestData.status == 'Pending Manager Approval' || requestData.status == 'Queries Raised') {
@@ -85,10 +87,15 @@ service cloud.firestore {
     
     // User Profiles
     match /users/{userId} {
-      allow get: if isAuth();
+      // Admins can list all users.
       allow list: if isAdmin(request.auth.uid);
+      // Any authenticated user can get any other user's profile.
+      allow get: if isAuth();
+      // Only admins can create users.
       allow create: if isAdmin(request.auth.uid);
+      // An admin can update any profile. A user can update their own.
       allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      // Only admins can delete users.
       allow delete: if isAdmin(request.auth.uid);
     }
 

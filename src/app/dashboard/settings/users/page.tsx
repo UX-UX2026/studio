@@ -206,7 +206,10 @@ export default function UsersPage() {
                 notificationPreference: notificationPreference,
             };
             
-            if (userRole !== 'Executive') {
+            // This is crucial: Do not wipe reportingDepartments if the role is not changing away from Executive
+            if (userRole === 'Executive') {
+                userData.reportingDepartments = editingUser.reportingDepartments || [];
+            } else {
                 userData.reportingDepartments = [];
             }
 
