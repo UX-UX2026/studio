@@ -73,20 +73,9 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if request.auth != null;
-
-      function isRequestingUserAdmin() {
-        return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator';
-      }
-      
-      function isRequestingUserOwner() {
-        return request.auth.uid == userId;
-      }
-      
-      // Explicitly define create, update, delete for clarity and to resolve permission issues.
-      allow create: if isRequestingUserAdmin();
-      allow update: if isRequestingUserAdmin() || isRequestingUserOwner();
-      allow delete: if isRequestingUserAdmin();
+      allow create: if isAdmin(request.auth.uid);
+      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      allow delete: if isAdmin(request.auth.uid);
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
