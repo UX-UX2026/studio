@@ -4,7 +4,7 @@
 import { useUser, type UserProfile, type UserRole } from "@/firebase/auth/use-user";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown } from "lucide-react";
+import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown, History } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc, useCollection } from "@/firebase";
-import { collection, doc, setDoc, serverTimestamp, addDoc, query, orderBy } from "firebase/firestore";
+import { collection, doc, setDoc, serverTimestamp, addDoc, query, orderBy, where } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useRoles } from "@/lib/roles-provider";
@@ -20,10 +20,20 @@ import { Switch } from "@/components/ui/switch";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { formatDistanceToNow } from "date-fns";
 
 type Department = {
     id: string;
     name: string;
+};
+
+type AuditEvent = {
+    id: string;
+    action: string;
+    details: string;
+    timestamp: { seconds: number; nanoseconds: number; };
 };
 
 export default function UserProfilePage() {
@@ -43,6 +53,16 @@ export default function UserProfilePage() {
 
     const allUsersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
     const { data: allUsers, loading: allUsersLoading } = useCollection<UserProfile>(allUsersQuery);
+    
+    const auditLogsQuery = useMemo(() => {
+        if (!firestore || !userId) return null;
+        return query(
+            collection(firestore, 'auditLogs'), 
+            where('entity.id', '==', userId),
+            orderBy('timestamp', 'desc')
+        );
+    }, [firestore, userId]);
+    const { data: auditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
 
     const { roles, loading: rolesLoading } = useRoles();
     
@@ -55,7 +75,7 @@ export default function UserProfilePage() {
         }
     }, [userProfile]);
 
-    const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading;
+    const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading || auditLogsLoading;
 
     const handleFormChange = (field: keyof UserProfile, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -209,12 +229,10 @@ export default function UserProfilePage() {
                                     <div className="p-4 border rounded-md grid grid-cols-2 gap-4">
                                         {departments?.map(dept => (
                                             <div key={dept.id} className="flex items-center gap-2">
-                                                <input
-                                                    type="checkbox"
+                                                <Checkbox
                                                     id={`dept-check-${dept.id}`}
-                                                    checked={formData.reportingDepartments?.includes(dept.id)}
-                                                    onChange={(e) => handleReportingDeptsChange(dept.id, e.target.checked)}
-                                                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                    checked={formData.reportingDepartments?.includes(dept.id) || false}
+                                                    onCheckedChange={(checked) => handleReportingDeptsChange(dept.id, !!checked)}
                                                 />
                                                 <Label htmlFor={`dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
                                             </div>
@@ -272,6 +290,53 @@ export default function UserProfilePage() {
                 </div>
             </div>
 
+            {adminRole === 'Administrator' && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2"><History className="h-5 w-5 text-primary" />User Audit Trail</CardTitle>
+                        <CardDescription>A log of significant actions related to this user.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {loading ? (
+                            <div className="flex items-center justify-center h-24">
+                                <Loader className="h-6 w-6 animate-spin" />
+                            </div>
+                        ) : (
+                            <div className="overflow-auto rounded-lg border max-h-96">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>Action</TableHead>
+                                            <TableHead>Details</TableHead>
+                                            <TableHead className="text-right">Date</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {auditLogs && auditLogs.length > 0 ? (
+                                            auditLogs.map(log => (
+                                                <TableRow key={log.id}>
+                                                    <TableCell><Badge variant="secondary">{log.action}</Badge></TableCell>
+                                                    <TableCell className="text-sm text-muted-foreground">{log.details}</TableCell>
+                                                    <TableCell className="text-right text-sm text-muted-foreground">
+                                                        {log.timestamp ? formatDistanceToNow(new Date(log.timestamp.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                                                    No audit events found for this user.
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             <div className="flex justify-end pt-4">
                 <Button onClick={handleSaveChanges} disabled={isSaving}>
                     {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
@@ -282,4 +347,3 @@ export default function UserProfilePage() {
         </div>
     );
 }
-

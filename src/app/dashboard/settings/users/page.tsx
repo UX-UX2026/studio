@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Plus, ChevronDown } from "lucide-react";
+import { Loader, Shield, Trash2, Plus, ChevronDown, Edit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -237,7 +237,7 @@ export default function UsersPage() {
                             User & Permission Management
                         </CardTitle>
                         <CardDescription>
-                            Quickly edit user roles and departments, or click a user's name for more details.
+                            Quickly edit user roles and departments, or click the edit icon for more details.
                         </CardDescription>
                     </div>
                     <Button onClick={() => setIsAddUserDialogOpen(true)}>
@@ -256,19 +256,19 @@ export default function UsersPage() {
                                     <TableHead className="w-[200px]">Department</TableHead>
                                     <TableHead className="w-[220px]">Reporting Depts</TableHead>
                                     <TableHead className="w-[200px] hidden md:table-cell">Delegated To</TableHead>
-                                    <TableHead className="text-right w-[80px]">Actions</TableHead>
+                                    <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {users && users.map((u) => (
-                                    <TableRow key={u.id} className={cn(u.role === 'Executive' && 'bg-primary/5')}>
+                                    <TableRow key={u.id} className={u.role === 'Executive' ? 'bg-primary/5' : ''}>
                                         <TableCell className="font-medium flex items-center gap-3">
                                             <Avatar>
                                                 <AvatarImage src={u.photoURL} />
                                                 <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div>
-                                                <Link href={`/dashboard/users/${u.id}`} className="font-semibold text-foreground hover:underline">{u.displayName || u.email}</Link>
+                                                <span className="font-semibold text-foreground">{u.displayName || u.email}</span>
                                                 <div className="text-xs text-muted-foreground">{u.email}</div>
                                             </div>
                                         </TableCell>
@@ -335,6 +335,11 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell className="text-right">
+                                            <Button asChild variant="ghost" size="icon">
+                                                <Link href={`/dashboard/users/${u.id}`}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Link>
+                                            </Button>
                                             <Button variant="ghost" size="icon" onClick={() => deleteDoc(doc(firestore, 'users', u.id))}>
                                                 <Trash2 className="h-4 w-4 text-destructive" />
                                             </Button>
