@@ -10,9 +10,9 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(userId));
     }
 
-    function isAdmin(userId) {
-      let userRes = getUserData(userId);
-      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Administrator';
+    function isAdmin() {
+      // Use the custom claim from the user's auth token. This is more efficient and reliable.
+      return request.auth.token.role == 'Administrator';
     }
 
     function isManager(userId) {
@@ -94,47 +94,40 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if request.auth != null;
       // An admin can write to any user profile. A user can write to their own.
-      allow write: if (
-                      // Check if the requesting user is an admin
-                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator'
-                    ) || (
-                      // Check if the requesting user is the owner of the document
-                      request.auth.uid == userId
-                    );
+      allow write: if isAdmin() || request.auth.uid == userId;
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
     match /roles/{roleId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
     
     match /companies/{companyId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
     
     match /approvalGroups/{groupId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
 
     match /app/metadata {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
     
     match /departments/{departmentId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isAdmin();
     }
 
     // Procurement Requests have complex rules
     match /procurementRequests/{procurementRequestId} {
       // Allow reading a single document if you are involved with it. `resource.data` is available here.
       allow get: if request.auth != null && (
-                   isAdmin(request.auth.uid)
+                   isAdmin()
                    || isProcurementOfficer(request.auth.uid)
                    || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
                    || resource.data.submittedById == request.auth.uid
@@ -151,7 +144,7 @@ service cloud.firestore {
       // Who can update? A user can update if any of the following are true:
       allow update: if
         // 1. User is an Administrator.
-        isAdmin(request.auth.uid)
+        isAdmin()
 
         // 2. User is the original submitter and the request is a Draft or has Queries.
         || (resource.data.submittedById == request.auth.uid &&
@@ -170,37 +163,37 @@ service cloud.firestore {
         || (isProcurementOfficer(request.auth.uid) &&
             (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
 
-      allow delete: if isAdmin(request.auth.uid);
+      allow delete: if isAdmin();
     }
 
     // Recurring Items
     match /recurringItems/{itemId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+      allow write: if isAdmin() || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
     match /vendors/{vendorId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isAdmin() || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow read, write: if isAdmin() || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
-      allow read, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow read, write: if isAdmin() || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow read: if isAdmin(request.auth.uid);
+      allow read: if isAdmin();
       allow create: if request.auth != null;
     }
     
     match /errorLogs/{errorLogId} {
-      allow read: if isAdmin(request.auth.uid);
+      allow read: if isAdmin();
       allow create: if request.auth != null;
     }
     
