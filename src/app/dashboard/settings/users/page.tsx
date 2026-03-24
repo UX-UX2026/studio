@@ -31,11 +31,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRoles } from "@/lib/roles-provider";
 import { useToast } from "@/hooks/use-toast";
-import { Badge } from "@/components/ui/badge";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, where, getDocs, updateDoc, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 type UserProfile = {
     id: string;
@@ -43,12 +43,12 @@ type UserProfile = {
     email: string;
     role: string;
     department: string;
-    departmentId?: string;
+    departmentId?: string | null;
     photoURL: string;
     status: 'Active' | 'Invited';
     alternateEmail?: string;
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
-    delegatedToId?: string;
+    delegatedToId?: string | null;
     delegatedToName?: string;
     reportingDepartments?: string[];
 };
@@ -124,19 +124,20 @@ export default function UsersPage() {
       
         let updateData: Partial<UserProfile> = { [field]: value };
         
-        // Special handling for combined fields
         if (field === 'departmentId') {
           const selectedDept = departments?.find(d => d.id === value);
           updateData = {
-            departmentId: selectedDept?.id || '',
-            department: selectedDept?.name || 'Unassigned',
+            departmentId: value === 'unassigned' ? null : (selectedDept?.id || ''),
+            department: value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned'),
           };
         } else if (field === 'delegatedToId') {
           const delegate = users?.find(u => u.id === value);
           updateData = {
-            delegatedToId: delegate?.id || '',
-            delegatedToName: delegate?.displayName || '',
+            delegatedToId: value === 'none' ? null : (delegate?.id || ''),
+            delegatedToName: value === 'none' ? '' : (delegate?.displayName || ''),
           };
+        } else if (field === 'reportingDepartments') {
+            updateData = { reportingDepartments: value };
         }
       
         const userRef = doc(firestore, 'users', userId);
@@ -236,7 +237,7 @@ export default function UsersPage() {
                             User & Permission Management
                         </CardTitle>
                         <CardDescription>
-                            Quickly edit user roles, departments, and permissions directly from this table.
+                            Quickly edit user roles and departments, or click a user's name for more details.
                         </CardDescription>
                     </div>
                     <Button onClick={() => setIsAddUserDialogOpen(true)}>
@@ -250,7 +251,7 @@ export default function UsersPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead className="min-w-[250px]">User</TableHead>
-                                    <TableHead className="w-[200px]">Role</TableHead>
+                                    <TableHead className="w-[180px]">Role</TableHead>
                                     <TableHead className="w-[150px]">Status</TableHead>
                                     <TableHead className="w-[200px]">Department</TableHead>
                                     <TableHead className="w-[220px]">Reporting Depts</TableHead>
@@ -267,7 +268,7 @@ export default function UsersPage() {
                                                 <AvatarFallback>{u.displayName?.charAt(0) || u.email.charAt(0)}</AvatarFallback>
                                             </Avatar>
                                             <div>
-                                                <div className="font-semibold text-foreground">{u.displayName || u.email}</div>
+                                                <Link href={`/dashboard/users/${u.id}`} className="font-semibold text-foreground hover:underline">{u.displayName || u.email}</Link>
                                                 <div className="text-xs text-muted-foreground">{u.email}</div>
                                             </div>
                                         </TableCell>
@@ -291,10 +292,10 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={u.departmentId || ''} onValueChange={(value) => handleUpdateUser(u.id, 'departmentId', value)}>
+                                            <Select value={u.departmentId || 'unassigned'} onValueChange={(value) => handleUpdateUser(u.id, 'departmentId', value)}>
                                                 <SelectTrigger><SelectValue placeholder="Unassigned"/></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="">Unassigned</SelectItem>
+                                                    <SelectItem value="unassigned">Unassigned</SelectItem>
                                                     {departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
@@ -323,10 +324,10 @@ export default function UsersPage() {
                                             </DropdownMenu>
                                         </TableCell>
                                         <TableCell className="hidden md:table-cell">
-                                            <Select value={u.delegatedToId || ''} onValueChange={(value) => handleUpdateUser(u.id, 'delegatedToId', value)}>
+                                            <Select value={u.delegatedToId || 'none'} onValueChange={(value) => handleUpdateUser(u.id, 'delegatedToId', value)}>
                                                 <SelectTrigger><SelectValue placeholder="Not Set"/></SelectTrigger>
                                                 <SelectContent>
-                                                    <SelectItem value="">None</SelectItem>
+                                                    <SelectItem value="none">None</SelectItem>
                                                     {users.filter(usr => usr.id !== u.id).map(delegate => (
                                                         <SelectItem key={delegate.id} value={delegate.id}>{delegate.displayName}</SelectItem>
                                                     ))}
