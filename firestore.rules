@@ -6,7 +6,8 @@ service cloud.firestore {
 
     // Helper functions
     function getUserData(userId) {
-      return get(/databases/$(database)/documents/users/$(userId)).data;
+      // Returns the resource object, not just the data, to allow for null checks
+      return get(/databases/$(database)/documents/users/$(userId));
     }
     
     function isOwner(userId) {
@@ -14,48 +15,70 @@ service cloud.firestore {
     }
 
     function isAdmin(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Administrator';
+      let userRes = getUserData(userId);
+      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Administrator';
     }
 
     function isManager(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Manager';
+      let userRes = getUserData(userId);
+      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Manager';
     }
 
     function isExecutive(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Executive';
+      let userRes = getUserData(userId);
+      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Executive';
     }
     
     function isExecutiveWithPermission(userId, departmentId) {
-      let userProfile = getUserData(userId);
-      if (departmentId == null) {
+      let userRes = getUserData(userId);
+      if (userRes == null || !('data' in userRes) || departmentId == null) {
         return false;
       }
-      return isExecutive(userId) &&
-             (!('approvableDepartmentIds' in userProfile) ||
+      let userProfile = userRes.data;
+
+      // Check if the user is an Executive
+      let isExecRole = 'role' in userProfile && userProfile.role == 'Executive';
+      if (!isExecRole) {
+        return false;
+      }
+      
+      // Now check department permissions. If no approvableDepartmentIds are set, they can approve all.
+      return (!('approvableDepartmentIds' in userProfile) ||
               userProfile.approvableDepartmentIds == null ||
               userProfile.approvableDepartmentIds.size() == 0 ||
               departmentId in userProfile.approvableDepartmentIds);
     }
 
     function isProcurementOfficer(userId) {
-      let userProfile = getUserData(userId);
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             (userProfile.role == 'Procurement Officer' || userProfile.role == 'Procurement Assistant');
+      let userRes = getUserData(userId);
+      return userRes != null && 'role' in userRes.data &&
+             (userRes.data.role == 'Procurement Officer' || userRes.data.role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId)) &&
-             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Requester';
+      let userRes = getUserData(userId);
+      return userRes != null && 'role' in userRes.data && userRes.data.role == 'Requester';
+    }
+    
+    function getDepartmentIdForUser(userId) {
+        let userRes = getUserData(userId);
+        if (userRes != null && 'departmentId' in userRes.data) {
+            return userRes.data.departmentId;
+        }
+        return null;
     }
 
     // A function to check if a user is authorized to approve a given request,
     // either directly or because they are a higher-level approver.
     function isAllowedToApprove(userId, requestData) {
-      let userProfile = getUserData(userId);
-      let isRequestManager = isManager(userId) && userProfile.departmentId == requestData.departmentId;
+      let userRes = getUserData(userId);
+      // Check if user profile exists before proceeding
+      if (userRes == null || !('data' in userRes)) {
+        return false;
+      }
+      let userProfile = userRes.data;
+
+      let isRequestManager = ('role' in userProfile && userProfile.role == 'Manager') && userProfile.departmentId == requestData.departmentId;
       let isRequestExecutive = isExecutiveWithPermission(userId, requestData.departmentId);
 
       // An Executive can approve a request at the Manager stage.
@@ -112,7 +135,7 @@ service cloud.firestore {
                    || isProcurementOfficer(request.auth.uid)
                    || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
                    || resource.data.submittedById == request.auth.uid
-                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getUserData(request.auth.uid).departmentId)
+                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getDepartmentIdForUser(request.auth.uid))
                  );
     
       // Allow querying the collection for any authenticated user.
@@ -136,7 +159,8 @@ service cloud.firestore {
 
         // 4. User is acting as a delegate for an authorized approver.
         || (request.resource.data.delegatorIdForApproval != null &&
-            getUserData(request.resource.data.delegatorIdForApproval).delegatedToId == request.auth.uid &&
+            getUserData(request.resource.data.delegatorIdForApproval) != null &&
+            getUserData(request.resource.data.delegatorIdForApproval).data.delegatedToId == request.auth.uid &&
             isAllowedToApprove(request.resource.data.delegatorIdForApproval, resource.data))
 
         // 5. User is a Procurement Officer and the request is in a fulfillment stage.
