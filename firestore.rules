@@ -9,27 +9,23 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    function getUserRole(userId) {
-      if (exists(/databases/$(database)/documents/users/$(userId))) {
-        return getUserData(userId).role;
-      }
-      return null;
-    }
-
     function isOwner(userId) {
       return request.auth.uid == userId;
     }
 
     function isAdmin(userId) {
-      return getUserRole(userId) == 'Administrator';
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Administrator';
     }
 
     function isManager(userId) {
-      return getUserRole(userId) == 'Manager';
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Manager';
     }
 
     function isExecutive(userId) {
-      return getUserRole(userId) == 'Executive';
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Executive';
     }
     
     function isExecutiveWithPermission(userId, departmentId) {
@@ -45,12 +41,14 @@ service cloud.firestore {
     }
 
     function isProcurementOfficer(userId) {
-      let role = getUserRole(userId);
-      return role == 'Procurement Officer' || role == 'Procurement Assistant';
+      let role = get(/databases/$(database)/documents/users/$(userId)).data.role;
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             (role == 'Procurement Officer' || role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
-      return getUserRole(userId) == 'Requester';
+      return exists(/databases/$(database)/documents/users/$(userId)) &&
+             get(/databases/$(database)/documents/users/$(userId)).data.role == 'Requester';
     }
 
     // A function to check if a user is authorized to approve a given request,
