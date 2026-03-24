@@ -50,7 +50,7 @@ type UserProfile = {
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
     delegatedToId?: string;
     delegatedToName?: string;
-    approvableDepartmentIds?: string[];
+    reportingDepartments?: string[];
 };
 
 type Department = {
@@ -165,7 +165,7 @@ export default function UsersPage() {
                     status: 'Invited' as const,
                     alternateEmail: alternateEmail,
                     notificationPreference: notificationPreference,
-                    approvableDepartmentIds: userRole === 'Executive' ? [] : [],
+                    reportingDepartments: userRole === 'Executive' ? [] : [],
                 };
                 const docRef = await addDoc(usersRef, newUserData);
                 toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
@@ -207,7 +207,7 @@ export default function UsersPage() {
             };
             
             if (userRole !== 'Executive') {
-                userData.approvableDepartmentIds = [];
+                userData.reportingDepartments = [];
             }
 
             await setDoc(userRef, userData, { merge: true });
@@ -292,37 +292,37 @@ export default function UsersPage() {
         setIsDialogOpen(true);
     };
     
-    const handleApprovableDeptsChange = async (userId: string, newDeptIds: string[]) => {
+    const handleReportingDeptsChange = async (userId: string, newDeptIds: string[]) => {
         if (!adminUser || !firestore) return;
-        const action = 'user.update.approvableDepts';
+        const action = 'user.update.reportingDepts';
         const user = users?.find(u => u.id === userId);
     
         try {
             const userRef = doc(firestore, 'users', userId);
             await updateDoc(userRef, {
-                approvableDepartmentIds: newDeptIds
+                reportingDepartments: newDeptIds
             });
             
             toast({
                 title: "User Updated",
-                description: `Updated approvable departments for ${user?.displayName || 'user'}.`,
+                description: `Updated reporting departments for ${user?.displayName || 'user'}.`,
             });
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action,
-                details: `Updated approvable departments for user ${user?.displayName || userId}`,
+                details: `Updated reporting departments for user ${user?.displayName || userId}`,
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
             });
     
         } catch (error: any) {
-            console.error("Approvable Depts Update Error:", error);
+            console.error("Reporting Depts Update Error:", error);
             toast({
                 variant: 'destructive',
                 title: 'Update Failed',
-                description: error.message || `Could not update approvable departments.`,
+                description: error.message || `Could not update reporting departments.`,
             });
             await logErrorToFirestore(firestore, {
                 userId: adminUser.uid,
@@ -453,7 +453,7 @@ export default function UsersPage() {
                                     <TableHead>Role</TableHead>
                                     <TableHead>Department</TableHead>
                                     <TableHead>Delegated To</TableHead>
-                                    <TableHead>Approvable Depts</TableHead>
+                                    <TableHead>Reporting Depts</TableHead>
                                     <TableHead className="w-[120px]">Status</TableHead>
                                     <TableHead className="text-right w-[120px]">Actions</TableHead>
                                 </TableRow>
@@ -526,26 +526,26 @@ export default function UsersPage() {
                                                     <DropdownMenuTrigger asChild>
                                                         <Button variant="outline" className="w-[180px] justify-between">
                                                             <span>
-                                                                {(u.approvableDepartmentIds && u.approvableDepartmentIds.length > 0)
-                                                                    ? `${u.approvableDepartmentIds.length} Dept(s)`
+                                                                {(u.reportingDepartments && u.reportingDepartments.length > 0)
+                                                                    ? `${u.reportingDepartments.length} Dept(s)`
                                                                     : 'All Departments'}
                                                             </span>
                                                             <ChevronDown className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent className="w-56">
-                                                        <DropdownMenuLabel>Approvable Departments</DropdownMenuLabel>
+                                                        <DropdownMenuLabel>Reporting Departments</DropdownMenuLabel>
                                                         <DropdownMenuSeparator />
                                                         {departments?.map(dept => (
                                                             <DropdownMenuCheckboxItem
                                                                 key={dept.id}
-                                                                checked={u.approvableDepartmentIds?.includes(dept.id)}
+                                                                checked={u.reportingDepartments?.includes(dept.id)}
                                                                 onCheckedChange={(checked) => {
-                                                                    const currentIds = u.approvableDepartmentIds || [];
+                                                                    const currentIds = u.reportingDepartments || [];
                                                                     const newIds = checked
                                                                         ? [...currentIds, dept.id]
                                                                         : currentIds.filter(id => id !== dept.id);
-                                                                    handleApprovableDeptsChange(u.id, newIds);
+                                                                    handleReportingDeptsChange(u.id, newIds);
                                                                 }}
                                                                 onSelect={(e) => e.preventDefault()}
                                                             >
@@ -660,5 +660,3 @@ export default function UsersPage() {
         </div>
     );
 }
-
-    

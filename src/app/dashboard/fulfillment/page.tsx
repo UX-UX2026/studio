@@ -129,14 +129,14 @@ export default function FulfillmentPage() {
         }
     
         if (role === 'Executive') {
-            if (!profile.approvableDepartmentIds || profile.approvableDepartmentIds.length === 0) {
+            if (!profile.reportingDepartments || profile.reportingDepartments.length === 0) {
                 return allDepartmentNames; // Can see all if not restricted
             }
-            const approvableDeptNames = departments
-                .filter(d => profile.approvableDepartmentIds!.includes(d.id))
+            const reportingDeptNames = departments
+                .filter(d => profile.reportingDepartments!.includes(d.id))
                 .map(d => d.name);
             
-            return allDepartmentNames.filter(deptName => approvableDeptNames.includes(deptName));
+            return allDepartmentNames.filter(deptName => reportingDeptNames.includes(deptName));
         }
     
         return [];
@@ -196,5 +196,3 @@ export default function FulfillmentPage() {
     </div>
   );
 }
-
-    

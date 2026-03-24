@@ -57,11 +57,11 @@ service cloud.firestore {
       
       let userProfile = getUserData(userId);
       
-      if (!('approvableDepartmentIds' in userProfile) || userProfile.approvableDepartmentIds == null || userProfile.approvableDepartmentIds.size() == 0) {
+      if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
         return true; // No restrictions means they can approve all
       }
       
-      return departmentId in userProfile.approvableDepartmentIds;
+      return departmentId in userProfile.reportingDepartments;
     }
 
     function isAllowedToApprove(userId, requestData) {

@@ -498,8 +498,8 @@ export default function ApprovalsPage() {
         if (!stageConfig) return { can: false, asDelegate: false, delegator: null };
     
         const canExecutiveApproveDept = (execProfile: UserProfile) => {
-            if (!execProfile.approvableDepartmentIds || execProfile.approvableDepartmentIds.length === 0) return true;
-            return execProfile.approvableDepartmentIds.includes(departmentId);
+            if (!execProfile.reportingDepartments || execProfile.reportingDepartments.length === 0) return true;
+            return execProfile.reportingDepartments.includes(departmentId);
         };
         
         let potentialApprovers: UserProfile[] = [];
@@ -1576,5 +1576,3 @@ export default function ApprovalsPage() {
     </>
   );
 }
-
-    

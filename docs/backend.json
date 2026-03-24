@@ -277,9 +277,9 @@
           "type": "string",
           "description": "The display name of the user this user has delegated approval authority to."
         },
-        "approvableDepartmentIds": {
+        "reportingDepartments": {
             "type": "array",
-            "description": "For Executive roles, an array of department IDs they are permitted to approve requests for.",
+            "description": "For Executive roles, an array of department IDs they are responsible for reporting on and approving requests for.",
             "items": {
                 "type": "string"
             }
@@ -890,5 +890,3 @@
     }
   }
 }
-
-    
