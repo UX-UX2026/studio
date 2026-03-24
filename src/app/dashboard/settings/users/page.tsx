@@ -392,34 +392,30 @@ export default function UsersPage() {
                                             <Badge variant={u.status === 'Active' ? 'default' : 'destructive'} className={cn(u.status === 'Active' && 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300')}>{u.status}</Badge>
                                         </TableCell>
                                         <TableCell>
-                                            {u.role === 'Executive' ? (
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="outline" className="w-full sm:w-[150px] font-normal justify-between">
-                                                            <span>{u.reportingDepartments?.length || 0} selected</span>
-                                                            <ChevronDown className="h-4 w-4 opacity-50" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent className="w-56">
-                                                        <DropdownMenuLabel>Select Departments</DropdownMenuLabel>
-                                                        <DropdownMenuSeparator />
-                                                        {departments?.map(dept => (
-                                                            <DropdownMenuCheckboxItem
-                                                                key={dept.id}
-                                                                checked={u.reportingDepartments?.includes(dept.id)}
-                                                                onSelect={(e) => e.preventDefault()} 
-                                                                onCheckedChange={(checked) => {
-                                                                    handleReportingDeptsChange(u.id, dept.id, !!checked);
-                                                                }}
-                                                            >
-                                                                {dept.name}
-                                                            </DropdownMenuCheckboxItem>
-                                                        ))}
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            ) : (
-                                                <span className="text-muted-foreground ml-3">N/A</span>
-                                            )}
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" className="w-full sm:w-[150px] font-normal justify-between">
+                                                        <span>{u.reportingDepartments?.length || 0} selected</span>
+                                                        <ChevronDown className="h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent className="w-56">
+                                                    <DropdownMenuLabel>Select Departments</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    {departments?.map(dept => (
+                                                        <DropdownMenuCheckboxItem
+                                                            key={dept.id}
+                                                            checked={u.reportingDepartments?.includes(dept.id)}
+                                                            onSelect={(e) => e.preventDefault()} 
+                                                            onCheckedChange={(checked) => {
+                                                                handleReportingDeptsChange(u.id, dept.id, !!checked);
+                                                            }}
+                                                        >
+                                                            {dept.name}
+                                                        </DropdownMenuCheckboxItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </TableCell>
                                         <TableCell className="hidden sm:table-cell">{u.department || 'Unassigned'}</TableCell>
                                         <TableCell className="hidden md:table-cell">
