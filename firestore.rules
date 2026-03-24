@@ -9,10 +9,6 @@ service cloud.firestore {
       // Returns the resource object, not just the data, to allow for null checks
       return get(/databases/$(database)/documents/users/$(userId));
     }
-    
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
 
     function isAdmin(userId) {
       let userRes = getUserData(userId);
@@ -37,15 +33,17 @@ service cloud.firestore {
       let userProfile = userRes.data;
 
       // Check if the user is an Executive
-      let isExecRole = 'role' in userProfile && userProfile.role == 'Executive';
-      if (!isExecRole) {
+      if (!('role' in userProfile) || userProfile.role != 'Executive') {
         return false;
       }
       
-      // Now check department permissions. If no approvableDepartmentIds are set, they can approve all.
-      return (!('approvableDepartmentIds' in userProfile) ||
-              userProfile.approvableDepartmentIds == null ||
-              departmentId in userProfile.approvableDepartmentIds);
+      // If no approvableDepartmentIds are set, they can approve all.
+      if (!('approvableDepartmentIds' in userProfile) || userProfile.approvableDepartmentIds == null) {
+        return true;
+      }
+      
+      // If the map exists, check if the departmentId is a key.
+      return departmentId in userProfile.approvableDepartmentIds;
     }
 
     function isProcurementOfficer(userId) {
@@ -95,9 +93,15 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow create: if isAdmin(request.auth.uid);
-      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
-      allow delete: if isAdmin(request.auth.uid);
+      // An admin can write to any user profile. A user can write to their own.
+      allow write: if (
+                      // Check if the requesting user is an admin
+                      exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                      get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrator'
+                    ) || (
+                      // Check if the requesting user is the owner of the document
+                      request.auth.uid == userId
+                    );
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
