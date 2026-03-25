@@ -41,7 +41,7 @@ type UserProfile = {
     id: string;
     displayName?: string;
     email: string;
-    role: string;
+    role: string | null;
     department: string;
     departmentId?: string | null;
     photoURL: string;
@@ -273,8 +273,8 @@ export default function UsersPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={u.role} onValueChange={(value) => handleUpdateUser(u.id, 'role', value)}>
-                                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                            <Select value={u.role || ''} onValueChange={(value) => handleUpdateUser(u.id, 'role', value)}>
+                                                <SelectTrigger><SelectValue placeholder="No Role" /></SelectTrigger>
                                                 <SelectContent>
                                                     {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                                 </SelectContent>

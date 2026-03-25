@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useUser, type UserProfile, type UserRole } from "@/firebase/auth/use-user";
+import { useUser, type UserProfile as MainUserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown, History } from "lucide-react";
@@ -46,13 +46,13 @@ export default function UserProfilePage() {
     const { toast } = useToast();
 
     const userDocRef = useMemo(() => doc(firestore, 'users', userId), [firestore, userId]);
-    const { data: userProfile, loading: userProfileLoading } = useDoc<UserProfile>(userDocRef);
+    const { data: userProfile, loading: userProfileLoading } = useDoc<MainUserProfile>(userDocRef);
 
     const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const allUsersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
-    const { data: allUsers, loading: allUsersLoading } = useCollection<UserProfile>(allUsersQuery);
+    const { data: allUsers, loading: allUsersLoading } = useCollection<MainUserProfile>(allUsersQuery);
     
     const auditLogsQuery = useMemo(() => {
         if (!firestore || !userId) return null;
@@ -67,7 +67,7 @@ export default function UserProfilePage() {
     const { roles, loading: rolesLoading } = useRoles();
     
     const [isSaving, setIsSaving] = useState(false);
-    const [formData, setFormData] = useState<Partial<UserProfile>>({});
+    const [formData, setFormData] = useState<Partial<MainUserProfile>>({});
     
     useEffect(() => {
         if (userProfile) {
@@ -77,7 +77,7 @@ export default function UserProfilePage() {
 
     const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading || auditLogsLoading;
 
-    const handleFormChange = (field: keyof UserProfile, value: any) => {
+    const handleFormChange = (field: keyof MainUserProfile, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
@@ -93,7 +93,7 @@ export default function UserProfilePage() {
         if (!adminUser || !firestore) return;
         setIsSaving(true);
         
-        let updateData = { ...formData };
+        let updateData: Partial<MainUserProfile> = { ...formData };
         
         const selectedDept = departments?.find(d => d.id === updateData.departmentId);
         if (selectedDept) {
@@ -111,15 +111,20 @@ export default function UserProfilePage() {
             updateData.delegatedToId = null;
         }
 
+        // Remove the 'id' field before saving to prevent Firestore errors.
+        if ('id' in updateData) {
+            delete (updateData as { id?: string }).id;
+        }
+
         try {
             await setDoc(doc(firestore, 'users', userId), updateData, { merge: true });
-            toast({ title: "User Profile Saved", description: `${updateData.displayName}'s profile has been updated.` });
+            toast({ title: "User Profile Saved", description: `${formData.displayName}'s profile has been updated.` });
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: adminUser.uid,
                 userName: adminUser.displayName,
                 action: 'user.update_profile',
-                details: `Updated profile for user: ${updateData.displayName}`,
+                details: `Updated profile for user: ${formData.displayName}`,
                 entity: { type: 'user', id: userId },
                 timestamp: serverTimestamp()
             });
@@ -205,7 +210,7 @@ export default function UserProfilePage() {
                                 <div className="space-y-1.5">
                                     <Label htmlFor="role">Role</Label>
                                     <Select value={formData.role || ''} onValueChange={v => handleFormChange('role', v)}>
-                                        <SelectTrigger id="role"><SelectValue /></SelectTrigger>
+                                        <SelectTrigger id="role"><SelectValue placeholder="No role assigned" /></SelectTrigger>
                                         <SelectContent>
                                             {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
                                         </SelectContent>
@@ -213,7 +218,7 @@ export default function UserProfilePage() {
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label htmlFor="department">Primary Department</Label>
-                                    <Select value={formData.departmentId || 'unassigned'} onValueChange={v => handleFormChange('departmentId', v)}>
+                                    <Select value={formData.departmentId || 'unassigned'} onValueChange={v => handleFormChange('departmentId', v === 'unassigned' ? null : v)}>
                                         <SelectTrigger id="department"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                                         <SelectContent>
                                             <SelectItem value="unassigned">Unassigned</SelectItem>
@@ -274,7 +279,7 @@ export default function UserProfilePage() {
                          <CardContent className="space-y-4">
                              <div className="space-y-1.5">
                                 <Label htmlFor="delegatedToId">Delegate Approval To</Label>
-                                <Select value={formData.delegatedToId || 'none'} onValueChange={v => handleFormChange('delegatedToId', v)}>
+                                <Select value={formData.delegatedToId || 'none'} onValueChange={v => handleFormChange('delegatedToId', v === 'none' ? null : v)}>
                                     <SelectTrigger id="delegatedToId"><SelectValue placeholder="Not Set" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None</SelectItem>
