@@ -74,21 +74,16 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         
         let firestore: Firestore;
         try {
+            // Initialize with persistent cache and tab synchronization.
             firestore = initializeFirestore(app, {
-                cache: persistentLocalCache({})
+                cache: persistentLocalCache({ synchronizeTabs: true })
             });
-             console.log("Firestore offline persistence enabled via initializeFirestore.");
+             console.log("Firestore offline persistence with tab synchronization enabled.");
         } catch (err: any) {
-            if (err.code === 'failed-precondition') {
-                console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
-                firestore = getFirestore(app);
-            } else if (err.code === 'unimplemented') {
-                console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
-                firestore = getFirestore(app);
-            } else {
-                console.error("Firestore initialization failed:", err);
-                firestore = getFirestore(app);
-            }
+            // If persistent cache fails (e.g., multiple tabs, browser limitations),
+            // fall back to in-memory cache. This is more robust than just getFirestore().
+            console.warn(`Firestore persistence failed: ${(err as Error).message}. Falling back to memory cache.`);
+            firestore = initializeFirestore(app, { cache: memoryLocalCache() });
         }
         
         setFirebaseServices({ app, auth, firestore });
