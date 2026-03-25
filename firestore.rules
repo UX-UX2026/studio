@@ -85,45 +85,87 @@ service cloud.firestore {
       
       return false;
     }
+
+    // ===================================
+    //  COLLECTION-LEVEL RULES
+    // ===================================
+    match /users {
+      allow list: if isAuth();
+    }
+    match /roles {
+      allow list: if isAuth();
+    }
+    match /companies {
+      allow list: if isAuth();
+    }
+    match /approvalGroups {
+      allow list: if isAuth();
+    }
+    match /departments {
+      allow list: if isAuth();
+    }
+    match /procurementRequests {
+       allow list: if isAuth();
+    }
+    match /recurringItems {
+      allow list: if isAuth();
+    }
+    match /vendors {
+      allow list: if isAuth();
+    }
+    match /budgetUploads {
+      allow list: if isAuth();
+    }
+    match /budgets {
+      allow list: if isAuth();
+    }
+    match /auditLogs {
+      allow list: if isAdmin(request.auth.uid);
+    }
+    match /errorLogs {
+      allow list: if isAdmin(request.auth.uid);
+    }
+
+    // ===================================
+    //  DOCUMENT-LEVEL RULES
+    // ===================================
     
     // User Profiles
     match /users/{userId} {
       allow get: if isAuth();
       allow update: if isAdmin(request.auth.uid) || isOwner(userId);
-      allow create: if isAuth();
+      allow create: if isAuth(); // Allows admins to create users, and users to be created on first sign-in
       allow delete: if isAdmin(request.auth.uid);
-    }
-    match /users {
-      allow list: if isAuth();
     }
 
     // Roles
     match /roles/{roleId} {
-      allow get, list: if isAuth();
-      // Allow any authenticated user to create one of the default roles if it doesn't exist.
-      // This supports the application's auto-seeding logic on first run.
+      allow get: if isAuth();
       allow create: if isAuth() && request.resource.data.name in ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'];
-      // Only admins can modify or delete roles once they exist.
       allow update, delete: if isAdmin(request.auth.uid);
     }
     
+    // Companies
     match /companies/{companyId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
     
+    // Approval Groups
     match /approvalGroups/{groupId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
 
+    // App Metadata
     match /app/metadata {
       allow read: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
     
+    // Departments
     match /departments/{departmentId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid);
     }
 
@@ -153,40 +195,37 @@ service cloud.firestore {
 
       allow delete: if isAdmin(request.auth.uid);
     }
-     match /procurementRequests {
-       allow list: if isAuth();
-    }
 
     // Recurring Items
     match /recurringItems/{itemId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
     // Vendors
     match /vendors/{vendorId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
-      allow get, list: if isAuth();
+      allow get: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow get, list: if isAdmin(request.auth.uid);
+      allow get: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
     match /errorLogs/{errorLogId} {
-      allow get, list: if isAdmin(request.auth.uid);
+      allow get: if isAdmin(request.auth.uid);
       allow create: if isAuth();
     }
     
@@ -195,5 +234,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
