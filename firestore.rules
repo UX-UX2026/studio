@@ -14,19 +14,17 @@ service cloud.firestore {
     function isOwner(userId) {
       return isAuth() && request.auth.uid == userId;
     }
+    
+    // Centralized function to identify the primary administrator.
+    // This removes the dependency on reading the user's role from the database during rule evaluation.
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'heinrich@ubuntux.co.za';
+    }
 
     function getUserData(userId) {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    function isAdmin(userId) {
-      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
-        return false;
-      }
-      let userData = getUserData(userId);
-      return 'role' in userData && userData.role == 'Administrator';
-    }
-
     function isManager(userId) {
       if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
         return false;
@@ -102,99 +100,65 @@ service cloud.firestore {
     // ===================================
     //  COLLECTION-LEVEL RULES
     // ===================================
-    match /users {
-      allow list: if isAuth();
-    }
-    match /roles {
-      allow list: if isAuth();
-    }
-    match /companies {
-      allow list: if isAuth();
-    }
-    match /approvalGroups {
-      allow list: if isAuth();
-    }
-    match /departments {
-      allow list: if isAuth();
-    }
-    match /procurementRequests {
-       allow list: if isAuth();
-    }
-    match /recurringItems {
-      allow list: if isAuth();
-    }
-    match /vendors {
-      allow list: if isAuth();
-    }
-    match /budgetUploads {
-      allow list: if isAuth();
-    }
-    match /budgets {
-      allow list: if isAuth();
-    }
-    match /auditLogs {
-      allow list: if isAdmin(request.auth.uid);
-    }
-    match /errorLogs {
-      allow list: if isAdmin(request.auth.uid);
-    }
+    match /users { allow list: if isAuth(); }
+    match /roles { allow list: if isAuth(); }
+    match /companies { allow list: if isAuth(); }
+    match /approvalGroups { allow list: if isAuth(); }
+    match /departments { allow list: if isAuth(); }
+    match /procurementRequests { allow list: if isAuth(); }
+    match /recurringItems { allow list: if isAuth(); }
+    match /vendors { allow list: if isAuth(); }
+    match /budgetUploads { allow list: if isAuth(); }
+    match /budgets { allow list: if isAuth(); }
+    match /auditLogs { allow list: if isSuperAdmin(); }
+    match /errorLogs { allow list: if isSuperAdmin(); }
 
     // ===================================
     //  DOCUMENT-LEVEL RULES
     // ===================================
     
-    // User Profiles
     match /users/{userId} {
       allow get: if isAuth();
       
-      // Update rules for User Profiles:
-      // 1. The Super Admin (by email) can update any profile. This breaks the bootstrap deadlock.
-      // 2. An Admin (by role in DB) can update any profile. This is for other admins.
-      // 3. A user can update their own profile, but cannot change protected fields.
-      allow update: if (isAuth() && request.auth.token.email == 'heinrich@ubuntux.co.za')
-                     || isAdmin(request.auth.uid)
-                     || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'department', 'departmentId', 'status', 'reportingDepartments']));
+      // NEW, SIMPLIFIED UPDATE RULE
+      // - The Super Admin can update any field on any user. This breaks the deadlock for initial role assignment.
+      // - A regular user can update only non-protected fields on their own profile.
+      allow update: if isSuperAdmin() || 
+                     (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'department', 'departmentId', 'status', 'reportingDepartments']));
 
-      allow create: if isAuth(); // Allows admins to create users, and users to be created on first sign-in
-      allow delete: if (isAuth() && request.auth.token.email == 'heinrich@ubuntux.co.za') || isAdmin(request.auth.uid);
+      allow create: if isAuth();
+      allow delete: if isSuperAdmin();
     }
 
-    // Roles
     match /roles/{roleId} {
       allow get: if isAuth();
-      // Allow any authenticated user to create one of the default roles if it doesn't exist. This is for seeding.
       allow create: if isAuth() && request.resource.data.name in ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'];
-      allow update, delete: if isAdmin(request.auth.uid);
+      allow update, delete: if isSuperAdmin();
     }
     
-    // Companies
     match /companies/{companyId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isSuperAdmin();
     }
     
-    // Approval Groups
     match /approvalGroups/{groupId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isSuperAdmin();
     }
 
-    // App Metadata
     match /app/metadata {
       allow read: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isSuperAdmin();
     }
     
-    // Departments
     match /departments/{departmentId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow write: if isSuperAdmin();
     }
 
-    // Procurement Requests have complex rules
     match /procurementRequests/{procurementRequestId} {
       allow get: if isAuth() && (
-                   isAdmin(request.auth.uid)
+                   isSuperAdmin()
                    || isProcurementOfficer(request.auth.uid)
                    || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
                    || resource.data.submittedById == request.auth.uid
@@ -204,7 +168,7 @@ service cloud.firestore {
       allow create: if isAuth() && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       allow update: if
-        isAdmin(request.auth.uid)
+        isSuperAdmin()
         || (resource.data.submittedById == request.auth.uid &&
             (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
         || isAllowedToApprove(request.auth.uid, resource.data)
@@ -215,39 +179,35 @@ service cloud.firestore {
         || (isProcurementOfficer(request.auth.uid) &&
             (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
 
-      allow delete: if isAdmin(request.auth.uid);
+      allow delete: if isSuperAdmin();
     }
 
-    // Recurring Items
     match /recurringItems/{itemId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
     }
 
-    // Vendors
     match /vendors/{vendorId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
     }
     
-    // Budget Data
     match /budgetUploads/{uploadId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
     }
     match /budgets/{budgetId} {
       allow get: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
     }
 
-    // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow get: if isAdmin(request.auth.uid);
+      allow get: if isSuperAdmin();
       allow create: if isAuth();
     }
     
     match /errorLogs/{errorLogId} {
-      allow get: if isAdmin(request.auth.uid);
+      allow get: if isSuperAdmin();
       allow create: if isAuth();
     }
     
