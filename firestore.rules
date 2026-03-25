@@ -119,13 +119,13 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAuth();
       // Only the Super Admin can create, update, or delete user profiles.
-      allow create, update, delete: if isSuperAdmin();
+      allow write: if isSuperAdmin();
     }
 
     match /roles/{roleId} {
       allow get: if isAuth();
-      allow create: if isAuth() && request.resource.data.name in ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'];
-      allow update, delete: if isSuperAdmin();
+      // Only the super admin can create, update, or delete roles.
+      allow write: if isSuperAdmin();
     }
     
     match /companies/{companyId} {

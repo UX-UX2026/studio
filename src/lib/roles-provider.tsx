@@ -1,9 +1,9 @@
-
 'use client';
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
 import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { useAuthentication } from '@/context/authentication-provider';
 
 export type Role = {
   id: string;
@@ -67,6 +67,7 @@ const defaultRolesWithPermissions: Omit<Role, 'id'>[] = [
 
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
+  const { user } = useAuthentication(); // Get the authenticated user
   const rolesCollection = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'roles'), orderBy('name'));
@@ -75,7 +76,8 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   const { data: roles, loading, error } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {
-    if (loading || !firestore || error) {
+    // Only the designated super admin can seed the default roles.
+    if (loading || !firestore || error || !user || user.email !== 'heinrich@ubuntux.co.za') {
       if (error) {
         console.error("Error loading roles, cannot seed default roles:", error);
       }
@@ -90,8 +92,10 @@ export function RolesProvider({ children }: { children: ReactNode }) {
             defaultRole => !existingRoleNames.includes(defaultRole.name)
           );
 
-          for (const roleData of rolesToCreate) {
-            await addDoc(collection(firestore, 'roles'), roleData);
+          if (rolesToCreate.length > 0) {
+            for (const roleData of rolesToCreate) {
+              await addDoc(collection(firestore, 'roles'), roleData);
+            }
           }
         } catch (seedError) {
             console.error("Error seeding roles:", seedError);
@@ -99,7 +103,7 @@ export function RolesProvider({ children }: { children: ReactNode }) {
       };
       seedRoles();
     }
-  }, [roles, loading, firestore, error]);
+  }, [roles, loading, firestore, error, user]); // Add user to dependency array
 
   const addRole = async (roleData: { name: string, permissions?: string[] }) => {
     if (!firestore) throw new Error("Firestore not available");
