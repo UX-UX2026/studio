@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
@@ -20,6 +21,50 @@ interface RolesContextValue {
 
 const RolesContext = createContext<RolesContextValue | undefined>(undefined);
 
+const defaultRolesWithPermissions: Omit<Role, 'id'>[] = [
+    {
+        name: 'Administrator',
+        permissions: [
+            'dashboard:view', 'procurement:submit', 'procurement:summary', 'procurement:recurring',
+            'approvals:view', 'approvals:action', 'fulfillment:view', 'fulfillment:manage',
+            'reports:view', 'vendors:manage', 'help:view', 'settings:general', 'settings:users',
+            'settings:departments', 'settings:budget', 'settings:roles', 'settings:workflow',
+            'settings:procurement-periods', 'settings:integrations', 'settings:email',
+            'settings:auditlog', 'settings:errorlog', 'settings:data'
+        ]
+    },
+    {
+        name: 'Manager',
+        permissions: [
+            'dashboard:view', 'procurement:submit', 'procurement:summary', 'procurement:recurring',
+            'approvals:view', 'approvals:action', 'reports:view', 'help:view'
+        ]
+    },
+    {
+        name: 'Executive',
+        permissions: [
+            'dashboard:view', 'procurement:summary', 'approvals:view', 'approvals:action',
+            'reports:view', 'help:view'
+        ]
+    },
+    {
+        name: 'Procurement Officer',
+        permissions: [
+            'dashboard:view', 'procurement:summary', 'procurement:recurring', 'approvals:view',
+            'fulfillment:view', 'fulfillment:manage', 'reports:view', 'vendors:manage',
+            'settings:budget', 'help:view'
+        ]
+    },
+    {
+        name: 'Procurement Assistant',
+        permissions: ['dashboard:view', 'fulfillment:view', 'fulfillment:manage', 'help:view']
+    },
+    {
+        name: 'Requester',
+        permissions: ['dashboard:view', 'procurement:submit', 'help:view']
+    }
+];
+
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
   const rolesCollection = useMemo(() => {
@@ -39,21 +84,14 @@ export function RolesProvider({ children }: { children: ReactNode }) {
 
     if (roles) {
       const seedRoles = async () => {
-        const defaultRoles = [
-          'Administrator', 
-          'Manager', 
-          'Procurement Officer', 
-          'Executive', 
-          'Requester', 
-          'Procurement Assistant'
-        ];
-        
         try {
           const existingRoleNames = roles.map(r => r.name);
-          const rolesToCreate = defaultRoles.filter(defaultRole => !existingRoleNames.includes(defaultRole));
+          const rolesToCreate = defaultRolesWithPermissions.filter(
+            defaultRole => !existingRoleNames.includes(defaultRole.name)
+          );
 
-          for (const roleName of rolesToCreate) {
-            await addDoc(collection(firestore, 'roles'), { name: roleName, permissions: [] });
+          for (const roleData of rolesToCreate) {
+            await addDoc(collection(firestore, 'roles'), roleData);
           }
         } catch (seedError) {
             console.error("Error seeding roles:", seedError);

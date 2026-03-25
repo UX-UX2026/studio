@@ -53,6 +53,7 @@ const allPermissions = [
     { id: 'settings:email', label: 'Manage Email & Notifications' },
     { id: 'settings:auditlog', label: 'View Audit Log' },
     { id: 'settings:errorlog', label: 'View Error Log' },
+    { id: 'settings:data', label: 'Manage Data (Backup/Restore)' },
 ];
 
 

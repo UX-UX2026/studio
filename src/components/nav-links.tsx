@@ -72,7 +72,11 @@ const allLinks = [
   { 
     label: 'Settings', 
     icon: Settings, 
-    permissions: ['settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 'settings:budget', 'settings:auditlog', 'settings:errorlog', 'settings:procurement-periods', 'settings:data', 'settings:email', 'settings:integrations'],
+    permissions: [
+        'settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 
+        'settings:budget', 'settings:auditlog', 'settings:errorlog', 'settings:procurement-periods', 
+        'settings:data', 'settings:email', 'settings:integrations', 'settings:users'
+    ],
     subLinks: [
         { href: '/dashboard/settings', label: 'General', icon: Settings, permission: 'settings:general', iconClass: "text-gray-500" },
         { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow', iconClass: "text-blue-500" },
