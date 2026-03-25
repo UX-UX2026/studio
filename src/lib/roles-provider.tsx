@@ -3,7 +3,7 @@
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy, getDocs, limit } from 'firebase/firestore';
 import { useAuthentication } from '@/context/authentication-provider';
 
 export type Role = {
@@ -78,34 +78,39 @@ export function RolesProvider({ children }: { children: ReactNode }) {
   const { data: roles, loading, error } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {
-    // Only the designated super admin can seed the default roles.
-    if (loading || !firestore || error || !user || user.email !== 'heinrich@ubuntux.co.za') {
-      if (error) {
-        console.error("Error loading roles, cannot seed default roles:", error);
-      }
+    // This effect is ONLY for seeding roles and should only run once for the Super Admin.
+    if (!firestore || !user || user.email !== 'heinrich@ubuntux.co.za') {
       return;
     }
 
-    if (roles) {
-      const seedRoles = async () => {
-        try {
-          const existingRoleNames = roles.map(r => r.name);
-          const rolesToCreate = defaultRolesWithPermissions.filter(
-            defaultRole => !existingRoleNames.includes(defaultRole.name)
-          );
-
-          if (rolesToCreate.length > 0) {
-            for (const roleData of rolesToCreate) {
-              await addDoc(collection(firestore, 'roles'), roleData);
-            }
+    const seedRoles = async () => {
+      try {
+        const rolesQuery = query(collection(firestore, 'roles'), limit(1));
+        const snapshot = await getDocs(rolesQuery);
+        
+        if (snapshot.empty) {
+          console.log("Roles collection is empty. Seeding default roles...");
+          for (const roleData of defaultRolesWithPermissions) {
+            await addDoc(collection(firestore, 'roles'), roleData);
           }
-        } catch (seedError) {
-            console.error("Error seeding roles:", seedError);
+          console.log("Default roles seeded successfully.");
         }
-      };
+      } catch (e) {
+        console.error("Error checking or seeding roles:", e);
+        // Not showing a toast here to avoid potential noise on startup if there's a
+        // temporary network issue or rules are still propagating.
+      }
+    };
+
+    // A short delay can help prevent race conditions where the check runs
+    // before Firestore rules have fully propagated after a user logs in.
+    const timer = setTimeout(() => {
       seedRoles();
-    }
-  }, [roles, loading, firestore, error, user]);
+    }, 1500);
+
+    return () => clearTimeout(timer);
+    
+  }, [firestore, user]);
 
   const addRole = async (roleData: { name: string, permissions?: string[] }) => {
     if (!firestore) throw new Error("Firestore not available");
