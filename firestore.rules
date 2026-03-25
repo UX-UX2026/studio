@@ -128,17 +128,18 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isAuth();
       
-      // On creation, a user must be creating their own profile.
-      // The role must be 'Administrator' if it's the super admin, otherwise it must be 'Requester'.
       allow create: if isOwner(userId) &&
           ( (isSuperAdmin() && request.resource.data.role == 'Administrator') ||
             (!isSuperAdmin() && request.resource.data.role == 'Requester') );
 
-      // Admins/SuperAdmin can update any profile.
-      // A regular user can update their own profile, but cannot change their own 'role'.
-      allow update: if isSuperAdmin() || isAdmin(request.auth.uid) || (isOwner(userId) && !('role' in request.resource.data));
+      // Allow update if:
+      // 1. User is an Admin (can edit anyone).
+      // 2. User is the Super Admin AND is editing their own profile (to fix their role).
+      // 3. User is editing their own profile BUT is NOT changing their role.
+      allow update: if isAdmin(request.auth.uid) || 
+                       (isOwner(userId) && isSuperAdmin()) ||
+                       (isOwner(userId) && !isSuperAdmin() && request.resource.data.role == resource.data.role);
 
-      // Only SuperAdmin or Admins can delete users.
       allow delete: if isSuperAdmin() || isAdmin(request.auth.uid);
     }
 
