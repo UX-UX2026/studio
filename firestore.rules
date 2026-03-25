@@ -148,15 +148,15 @@ service cloud.firestore {
       allow get: if isAuth();
       
       // Update rules for User Profiles:
-      // 1. An Admin can update any field on any profile.
-      // 2. A user can update their own profile, BUT cannot change protected fields (role, status, department).
-      // 3. A special one-time rule allows the designated admin email to set their OWN role to Administrator.
-      allow update: if isAdmin(request.auth.uid)
-                     || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'department', 'departmentId', 'status', 'reportingDepartments']))
-                     || (isOwner(userId) && request.auth.token.email == 'heinrich@ubuntux.co.za' && request.resource.data.role == 'Administrator');
+      // 1. The Super Admin (by email) can update any profile. This breaks the bootstrap deadlock.
+      // 2. An Admin (by role in DB) can update any profile. This is for other admins.
+      // 3. A user can update their own profile, but cannot change protected fields.
+      allow update: if (isAuth() && request.auth.token.email == 'heinrich@ubuntux.co.za')
+                     || isAdmin(request.auth.uid)
+                     || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'department', 'departmentId', 'status', 'reportingDepartments']));
 
       allow create: if isAuth(); // Allows admins to create users, and users to be created on first sign-in
-      allow delete: if isAdmin(request.auth.uid);
+      allow delete: if (isAuth() && request.auth.token.email == 'heinrich@ubuntux.co.za') || isAdmin(request.auth.uid);
     }
 
     // Roles
