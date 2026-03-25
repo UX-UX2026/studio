@@ -32,7 +32,7 @@ service cloud.firestore {
     }
 
     function isProcurementOfficer(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
+      return isAuth() && userExists(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
@@ -99,12 +99,14 @@ service cloud.firestore {
 
       // UPDATING a profile has two conditions:
       // 1. An Administrator can update any field on any profile.
-      // 2. A user can update their own profile, but CANNOT change their own role, department, or status.
+      // 2. A user can update their own profile, but CANNOT change their own role, department, or status (except to activate).
       allow update: if (isAdmin(request.auth.uid)) ||
                      (isOwner(userId) &&
                       request.resource.data.role == resource.data.role &&
                       request.resource.data.departmentId == resource.data.departmentId &&
-                      request.resource.data.status == resource.data.status);
+                      (request.resource.data.status == resource.data.status || 
+                       (resource.data.status == 'Invited' && request.resource.data.status == 'Active'))
+                     );
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
@@ -200,5 +202,3 @@ service cloud.firestore {
     }
   }
 }
-
-    
