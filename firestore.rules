@@ -15,7 +15,7 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == userId;
     }
     
-    // Centralized function to identify the primary administrator.
+    // Centralized function to identify the primary administrator by email.
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.email == 'heinrich@ubuntux.co.za';
     }
@@ -24,6 +24,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
+    // Checks if a user has the 'Administrator' role stored in their profile.
+    function isAdmin(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Administrator';
+    }
+
     function isManager(userId) {
       if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
         return false;
@@ -118,12 +127,23 @@ service cloud.firestore {
     
     match /users/{userId} {
       allow get: if isAuth();
-      // Only the Super Admin can create, update, or delete user profiles.
-      allow write: if isSuperAdmin();
+      
+      // On creation, a user must be creating their own profile.
+      // The role must be 'Administrator' if it's the super admin, otherwise it must be 'Requester'.
+      allow create: if isOwner(userId) &&
+          ( (isSuperAdmin() && request.resource.data.role == 'Administrator') ||
+            (!isSuperAdmin() && request.resource.data.role == 'Requester') );
+
+      // Admins/SuperAdmin can update any profile.
+      // A regular user can update their own profile, but cannot change their own 'role'.
+      allow update: if isSuperAdmin() || isAdmin(request.auth.uid) || (isOwner(userId) && !('role' in request.resource.data));
+
+      // Only SuperAdmin or Admins can delete users.
+      allow delete: if isSuperAdmin() || isAdmin(request.auth.uid);
     }
 
     match /roles/{roleId} {
-      allow get: if isAuth();
+      allow read: if isAuth();
       // Only the super admin can create, update, or delete roles.
       allow write: if isSuperAdmin();
     }
