@@ -32,7 +32,7 @@ service cloud.firestore {
     }
 
     function isProcurementOfficer(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
+      return isAuth() && userExists(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
     }
     
     function isRequester(userId) {
@@ -87,32 +87,37 @@ service cloud.firestore {
     
     // User Profiles
     match /users/{userId} {
-      // Admins can list all users.
-      allow list: if isAdmin(request.auth.uid);
-      // Any authenticated user can get any other user's profile.
       allow get: if isAuth();
-      // An admin can create a user, OR a user can create their own profile.
       allow create: if isAdmin(request.auth.uid) || isOwner(userId);
-      // An admin can update any profile. A user can update their own.
       allow update: if isAdmin(request.auth.uid) || isOwner(userId);
-      // Only admins can delete users.
       allow delete: if isAdmin(request.auth.uid);
+    }
+    match /users {
+      // Allow any authenticated user to list users. This is needed for UI components
+      // like dropdowns that show user names.
+      allow list: if isAuth();
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
     match /roles/{roleId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid);
+    }
+    match /roles {
+       allow list: if isAuth();
     }
     
     match /companies/{companyId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid);
+    }
+     match /companies {
+       allow list: if isAuth();
     }
     
     match /approvalGroups/{groupId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid);
+    }
+    match /approvalGroups {
+       allow list: if isAuth();
     }
 
     match /app/metadata {
@@ -121,8 +126,10 @@ service cloud.firestore {
     }
     
     match /departments/{departmentId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid);
+    }
+     match /departments {
+       allow list: if isAuth();
     }
 
     // Procurement Requests have complex rules
@@ -135,8 +142,6 @@ service cloud.firestore {
                    || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getDepartmentIdForUser(request.auth.uid))
                  );
     
-      allow list: if isAuth();
-
       allow create: if isAuth() && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
 
       allow update: if
@@ -153,38 +158,54 @@ service cloud.firestore {
 
       allow delete: if isAdmin(request.auth.uid);
     }
+    match /procurementRequests {
+        allow list: if isAuth();
+    }
 
     // Recurring Items
     match /recurringItems/{itemId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+    }
+     match /recurringItems {
+       allow list: if isAuth();
     }
 
     // Vendors
     match /vendors/{vendorId} {
-      allow get, list: if isAuth();
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+    match /vendors {
+       allow list: if isAuth();
     }
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
+     match /budgetUploads {
+      allow list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+    
     match /budgets/{budgetId} {
-      allow get, list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
-      allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+      allow get, write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
+    }
+     match /budgets {
+      allow list: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
     match /auditLogs/{logId} {
-      allow get, list: if isAdmin(request.auth.uid);
       allow create: if isAuth();
+    }
+    match /auditLogs {
+      allow get, list: if isAdmin(request.auth.uid);
     }
     
     match /errorLogs/{errorLogId} {
-      allow get, list: if isAdmin(request.auth.uid);
       allow create: if isAuth();
+    }
+    match /errorLogs {
+      allow get, list: if isAdmin(request.auth.uid);
     }
     
     match /_diagnostics/{docId} {

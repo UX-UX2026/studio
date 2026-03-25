@@ -3,7 +3,7 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { type Firestore, getFirestore, initializeFirestore, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
@@ -71,17 +71,24 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
 
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
-        const firestore = getFirestore(app);
         
+        let firestore: Firestore;
         try {
-          await enableIndexedDbPersistence(firestore);
-          console.log("Firestore offline persistence enabled.");
+            firestore = initializeFirestore(app, {
+                cache: persistentLocalCache({})
+            });
+             console.log("Firestore offline persistence enabled via initializeFirestore.");
         } catch (err: any) {
-          if (err.code === 'failed-precondition') {
-            console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
-          } else if (err.code === 'unimplemented') {
-            console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
-          }
+            if (err.code === 'failed-precondition') {
+                console.warn("Firestore persistence failed (likely multiple tabs open). Continuing in online-only mode.");
+                firestore = getFirestore(app);
+            } else if (err.code === 'unimplemented') {
+                console.warn("Persistence is not available in this browser. Continuing in online-only mode.");
+                firestore = getFirestore(app);
+            } else {
+                console.error("Firestore initialization failed:", err);
+                firestore = getFirestore(app);
+            }
         }
         
         setFirebaseServices({ app, auth, firestore });
