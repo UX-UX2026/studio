@@ -88,15 +88,33 @@ export function useUser() {
                         description: "Your user profile has been created.",
                     });
                 } else {
-                    // Profile exists, let's just make sure their status is Active if they were invited.
+                    // Profile exists, check for necessary updates.
                     const existingProfile = docSnap.data();
+                    const updates: Partial<Omit<UserProfile, 'id'>> = {};
+
+                    // If user was invited, activate their account.
                     if (existingProfile.status === 'Invited') {
-                        setDoc(docRef, { status: 'Active' }, { merge: true })
+                        updates.status = 'Active';
+                    }
+
+                    // If this is the designated admin, ensure their role is correct.
+                    if (user.email === 'heinrich@ubuntux.co.za' && existingProfile.role !== 'Administrator') {
+                        updates.role = 'Administrator';
+                    }
+
+                    // If there are updates to be made, apply them.
+                    if (Object.keys(updates).length > 0) {
+                        setDoc(docRef, updates, { merge: true })
+                            .then(() => {
+                                if (updates.role === 'Administrator') {
+                                    toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
+                                }
+                            })
                             .catch(async (serverError: any) => {
                                 const permissionError = new FirestorePermissionError({
                                     path: docRef.path,
                                     operation: 'update',
-                                    requestResourceData: { status: 'Active' },
+                                    requestResourceData: updates,
                                 });
                                 errorEmitter.emit('permission-error', permissionError);
                             });
