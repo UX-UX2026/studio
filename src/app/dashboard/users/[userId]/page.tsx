@@ -111,7 +111,6 @@ export default function UserProfilePage() {
             updateData.delegatedToId = null;
         }
 
-        // Remove the 'id' field before saving to prevent Firestore errors.
         if ('id' in updateData) {
             delete (updateData as { id?: string }).id;
         }
@@ -350,3 +349,5 @@ export default function UserProfilePage() {
                 </Button>
             </div>
         </div>
+    );
+}
