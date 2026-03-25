@@ -1,3 +1,4 @@
+
 'use client';
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
@@ -27,10 +28,11 @@ const defaultRolesWithPermissions: Omit<Role, 'id'>[] = [
         permissions: [
             'dashboard:view', 'procurement:submit', 'procurement:summary', 'procurement:recurring',
             'approvals:view', 'approvals:action', 'fulfillment:view', 'fulfillment:manage',
-            'reports:view', 'vendors:manage', 'help:view', 'settings:general', 'settings:users',
-            'settings:departments', 'settings:budget', 'settings:roles', 'settings:workflow',
-            'settings:procurement-periods', 'settings:integrations', 'settings:email',
-            'settings:auditlog', 'settings:errorlog', 'settings:data'
+            'reports:view', 'vendors:manage', 'help:view',
+            'settings:general', 'settings:users', 'settings:departments', 'settings:roles',
+            'settings:workflow', 'settings:budget', 'settings:procurement-periods',
+            'settings:integrations', 'settings:email', 'settings:auditlog',
+            'settings:errorlog', 'settings:data'
         ]
     },
     {
@@ -67,7 +69,7 @@ const defaultRolesWithPermissions: Omit<Role, 'id'>[] = [
 
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
-  const { user } = useAuthentication(); // Get the authenticated user
+  const { user } = useAuthentication();
   const rolesCollection = useMemo(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'roles'), orderBy('name'));
@@ -103,7 +105,7 @@ export function RolesProvider({ children }: { children: ReactNode }) {
       };
       seedRoles();
     }
-  }, [roles, loading, firestore, error, user]); // Add user to dependency array
+  }, [roles, loading, firestore, error, user]);
 
   const addRole = async (roleData: { name: string, permissions?: string[] }) => {
     if (!firestore) throw new Error("Firestore not available");
