@@ -28,7 +28,7 @@ export function useUser() {
     
     const creationAttempted = useRef(false);
 
-    const isSuperAdmin = user?.email === 'heinrich@ubuntux.co.za';
+    const isSuperAdmin = user?.email === 'heinrich@ubuntux.co.za' || user?.email === 'admin@procurportal.com';
 
     useEffect(() => {
         if (profileError) {
@@ -62,8 +62,8 @@ export function useUser() {
                         displayName: user.displayName || user.email?.split('@')[0] || 'New User',
                         email: user.email!,
                         photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                        role: isSuperAdmin ? 'Administrator' : 'Requester', // Default role
-                        department: isSuperAdmin ? 'Executive' : 'Unassigned',
+                        role: isSuperAdmin ? 'Administrator' : null, // Default role ONLY for super admins
+                        department: 'Unassigned',
                         departmentId: null,
                         companyId: null,
                         companyName: 'Unassigned',
@@ -79,31 +79,24 @@ export function useUser() {
                 } else {
                     // Profile exists, check for necessary updates.
                     const existingProfile = docSnap.data();
-                    const updates: Partial<Omit<UserProfile, 'id'>> = {};
+                    let updates: Partial<Omit<UserProfile, 'id'>> = {};
 
-                    // If user was invited, activate their account AND ensure they have a role.
+                    // If user was invited, activate their account.
                     if (existingProfile.status === 'Invited') {
                         updates.status = 'Active';
-                        // Only set a default role if one isn't already set.
-                        if (!existingProfile.role) {
-                            updates.role = 'Requester';
-                        }
+                        // No longer automatically assign 'Requester' role.
+                        toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
                     }
 
                     // Always ensure the super admin has the administrator role.
                     if (isSuperAdmin && existingProfile.role !== 'Administrator') {
                         updates.role = 'Administrator';
+                         toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
                     }
 
                     // If there are updates to be made, apply them.
                     if (Object.keys(updates).length > 0) {
                         await setDoc(docRef, updates, { merge: true });
-                        if (updates.status === 'Active') {
-                             toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
-                        }
-                        if (updates.role === 'Administrator') {
-                            toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
-                        }
                     }
                 }
             } catch (error) {
@@ -135,5 +128,4 @@ export function useUser() {
         loading: isLoading,
     };
 }
-
     
