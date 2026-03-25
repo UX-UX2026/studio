@@ -15,7 +15,6 @@ service cloud.firestore {
       return isAuth() && request.auth.uid == userId;
     }
     
-    // Centralized function to identify the primary administrator by email.
     function isSuperAdmin() {
       return request.auth != null && request.auth.token.email == 'heinrich@ubuntux.co.za';
     }
@@ -24,7 +23,6 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(userId)).data;
     }
     
-    // Checks if a user has the 'Administrator' role stored in their profile.
     function isAdmin(userId) {
       if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
         return false;
@@ -80,6 +78,7 @@ service cloud.firestore {
         return false;
       }
       let userProfile = getUserData(userId);
+      // An executive with no specific reporting departments is a global executive.
       if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
         return true;
       }
@@ -124,21 +123,26 @@ service cloud.firestore {
     // ===================================
     //  DOCUMENT-LEVEL RULES
     // ===================================
-    
+
     match /users/{userId} {
+      function isChangingRole() {
+        return request.resource.data.role != resource.data.role;
+      }
+      function isTargetAdmin() {
+        return resource.data.role == 'Administrator';
+      }
+
       allow get: if isAuth();
       
-      allow create: if isSuperAdmin() && request.resource.data.role == 'Administrator';
+      // On create, Super Admin must be role 'Administrator', others must be 'Requester'.
+      allow create: if (request.auth.token.email == 'heinrich@ubuntux.co.za' && request.resource.data.role == 'Administrator') ||
+                       (request.auth.token.email != 'heinrich@ubuntux.co.za' && request.resource.data.role == 'Requester');
 
-      // Update rules:
-      // 1. Super Admin can update anything.
-      // 2. An admin can update other users, but cannot change another admin's role.
-      // 3. A user can update their own profile, BUT cannot change their role.
-      allow update: if isSuperAdmin() || 
-                       (isAdmin(request.auth.uid) && resource.data.role != 'Administrator') ||
-                       (isOwner(userId) && request.resource.data.role == resource.data.role);
-
-      allow delete: if isSuperAdmin() || isAdmin(request.auth.uid);
+      // An admin can update a user, but cannot change another admin's role unless they are Super Admin.
+      allow update: if isAdmin(request.auth.uid) && (!isChangingRole() || isSuperAdmin());
+      
+      // An admin can delete a user, but cannot delete another admin unless they are Super Admin.
+      allow delete: if isAdmin(request.auth.uid) && (!isTargetAdmin() || isSuperAdmin());
     }
 
     match /roles/{roleId} {
