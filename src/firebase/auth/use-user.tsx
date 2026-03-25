@@ -79,17 +79,16 @@ export function useUser() {
                     const existingProfile = docSnap.data();
                     const updates: Partial<Omit<UserProfile, 'id'>> = {};
 
-                    // If user was invited, activate their account.
+                    // If user was invited, activate their account AND ensure they have a role.
                     if (existingProfile.status === 'Invited') {
                         updates.status = 'Active';
+                        // Only set a default role if one isn't already set.
+                        if (!existingProfile.role) {
+                            updates.role = 'Requester';
+                        }
                     }
 
-                    // If a user exists but somehow has no role, default them to Requester.
-                    if (!existingProfile.role) {
-                        updates.role = 'Requester';
-                    }
-
-                    // If this is the designated admin, ensure their role is correct.
+                    // Always ensure the super admin has the administrator role.
                     if (isSuperAdmin && existingProfile.role !== 'Administrator') {
                         updates.role = 'Administrator';
                     }
@@ -97,10 +96,11 @@ export function useUser() {
                     // If there are updates to be made, apply them.
                     if (Object.keys(updates).length > 0) {
                         await setDoc(docRef, updates, { merge: true });
+                        if (updates.status === 'Active') {
+                             toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
+                        }
                         if (updates.role === 'Administrator') {
                             toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
-                        } else if (updates.role === 'Requester') {
-                            toast({ title: "Profile Corrected", description: "Your user role has been set to Requester." });
                         }
                     }
                 }
