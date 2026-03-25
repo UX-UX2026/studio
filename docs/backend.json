@@ -239,6 +239,14 @@
           "type": "string",
           "description": "The user's role in the application, which determines their permissions."
         },
+        "companyId": {
+            "type": "string",
+            "description": "The ID of the company this user is associated with."
+        },
+        "companyName": {
+            "type": "string",
+            "description": "The name of the company this user is associated with."
+        },
         "department": {
           "type": "string",
           "description": "The name of the department this user belongs to or manages."
@@ -890,3 +898,5 @@
     }
   }
 }
+
+    

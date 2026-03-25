@@ -4,7 +4,7 @@
 import { useUser, type UserProfile as MainUserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown, History } from "lucide-react";
+import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown, History, Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,11 @@ type Department = {
     name: string;
 };
 
+type Company = {
+    id: string;
+    name: string;
+};
+
 type AuditEvent = {
     id: string;
     action: string;
@@ -51,6 +56,9 @@ export default function UserProfilePage() {
 
     const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+    
+    const companiesQuery = useMemo(() => query(collection(firestore, 'companies'), orderBy('name')), [firestore]);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
 
     const allUsersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
     const { data: allUsers, loading: allUsersLoading } = useCollection<MainUserProfile>(allUsersQuery);
@@ -76,7 +84,7 @@ export default function UserProfilePage() {
         }
     }, [userProfile]);
 
-    const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading || auditLogsLoading;
+    const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading || auditLogsLoading || companiesLoading;
 
     const handleFormChange = (field: keyof MainUserProfile, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
@@ -102,6 +110,14 @@ export default function UserProfilePage() {
         } else {
             updateData.department = 'Unassigned';
             updateData.departmentId = null;
+        }
+        
+        const selectedCompany = companies?.find(c => c.id === updateData.companyId);
+        if (selectedCompany) {
+            updateData.companyName = selectedCompany.name;
+        } else {
+            updateData.companyName = 'Unassigned';
+            updateData.companyId = null;
         }
 
         const delegatedUser = allUsers?.find(u => u.id === updateData.delegatedToId);
@@ -220,13 +236,23 @@ export default function UserProfilePage() {
                             <CardTitle className="flex items-center gap-2"><Building className="h-5 w-5 text-primary" />Organizational Role</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-4">
+                            <div className="space-y-1.5">
+                                <Label htmlFor="role">Role</Label>
+                                <Select value={formData.role || ''} onValueChange={v => handleFormChange('role', v)}>
+                                    <SelectTrigger id="role"><SelectValue placeholder="No role assigned" /></SelectTrigger>
+                                    <SelectContent>
+                                        {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="role">Role</Label>
-                                    <Select value={formData.role || ''} onValueChange={v => handleFormChange('role', v)}>
-                                        <SelectTrigger id="role"><SelectValue placeholder="No role assigned" /></SelectTrigger>
+                                    <Label htmlFor="company">Company</Label>
+                                    <Select value={formData.companyId || 'unassigned'} onValueChange={v => handleFormChange('companyId', v === 'unassigned' ? null : v)}>
+                                        <SelectTrigger id="company"><SelectValue placeholder="Unassigned" /></SelectTrigger>
                                         <SelectContent>
-                                            {roles.map(r => r && <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}
+                                            <SelectItem value="unassigned">Unassigned</SelectItem>
+                                            {companies?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>
@@ -364,3 +390,5 @@ export default function UserProfilePage() {
         </div>
     );
 }
+
+    

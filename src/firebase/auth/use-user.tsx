@@ -65,6 +65,8 @@ export function useUser() {
                         role: isSuperAdmin ? 'Administrator' : 'Requester', // Default role
                         department: isSuperAdmin ? 'Executive' : 'Unassigned',
                         departmentId: null,
+                        companyId: null,
+                        companyName: 'Unassigned',
                         status: 'Active',
                     };
                     
@@ -127,7 +129,11 @@ export function useUser() {
         role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
+        companyId: profile?.companyId || null,
+        companyName: profile?.companyName || null,
         status: profile?.status || null,
         loading: isLoading,
     };
 }
+
+    

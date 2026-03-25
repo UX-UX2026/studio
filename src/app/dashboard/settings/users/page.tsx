@@ -38,6 +38,15 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { type UserProfile } from "@/context/authentication-provider";
 
+type Department = {
+    id: string;
+    name: string;
+};
+
+type Company = {
+    id: string;
+    name: string;
+};
 
 export default function UsersPage() {
     const { user: adminUser, role: adminRole, loading: userLoading } = useUser();
@@ -50,6 +59,9 @@ export default function UsersPage() {
     const departmentsQuery = useMemo(() => query(collection(firestore, 'departments'), orderBy('name')), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
+    const companiesQuery = useMemo(() => query(collection(firestore, 'companies'), orderBy('name')), [firestore]);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
+
     const { roles, loading: rolesLoading } = useRoles();
 
     const [isAddUserDialogOpen, setIsAddUserDialogOpen] = useState(false);
@@ -59,6 +71,7 @@ export default function UsersPage() {
     const [email, setEmail] = useState('');
     const [newUserRole, setNewUserRole] = useState('');
     const [newUserDepartment, setNewUserDepartment] = useState('');
+    const [newUserCompany, setNewUserCompany] = useState('');
     
     const { toast } = useToast();
     
@@ -69,10 +82,11 @@ export default function UsersPage() {
             setEmail('');
             setNewUserRole('');
             setNewUserDepartment('');
+            setNewUserCompany('');
         }
     }, [isAddUserDialogOpen]);
 
-    const loading = userLoading || usersLoading || deptsLoading || rolesLoading;
+    const loading = userLoading || usersLoading || deptsLoading || rolesLoading || companiesLoading;
     
     useEffect(() => {
         if (userLoading) return;
@@ -110,6 +124,12 @@ export default function UsersPage() {
             departmentId: value === 'unassigned' ? null : (selectedDept?.id || ''),
             department: value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned'),
           };
+        } else if (field === 'companyId') {
+            const selectedCompany = companies?.find(c => c.id === value);
+            updateData = {
+                companyId: value === 'unassigned' ? null : (selectedCompany?.id || ''),
+                companyName: value === 'unassigned' ? 'Unassigned' : (selectedCompany?.name || 'Unassigned'),
+            };
         } else if (field === 'delegatedToId') {
           const delegate = users?.find(u => u.id === value);
           updateData = {
@@ -177,6 +197,7 @@ export default function UsersPage() {
         }
 
         const selectedDept = departments?.find(d => d.name === newUserDepartment);
+        const selectedCompany = companies?.find(c => c.name === newUserCompany);
         const action = 'user.create';
 
         const usersRef = collection(firestore, 'users');
@@ -192,6 +213,8 @@ export default function UsersPage() {
                 role: newUserRole || 'Requester',
                 department: newUserDepartment || 'Unassigned',
                 departmentId: selectedDept?.id || null,
+                companyId: selectedCompany?.id || null,
+                companyName: selectedCompany?.name || 'Unassigned',
                 photoURL: `https://i.pravatar.cc/150?u=${email}`,
                 status: 'Invited' as const,
             };
@@ -253,6 +276,7 @@ export default function UsersPage() {
                                     <TableHead className="min-w-[250px]">User</TableHead>
                                     <TableHead className="w-[180px]">Role</TableHead>
                                     <TableHead className="w-[150px]">Status</TableHead>
+                                    <TableHead className="w-[200px]">Company</TableHead>
                                     <TableHead className="w-[200px]">Department</TableHead>
                                     <TableHead className="w-[220px]">Reporting Depts</TableHead>
                                     <TableHead className="w-[200px] hidden md:table-cell">Delegated To</TableHead>
@@ -288,6 +312,15 @@ export default function UsersPage() {
                                                 <SelectContent>
                                                     <SelectItem value="Active">Active</SelectItem>
                                                     <SelectItem value="Invited">Invited</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select value={u.companyId || 'unassigned'} onValueChange={(value) => handleUpdateUser(u.id, 'companyId', value)}>
+                                                <SelectTrigger><SelectValue placeholder="Unassigned"/></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="unassigned">Unassigned</SelectItem>
+                                                    {companies?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                                                 </SelectContent>
                                             </Select>
                                         </TableCell>
@@ -381,6 +414,18 @@ export default function UsersPage() {
                             </Select>
                         </div>
                         <div className="grid w-full items-center gap-1.5">
+                            <Label htmlFor="company-add">Company</Label>
+                            <Select value={newUserCompany} onValueChange={setNewUserCompany}>
+                                <SelectTrigger id="company-add">
+                                    <SelectValue placeholder="Assign a company" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="Unassigned">Unassigned</SelectItem>
+                                    {companies?.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid w-full items-center gap-1.5">
                             <Label htmlFor="department-add">Primary Department</Label>
                             <Select value={newUserDepartment} onValueChange={setNewUserDepartment}>
                                 <SelectTrigger id="department-add">
@@ -407,8 +452,4 @@ export default function UsersPage() {
     );
 }
 
-// Define Department type locally if not imported from elsewhere
-type Department = {
-    id: string;
-    name: string;
-};
+    
