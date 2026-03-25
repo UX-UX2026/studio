@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Shield, Trash2, Plus, ChevronDown, Edit } from "lucide-react";
+import { Loader, Shield, Trash2, Plus, ChevronDown, Edit, Briefcase } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,6 +37,7 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { type UserProfile } from "@/context/authentication-provider";
+import { Badge } from "@/components/ui/badge";
 
 type Department = {
     id: string;
@@ -71,7 +72,7 @@ export default function UsersPage() {
     const [email, setEmail] = useState('');
     const [newUserRole, setNewUserRole] = useState('');
     const [newUserDepartment, setNewUserDepartment] = useState('');
-    const [newUserCompany, setNewUserCompany] = useState('');
+    const [newUserCompanyIds, setNewUserCompanyIds] = useState<string[]>([]);
     
     const { toast } = useToast();
     
@@ -82,7 +83,7 @@ export default function UsersPage() {
             setEmail('');
             setNewUserRole('');
             setNewUserDepartment('');
-            setNewUserCompany('');
+            setNewUserCompanyIds([]);
         }
     }, [isAddUserDialogOpen]);
 
@@ -124,12 +125,8 @@ export default function UsersPage() {
             departmentId: value === 'unassigned' ? null : (selectedDept?.id || ''),
             department: value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned'),
           };
-        } else if (field === 'companyId') {
-            const selectedCompany = companies?.find(c => c.id === value);
-            updateData = {
-                companyId: value === 'unassigned' ? null : (selectedCompany?.id || ''),
-                companyName: value === 'unassigned' ? 'Unassigned' : (selectedCompany?.name || 'Unassigned'),
-            };
+        } else if (field === 'companyIds') {
+            updateData = { companyIds: value };
         } else if (field === 'delegatedToId') {
           const delegate = users?.find(u => u.id === value);
           updateData = {
@@ -184,6 +181,17 @@ export default function UsersPage() {
         handleUpdateUser(userId, 'reportingDepartments', newDepts);
     };
 
+    const handleCompanyChange = (userId: string, companyId: string, isChecked: boolean) => {
+        const userToUpdate = users?.find(u => u.id === userId);
+        if (!userToUpdate) return;
+    
+        const currentIds = userToUpdate.companyIds || [];
+        const newIds = isChecked
+            ? [...new Set([...currentIds, companyId])]
+            : currentIds.filter(id => id !== companyId);
+    
+        handleUpdateUser(userId, 'companyIds', newIds);
+    };
     
     const handleAddUser = () => {
         if (!adminUser || !firestore) {
@@ -197,7 +205,6 @@ export default function UsersPage() {
         }
 
         const selectedDept = departments?.find(d => d.name === newUserDepartment);
-        const selectedCompany = companies?.find(c => c.name === newUserCompany);
         const action = 'user.create';
 
         const usersRef = collection(firestore, 'users');
@@ -213,8 +220,7 @@ export default function UsersPage() {
                 role: newUserRole || 'Requester',
                 department: newUserDepartment || 'Unassigned',
                 departmentId: selectedDept?.id || null,
-                companyId: selectedCompany?.id || null,
-                companyName: selectedCompany?.name || 'Unassigned',
+                companyIds: newUserCompanyIds,
                 photoURL: `https://i.pravatar.cc/150?u=${email}`,
                 status: 'Invited' as const,
             };
@@ -316,13 +322,27 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                         <TableCell>
-                                            <Select value={u.companyId || 'unassigned'} onValueChange={(value) => handleUpdateUser(u.id, 'companyId', value)}>
-                                                <SelectTrigger><SelectValue placeholder="Unassigned"/></SelectTrigger>
-                                                <SelectContent>
-                                                    <SelectItem value="unassigned">Unassigned</SelectItem>
-                                                    {companies?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button variant="outline" className="w-full justify-between">
+                                                        <span className="truncate">{u.companyIds?.length || 0} selected</span>
+                                                        <ChevronDown className="h-4 w-4 opacity-50" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent className="w-56">
+                                                    <DropdownMenuLabel>Associated Companies</DropdownMenuLabel>
+                                                    <DropdownMenuSeparator />
+                                                    {companies?.map(company => (
+                                                        <DropdownMenuCheckboxItem
+                                                            key={company.id}
+                                                            checked={u.companyIds?.includes(company.id)}
+                                                            onCheckedChange={(checked) => handleCompanyChange(u.id, company.id, !!checked)}
+                                                        >
+                                                            {company.name}
+                                                        </DropdownMenuCheckboxItem>
+                                                    ))}
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </TableCell>
                                         <TableCell>
                                             <Select value={u.departmentId || 'unassigned'} onValueChange={(value) => handleUpdateUser(u.id, 'departmentId', value)}>
@@ -338,7 +358,7 @@ export default function UsersPage() {
                                                 <DropdownMenuTrigger asChild>
                                                     <Button variant="outline" className="w-full justify-between">
                                                         <span>{u.reportingDepartments?.length || 0} departments</span>
-                                                        <ChevronDown className="h-4 w-4" />
+                                                        <ChevronDown className="h-4 w-4 opacity-50" />
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent className="w-56">
@@ -414,16 +434,30 @@ export default function UsersPage() {
                             </Select>
                         </div>
                         <div className="grid w-full items-center gap-1.5">
-                            <Label htmlFor="company-add">Company</Label>
-                            <Select value={newUserCompany} onValueChange={setNewUserCompany}>
-                                <SelectTrigger id="company-add">
-                                    <SelectValue placeholder="Assign a company" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="Unassigned">Unassigned</SelectItem>
-                                    {companies?.map(c => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                            <Label>Companies</Label>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="w-full justify-between">
+                                        <span>{newUserCompanyIds.length} selected</span>
+                                        <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-full">
+                                    <DropdownMenuLabel>Associated Companies</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {companies?.map(company => (
+                                        <DropdownMenuCheckboxItem
+                                            key={company.id}
+                                            checked={newUserCompanyIds.includes(company.id)}
+                                            onCheckedChange={(checked) => {
+                                                setNewUserCompanyIds(prev => checked ? [...prev, company.id] : prev.filter(id => id !== company.id));
+                                            }}
+                                        >
+                                            {company.name}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </div>
                         <div className="grid w-full items-center gap-1.5">
                             <Label htmlFor="department-add">Primary Department</Label>
@@ -451,5 +485,3 @@ export default function UsersPage() {
         </div>
     );
 }
-
-    

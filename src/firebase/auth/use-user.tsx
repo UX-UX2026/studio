@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useAuthentication, UserProfile } from '@/context/authentication-provider';
@@ -7,6 +6,7 @@ import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { signOut } from 'firebase/auth';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -16,7 +16,7 @@ export type UserStatus = 'Active' | 'Invited' | null;
  * It uses a realtime listener for the user's profile and creates it if it doesn't exist.
  */
 export function useUser() {
-    const { user, isLoading: authIsLoading, firestore } = useAuthentication();
+    const { user, isLoading: authIsLoading, firestore, auth } = useAuthentication();
     const { toast } = useToast();
     
     const userDocRef = useMemo(() => {
@@ -41,13 +41,10 @@ export function useUser() {
     }, [profileError, toast]);
     
     useEffect(() => {
-        // This effect's job is to ensure a user profile document exists in Firestore.
-        // It runs a one-time check after the user is authenticated.
         if (authIsLoading || !user || !firestore || creationAttempted.current) {
             return;
         }
 
-        // Mark that we're performing the check to prevent re-running.
         creationAttempted.current = true;
 
         const checkAndCreateProfile = async () => {
@@ -55,46 +52,49 @@ export function useUser() {
             try {
                 const docSnap = await getDoc(docRef);
                 if (!docSnap.exists()) {
-                    // The document does not exist, so we create it.
-                    console.log("No profile found for this user. Creating a new one...");
-                    
-                    const newProfileData: Omit<UserProfile, 'id'> = {
-                        displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-                        email: user.email!,
-                        photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                        role: isSuperAdmin ? 'Administrator' : null, // Default role ONLY for super admins
-                        department: 'Unassigned',
-                        departmentId: null,
-                        companyId: null,
-                        companyName: 'Unassigned',
-                        status: 'Active',
-                    };
-                    
-                    await setDoc(docRef, newProfileData);
-
-                    toast({
-                        title: "Welcome!",
-                        description: "Your user profile has been created.",
-                    });
+                    if (isSuperAdmin) {
+                        console.log("Super admin profile not found. Creating a new one...");
+                        const newProfileData: Omit<UserProfile, 'id'> = {
+                            displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+                            email: user.email!,
+                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                            role: 'Administrator',
+                            department: 'Unassigned',
+                            departmentId: null,
+                            companyIds: [],
+                            status: 'Active',
+                        };
+                        await setDoc(docRef, newProfileData);
+                        toast({ title: "Welcome, Administrator!", description: "Your admin profile has been created." });
+                    } else {
+                        console.warn(`Access denied. No profile found for user: ${user.email}. Signing out.`);
+                        toast({
+                            variant: "destructive",
+                            title: "Access Denied",
+                            description: "Your account has not been setup by an administrator. Please contact support.",
+                            duration: 9000,
+                        });
+                        if (auth) {
+                            await signOut(auth);
+                        }
+                    }
                 } else {
-                    // Profile exists, check for necessary updates.
                     const existingProfile = docSnap.data();
                     let updates: Partial<Omit<UserProfile, 'id'>> = {};
 
-                    // If user was invited, activate their account.
                     if (existingProfile.status === 'Invited') {
                         updates.status = 'Active';
-                        // No longer automatically assign 'Requester' role.
+                        if (!existingProfile.role) {
+                            updates.role = 'Requester'; 
+                        }
                         toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
                     }
-
-                    // Always ensure the super admin has the administrator role.
+                    
                     if (isSuperAdmin && existingProfile.role !== 'Administrator') {
                         updates.role = 'Administrator';
                          toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
                     }
 
-                    // If there are updates to be made, apply them.
                     if (Object.keys(updates).length > 0) {
                         await setDoc(docRef, updates, { merge: true });
                     }
@@ -111,9 +111,8 @@ export function useUser() {
 
         checkAndCreateProfile();
         
-    }, [user, firestore, authIsLoading, toast, isSuperAdmin]);
+    }, [user, firestore, auth, authIsLoading, toast, isSuperAdmin]);
     
-    // The main loading state is true if either authentication or the initial profile fetch is in progress.
     const isLoading = authIsLoading || profileIsLoading;
     
     return {
@@ -122,10 +121,8 @@ export function useUser() {
         role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
-        companyId: profile?.companyId || null,
-        companyName: profile?.companyName || null,
+        companyIds: profile?.companyIds || [],
         status: profile?.status || null,
         loading: isLoading,
     };
 }
-    

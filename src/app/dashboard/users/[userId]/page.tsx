@@ -90,6 +90,14 @@ export default function UserProfilePage() {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
 
+    const handleCompanyChange = (companyId: string, isChecked: boolean) => {
+        const currentIds = formData.companyIds || [];
+        const newIds = isChecked
+            ? [...new Set([...currentIds, companyId])]
+            : currentIds.filter(id => id !== companyId);
+        handleFormChange('companyIds', newIds);
+    };
+
     const handleReportingDeptsChange = (departmentId: string, isChecked: boolean) => {
         const currentDepts = formData.reportingDepartments || [];
         const newDepts = isChecked
@@ -110,14 +118,6 @@ export default function UserProfilePage() {
         } else {
             updateData.department = 'Unassigned';
             updateData.departmentId = null;
-        }
-        
-        const selectedCompany = companies?.find(c => c.id === updateData.companyId);
-        if (selectedCompany) {
-            updateData.companyName = selectedCompany.name;
-        } else {
-            updateData.companyName = 'Unassigned';
-            updateData.companyId = null;
         }
 
         const delegatedUser = allUsers?.find(u => u.id === updateData.delegatedToId);
@@ -247,16 +247,6 @@ export default function UserProfilePage() {
                             </div>
                             <div className="grid md:grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <Label htmlFor="company">Company</Label>
-                                    <Select value={formData.companyId || 'unassigned'} onValueChange={v => handleFormChange('companyId', v === 'unassigned' ? null : v)}>
-                                        <SelectTrigger id="company"><SelectValue placeholder="Unassigned" /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="unassigned">Unassigned</SelectItem>
-                                            {companies?.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1.5">
                                     <Label htmlFor="department">Primary Department</Label>
                                     <Select value={formData.departmentId || 'unassigned'} onValueChange={v => handleFormChange('departmentId', v === 'unassigned' ? null : v)}>
                                         <SelectTrigger id="department"><SelectValue placeholder="Unassigned" /></SelectTrigger>
@@ -266,6 +256,30 @@ export default function UserProfilePage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
+                            </div>
+                            <div className="space-y-2 pt-2">
+                                <Label>Associated Companies</Label>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="outline" className="w-full justify-between">
+                                            <span>{formData.companyIds?.length || 0} selected</span>
+                                            <ChevronDown className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent className="w-full">
+                                        <DropdownMenuLabel>Select Companies</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {companies?.map(company => (
+                                            <DropdownMenuCheckboxItem
+                                                key={company.id}
+                                                checked={formData.companyIds?.includes(company.id) || false}
+                                                onCheckedChange={(checked) => handleCompanyChange(company.id, !!checked)}
+                                            >
+                                                {company.name}
+                                            </DropdownMenuCheckboxItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
                             </div>
                             <div className="space-y-2 pt-2">
                                 <Label>Reporting Departments</Label>
@@ -390,5 +404,3 @@ export default function UserProfilePage() {
         </div>
     );
 }
-
-    

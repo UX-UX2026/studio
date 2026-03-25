@@ -30,8 +30,7 @@ export interface UserProfile {
     delegatedToId?: string | null;
     delegatedToName?: string;
     reportingDepartments?: string[];
-    companyId?: string | null;
-    companyName?: string;
+    companyIds?: string[];
 }
 
 interface FirebaseServices {
@@ -175,5 +174,3 @@ export const useAuthentication = () => {
   }
   return context;
 };
-
-    
