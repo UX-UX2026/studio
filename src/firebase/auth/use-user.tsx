@@ -6,6 +6,8 @@ import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -61,6 +63,7 @@ export function useUser() {
                         photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
                         role: 'Requester', // Default role for all new users.
                         department: 'Unassigned',
+                        departmentId: null,
                         status: 'Active',
                     };
                     
@@ -70,17 +73,33 @@ export function useUser() {
                         newProfileData.department = 'Executive';
                     }
                     
-                    await setDoc(docRef, newProfileData);
+                    setDoc(docRef, newProfileData)
+                        .catch(async (serverError: any) => {
+                            const permissionError = new FirestorePermissionError({
+                                path: docRef.path,
+                                operation: 'create',
+                                requestResourceData: newProfileData,
+                            });
+                            errorEmitter.emit('permission-error', permissionError);
+                        });
+
                     toast({
                         title: "Welcome!",
                         description: "Your user profile has been created.",
                     });
-                    // The `useDoc` hook listening on this `docRef` will automatically update and provide the new profile.
                 } else {
                     // Profile exists, let's just make sure their status is Active if they were invited.
                     const existingProfile = docSnap.data();
                     if (existingProfile.status === 'Invited') {
-                        await setDoc(docRef, { status: 'Active' }, { merge: true });
+                        setDoc(docRef, { status: 'Active' }, { merge: true })
+                            .catch(async (serverError: any) => {
+                                const permissionError = new FirestorePermissionError({
+                                    path: docRef.path,
+                                    operation: 'update',
+                                    requestResourceData: { status: 'Active' },
+                                });
+                                errorEmitter.emit('permission-error', permissionError);
+                            });
                     }
                 }
             } catch (error) {
