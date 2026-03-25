@@ -11,8 +11,8 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function userExists(userId) {
-      return exists(/databases/$(database)/documents/users/$(userId));
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
     }
 
     function getUserData(userId) {
@@ -20,31 +20,47 @@ service cloud.firestore {
     }
     
     function isAdmin(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Administrator';
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Administrator';
     }
 
     function isManager(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Manager';
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Manager';
     }
 
     function isExecutive(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Executive';
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Executive';
     }
 
     function isProcurementOfficer(userId) {
-      return isAuth() && userExists(userId) && (getUserData(userId).role == 'Procurement Officer' || getUserData(userId).role == 'Procurement Assistant');
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return userData.role == 'Procurement Officer' || userData.role == 'Procurement Assistant';
     }
     
     function isRequester(userId) {
-      return isAuth() && userExists(userId) && 'role' in getUserData(userId) && getUserData(userId).role == 'Requester';
-    }
-
-    function isOwner(userId) {
-      return isAuth() && request.auth.uid == userId;
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Requester';
     }
     
     function getDepartmentIdForUser(userId) {
-        if (userExists(userId)) {
+        if (exists(/databases/$(database)/documents/users/$(userId))) {
             let userData = getUserData(userId);
             if ('departmentId' in userData) {
                 return userData.departmentId;
@@ -57,18 +73,15 @@ service cloud.firestore {
       if (!isExecutive(userId) || departmentId == null) {
         return false;
       }
-      
       let userProfile = getUserData(userId);
-      
       if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
         return true;
       }
-      
       return departmentId in userProfile.reportingDepartments;
     }
 
     function isAllowedToApprove(userId, requestData) {
-      if (!isAuth() || !userExists(userId)) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
         return false;
       }
       let userProfile = getUserData(userId);
@@ -85,7 +98,7 @@ service cloud.firestore {
       
       return false;
     }
-
+    
     // ===================================
     //  COLLECTION-LEVEL RULES
     // ===================================
@@ -133,7 +146,15 @@ service cloud.firestore {
     // User Profiles
     match /users/{userId} {
       allow get: if isAuth();
-      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
+      
+      // Update rules for User Profiles:
+      // 1. An Admin can update any field on any profile.
+      // 2. A user can update their own profile, BUT cannot change protected fields (role, status, department).
+      // 3. A special one-time rule allows the designated admin email to set their OWN role to Administrator.
+      allow update: if isAdmin(request.auth.uid)
+                     || (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'department', 'departmentId', 'status', 'reportingDepartments']))
+                     || (isOwner(userId) && request.auth.token.email == 'heinrich@ubuntux.co.za' && request.resource.data.role == 'Administrator');
+
       allow create: if isAuth(); // Allows admins to create users, and users to be created on first sign-in
       allow delete: if isAdmin(request.auth.uid);
     }
@@ -141,6 +162,7 @@ service cloud.firestore {
     // Roles
     match /roles/{roleId} {
       allow get: if isAuth();
+      // Allow any authenticated user to create one of the default roles if it doesn't exist. This is for seeding.
       allow create: if isAuth() && request.resource.data.name in ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'];
       allow update, delete: if isAdmin(request.auth.uid);
     }
@@ -187,7 +209,7 @@ service cloud.firestore {
             (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
         || isAllowedToApprove(request.auth.uid, resource.data)
         || (request.resource.data.delegatorIdForApproval != null &&
-            userExists(request.resource.data.delegatorIdForApproval) &&
+            exists(/databases/$(database)/documents/users/$(request.resource.data.delegatorIdForApproval)) &&
             getUserData(request.resource.data.delegatorIdForApproval).delegatedToId == request.auth.uid &&
             isAllowedToApprove(request.resource.data.delegatorIdForApproval, resource.data))
         || (isProcurementOfficer(request.auth.uid) &&
