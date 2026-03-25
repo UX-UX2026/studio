@@ -358,15 +358,12 @@ const getFulfillmentStatusBadge = (status: string) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, profile, loading: userLoading } = useUser();
+    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
     const firestore = useFirestore();
     const { roles, loading: rolesLoading } = useRoles();
-    const role = profile?.role;
-    const userDepartment = profile?.department;
-
 
     const requestsQuery = useMemo(() => {
         if (!firestore || !role) return null;
@@ -382,19 +379,19 @@ export default function ApprovalsPage() {
             return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Manager') {
-            if (!userDepartment) return null; // Manager must have a department
-            return query(baseQuery, where('department', '==', userDepartment));
+            if (!userDepartmentId) return null; // Manager must have a department
+            return query(baseQuery, where('departmentId', '==', userDepartmentId));
         }
         if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Requester') {
-            if (!userDepartment) return null; // Requester must have a department
-            return query(baseQuery, where('department', '==', userDepartment));
+            if (!userDepartmentId) return null; // Requester must have a department
+            return query(baseQuery, where('departmentId', '==', userDepartmentId));
         }
 
         return null; // No requests for other roles on this page
-    }, [firestore, role, userDepartment]);
+    }, [firestore, role, userDepartmentId]);
 
     const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
     

@@ -155,51 +155,56 @@ const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
 export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
-  const { user, role, department: userDepartment } = useUser();
+  const { user, role, department: userDepartment, departmentId: userDepartmentId } = useUser();
   const { toast } = useToast();
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
-  // Define statuses for open requests
   const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
 
-  // Query for ALL open requests. Sorting will be done on the client to avoid composite index.
   const openRequestsQuery = useMemo(() => {
     if (!firestore) return null;
-    return query(
-      collection(firestore, 'procurementRequests'),
-      where('status', 'in', openStatuses)
-    );
-  }, [firestore, openStatuses]);
-  
-  const { data: allOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
+    
+    const baseQuery = collection(firestore, 'procurementRequests');
 
-  const userOpenRequests = useMemo(() => {
-    if (!allOpenRequests) return [];
-    if ((role === 'Manager' || role === 'Requester') && userDepartment) {
-        return allOpenRequests.filter(req => req.department === userDepartment);
+    if (role === 'Manager' || role === 'Requester') {
+        if (!userDepartmentId) return null; // Wait for department ID
+        return query(
+            baseQuery,
+            where('status', 'in', openStatuses),
+            where('departmentId', '==', userDepartmentId)
+        );
     }
-    return allOpenRequests;
-  }, [allOpenRequests, role, userDepartment]);
+    
+    // For Admin, Exec, PO, fetch all open requests (their rules allow this)
+    return query(baseQuery, where('status', 'in', openStatuses));
 
-  // Memoize sorted open requests for the "Open Submissions" table
-  const sortedOpenRequests = useMemo(() => {
-    if (!userOpenRequests) return [];
-    // Create a new array before sorting to avoid mutating the original
-    return [...userOpenRequests].sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
-  }, [userOpenRequests]);
+  }, [firestore, role, userDepartmentId, openStatuses]);
+  
+  const { data: userOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
 
-  // Query for all requests created in the current month for accurate spend calculation
   const monthlyRequestsQuery = useMemo(() => {
     if (!firestore) return null;
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const baseQuery = collection(firestore, 'procurementRequests');
+
+    if (role === 'Manager' || role === 'Requester') {
+        if (!userDepartmentId) return null;
+        return query(
+            baseQuery,
+            where('createdAt', '>=', startOfMonth),
+            where('departmentId', '==', userDepartmentId)
+        );
+    }
+    
     return query(
-      collection(firestore, 'procurementRequests'),
+      baseQuery,
       where('createdAt', '>=', startOfMonth)
     );
-  }, [firestore]);
+  }, [firestore, role, userDepartmentId]);
 
   const { data: monthlyRequests, loading: monthlyRequestsLoading } = useCollection<ApprovalRequest>(monthlyRequestsQuery);
 
@@ -262,17 +267,14 @@ export default function DashboardPage() {
   }, {} as Record<string, number>), [allFulfillmentItems]);
 
     const dashboardStats = useMemo(() => {
-        const monthlyRequestsForUser = (role === 'Requester' && userDepartment)
-            ? monthlyRequests?.filter(req => req.department === userDepartment)
-            : monthlyRequests;
-        const totalSpendCurrentMonth = monthlyRequestsForUser?.reduce((sum, req) => sum + req.total, 0) || 0;
+        const totalSpendCurrentMonth = monthlyRequests?.reduce((sum, req) => sum + req.total, 0) || 0;
         
         const pendingManager = userOpenRequests?.filter(req => req.status === 'Pending Manager Approval').length || 0;
         const pendingExecutive = userOpenRequests?.filter(req => req.status === 'Pending Executive').length || 0;
         const queriesRaised = userOpenRequests?.filter(req => req.status === 'Queries Raised').length || 0;
 
         return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
-    }, [monthlyRequests, userOpenRequests, role, userDepartment]);
+    }, [monthlyRequests, userOpenRequests]);
 
     const approvedCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'Approved').length || 0, [userOpenRequests]);
     const fulfillmentCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [userOpenRequests]);
@@ -457,8 +459,6 @@ export default function DashboardPage() {
             const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
             const company = companies?.find(c => c.id === request.companyId);
             
-            const doc = new jsPDF();
-            
             let logoImage: HTMLImageElement | null = null;
             if (company?.logoUrl) {
                 try {
@@ -477,6 +477,8 @@ export default function DashboardPage() {
                     logoImage = null;
                 }
             }
+            
+            const doc = new jsPDF();
             
             let tableStartY = 30;
             
@@ -815,14 +817,14 @@ export default function DashboardPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {requestsLoading ? (
+                          {openRequestsLoading ? (
                               <TableRow>
                                   <TableCell colSpan={6} className="text-center h-24">
                                       <Loader className="h-6 w-6 animate-spin mx-auto" />
                                   </TableCell>
                               </TableRow>
-                          ) : sortedOpenRequests && sortedOpenRequests.length > 0 ? (
-                            sortedOpenRequests.slice(0, 5).map((req) => (
+                          ) : userOpenRequests && userOpenRequests.length > 0 ? (
+                            userOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
                               <TableRow key={req.id}>
                                 <TableCell className="font-medium">
                                   <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id.substring(0,8)}...</Link>

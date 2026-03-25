@@ -22,11 +22,22 @@ const RolesContext = createContext<RolesContextValue | undefined>(undefined);
 
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
-  const rolesCollection = useMemo(() => query(collection(firestore, 'roles'), orderBy('name')), [firestore]);
-  const { data: roles, loading } = useCollection<Role>(rolesCollection);
+  const rolesCollection = useMemo(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'roles'), orderBy('name'));
+  }, [firestore]);
+  
+  const { data: roles, loading, error } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {
-    if (!loading && roles && firestore) {
+    if (loading || !firestore || error) {
+      if (error) {
+        console.error("Error loading roles, cannot seed default roles:", error);
+      }
+      return;
+    }
+
+    if (roles) {
       const seedRoles = async () => {
         const defaultRoles = [
           'Administrator', 
@@ -39,32 +50,33 @@ export function RolesProvider({ children }: { children: ReactNode }) {
         
         try {
           const existingRoleNames = roles.map(r => r.name);
-          
-          for (const roleName of defaultRoles) {
-            if (!existingRoleNames.includes(roleName)) {
-              // This role is missing, add it.
-              await addDoc(collection(firestore, 'roles'), { name: roleName });
-            }
+          const rolesToCreate = defaultRoles.filter(defaultRole => !existingRoleNames.includes(defaultRole));
+
+          for (const roleName of rolesToCreate) {
+            await addDoc(collection(firestore, 'roles'), { name: roleName, permissions: [] });
           }
-        } catch (error) {
-            console.error("Error seeding roles:", error);
+        } catch (seedError) {
+            console.error("Error seeding roles:", seedError);
         }
       };
       seedRoles();
     }
-  }, [roles, loading, firestore]);
+  }, [roles, loading, firestore, error]);
 
   const addRole = async (roleData: { name: string, permissions?: string[] }) => {
+    if (!firestore) throw new Error("Firestore not available");
     await addDoc(collection(firestore, 'roles'), roleData);
   };
 
   const updateRole = async (updatedRole: Role) => {
+    if (!firestore) throw new Error("Firestore not available");
     const roleRef = doc(firestore, 'roles', updatedRole.id);
     const { id, ...roleData } = updatedRole;
     await setDoc(roleRef, roleData, { merge: true });
   };
 
   const deleteRole = async (roleId: string) => {
+    if (!firestore) throw new Error("Firestore not available");
     const roleRef = doc(firestore, 'roles', roleId);
     await deleteDoc(roleRef);
   };
