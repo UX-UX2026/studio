@@ -1,0 +1,211 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===================================
+    //  HELPER FUNCTIONS
+    // ===================================
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuth() && request.auth.uid == userId;
+    }
+    
+    function isSuperAdmin() {
+      return request.auth != null && request.auth.token.email == 'heinrich@ubuntux.co.za';
+    }
+
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data;
+    }
+    
+    function isAdmin(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Administrator';
+    }
+
+    function isManager(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Manager';
+    }
+
+    function isExecutive(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Executive';
+    }
+
+    function isProcurementOfficer(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return userData.role == 'Procurement Officer' || userData.role == 'Procurement Assistant';
+    }
+    
+    function isRequester(userId) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userData = getUserData(userId);
+      return 'role' in userData && userData.role == 'Requester';
+    }
+    
+    function getDepartmentIdForUser(userId) {
+        if (exists(/databases/$(database)/documents/users/$(userId))) {
+            let userData = getUserData(userId);
+            if ('departmentId' in userData) {
+                return userData.departmentId;
+            }
+        }
+        return null;
+    }
+    
+    function isExecutiveWithPermission(userId, departmentId) {
+      if (!isExecutive(userId) || departmentId == null) {
+        return false;
+      }
+      let userProfile = getUserData(userId);
+      if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
+        return true;
+      }
+      return departmentId in userProfile.reportingDepartments;
+    }
+
+    function isAllowedToApprove(userId, requestData) {
+      if (!isAuth() || !exists(/databases/$(database)/documents/users/$(userId))) {
+        return false;
+      }
+      let userProfile = getUserData(userId);
+
+      let isRequestManager = 'role' in userProfile && userProfile.role == 'Manager' && 'departmentId' in userProfile && userProfile.departmentId == requestData.departmentId;
+      let isRequestExecutive = isExecutiveWithPermission(userId, requestData.departmentId);
+
+      if (requestData.status == 'Pending Manager Approval' || requestData.status == 'Queries Raised') {
+        return isRequestManager || isRequestExecutive;
+      }
+      if (requestData.status == 'Pending Executive') {
+        return isRequestExecutive;
+      }
+      
+      return false;
+    }
+    
+    // ===================================
+    //  COLLECTION-LEVEL RULES
+    // ===================================
+    match /users/{userId} {
+      allow get: if isAuth();
+      allow list: if isSuperAdmin(); // Only Super Admin can list all users.
+
+      allow create: if isSuperAdmin(); // Only Super Admin can create users.
+      
+      // Update rules:
+      // 1. Super Admin can update anything.
+      // 2. A user can update their own profile, BUT cannot change their role.
+      allow update: if isSuperAdmin() || 
+                       (isOwner(userId) && request.resource.data.role == resource.data.role);
+      
+      allow delete: if isSuperAdmin();
+    }
+
+    match /roles/{roleId} {
+      // Any authenticated user can list/read roles.
+      allow list, read: if isAuth();
+      // Only the Super Admin can create, update, or delete roles.
+      allow write: if isSuperAdmin();
+    }
+    
+    match /companies/{companyId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin();
+    }
+    
+    match /approvalGroups/{groupId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin();
+    }
+
+    match /app/metadata {
+      allow read: if isAuth();
+      allow write: if isSuperAdmin();
+    }
+    
+    match /departments/{departmentId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin();
+    }
+
+    match /procurementRequests/{procurementRequestId} {
+      allow get: if isAuth() && (
+                   isSuperAdmin()
+                   || isProcurementOfficer(request.auth.uid)
+                   || isExecutiveWithPermission(request.auth.uid, resource.data.departmentId)
+                   || resource.data.submittedById == request.auth.uid
+                   || ((isManager(request.auth.uid) || isRequester(request.auth.uid)) && resource.data.departmentId == getDepartmentIdForUser(request.auth.uid))
+                 );
+      allow list: if isAuth();
+    
+      allow create: if isAuth() && request.resource.data.status == 'Draft' && request.resource.data.submittedById == request.auth.uid;
+
+      allow update: if
+        isSuperAdmin()
+        || (resource.data.submittedById == request.auth.uid &&
+            (resource.data.status == 'Draft' || resource.data.status == 'Queries Raised'))
+        || isAllowedToApprove(request.auth.uid, resource.data)
+        || (request.resource.data.delegatorIdForApproval != null &&
+            exists(/databases/$(database)/documents/users/$(request.resource.data.delegatorIdForApproval)) &&
+            getUserData(request.resource.data.delegatorIdForApproval).delegatedToId == request.auth.uid &&
+            isAllowedToApprove(request.resource.data.delegatorIdForApproval, resource.data))
+        || (isProcurementOfficer(request.auth.uid) &&
+            (resource.data.status == 'Approved' || resource.data.status == 'In Fulfillment'));
+
+      allow delete: if isSuperAdmin();
+    }
+
+    match /recurringItems/{itemId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid) || isManager(request.auth.uid) || isRequester(request.auth.uid);
+    }
+
+    match /vendors/{vendorId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
+    }
+    
+    match /budgetUploads/{uploadId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
+    }
+    match /budgets/{budgetId} {
+      allow list, get: if isAuth();
+      allow write: if isSuperAdmin() || isProcurementOfficer(request.auth.uid);
+    }
+
+    match /auditLogs/{logId} {
+      allow list, get: if isSuperAdmin();
+      allow create: if isAuth();
+    }
+    
+    match /errorLogs/{errorLogId} {
+      allow list, get: if isSuperAdmin();
+      allow create: if isAuth();
+    }
+    
+    match /_diagnostics/{docId} {
+      allow write: if isAuth();
+    }
+  }
+}

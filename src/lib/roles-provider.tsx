@@ -97,11 +97,9 @@ export function RolesProvider({ children }: { children: ReactNode }) {
         }
       } catch (e) {
         console.error("Error checking or seeding roles:", e);
-        // Not showing a toast here to avoid potential noise on startup if there's a
-        // temporary network issue or rules are still propagating.
       }
     };
-
+    
     // A short delay can help prevent race conditions where the check runs
     // before Firestore rules have fully propagated after a user logs in.
     const timer = setTimeout(() => {
