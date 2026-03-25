@@ -36,27 +36,9 @@ import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, whe
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
-
-type UserProfile = {
-    id: string;
-    displayName?: string;
-    email: string;
-    role: string | null;
-    department: string;
-    departmentId?: string | null;
-    photoURL: string;
-    status: 'Active' | 'Invited';
-    alternateEmail?: string;
-    notificationPreference?: 'Primary' | 'Alternate' | 'Both';
-    delegatedToId?: string | null;
-    delegatedToName?: string;
-    reportingDepartments?: string[];
-};
-
-type Department = {
-    id: string;
-    name: string;
-};
+import { type UserProfile } from "@/context/authentication-provider";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 
 export default function UsersPage() {
@@ -113,7 +95,7 @@ export default function UsersPage() {
         );
     }
 
-    const handleUpdateUser = async (userId: string, field: keyof UserProfile, value: any) => {
+    const handleUpdateUser = (userId: string, field: keyof UserProfile, value: any) => {
         if (!adminUser || !firestore) {
           toast({ variant: 'destructive', title: 'Update Failed', description: 'Authentication or database service is not available.' });
           return;
@@ -143,27 +125,30 @@ export default function UsersPage() {
         const userRef = doc(firestore, 'users', userId);
         const action = 'user.quick_edit';
       
-        try {
-          await updateDoc(userRef, updateData);
-          toast({ title: 'User Updated', description: `${userToUpdate.displayName}'s profile has been updated.` });
-      
-          await addDoc(collection(firestore, 'auditLogs'), {
-            userId: adminUser.uid,
-            userName: adminUser.displayName,
-            action,
-            details: `Quick-edited ${Object.keys(updateData).join(', ')} for user: ${userToUpdate.displayName}`,
-            entity: { type: 'user', id: userId },
-            timestamp: serverTimestamp()
-          });
-      
-        } catch (error: any) {
-          console.error("User Update Error:", error);
-          toast({ variant: 'destructive', title: 'Update Failed', description: error.message });
-          await logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
-        }
+        updateDoc(userRef, updateData)
+            .then(() => {
+                toast({ title: 'User Updated', description: `${userToUpdate.displayName}'s profile has been updated.` });
+                addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action,
+                    details: `Quick-edited ${Object.keys(updateData).join(', ')} for user: ${userToUpdate.displayName}`,
+                    entity: { type: 'user', id: userId },
+                    timestamp: serverTimestamp()
+                });
+            })
+            .catch(async (serverError: any) => {
+                console.error("User Update Error:", serverError);
+                const permissionError = new FirestorePermissionError({
+                    path: userRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            });
     };
       
-    const handleReportingDeptsChange = async (userId: string, departmentId: string, isChecked: boolean) => {
+    const handleReportingDeptsChange = (userId: string, departmentId: string, isChecked: boolean) => {
         const userToUpdate = users?.find(u => u.id === userId);
         if (!userToUpdate) return;
     
@@ -172,11 +157,11 @@ export default function UsersPage() {
             ? [...new Set([...currentDepts, departmentId])]
             : currentDepts.filter(id => id !== departmentId);
     
-        await handleUpdateUser(userId, 'reportingDepartments', newDepts);
+        handleUpdateUser(userId, 'reportingDepartments', newDepts);
     };
 
     
-    const handleAddUser = async () => {
+    const handleAddUser = () => {
         if (!adminUser || !firestore) {
             toast({ variant: 'destructive', title: 'Save Failed', description: 'Authentication or database service is not available.' });
             return;
@@ -190,10 +175,8 @@ export default function UsersPage() {
         const selectedDept = departments?.find(d => d.name === newUserDepartment);
         const action = 'user.create';
 
-        try {
-            const usersRef = collection(firestore, 'users');
-            const q = query(usersRef, where("email", "==", email));
-            const querySnapshot = await getDocs(q);
+        const usersRef = collection(firestore, 'users');
+        getDocs(query(usersRef, where("email", "==", email))).then(querySnapshot => {
             if (!querySnapshot.empty) {
                 toast({ variant: 'destructive', title: 'User Exists', description: 'A user with this email address already exists.' });
                 return;
@@ -208,23 +191,30 @@ export default function UsersPage() {
                 photoURL: `https://i.pravatar.cc/150?u=${email}`,
                 status: 'Invited' as const,
             };
-            const docRef = await addDoc(usersRef, newUserData);
-            toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
 
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action,
-                details: `Invited new user: ${email}`,
-                entity: { type: 'user', id: docRef.id },
-                timestamp: serverTimestamp()
-            });
-            
-            setIsAddUserDialogOpen(false);
-        } catch(error: any) {
-            logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action, errorMessage: error.message, errorStack: error.stack });
-            toast({ variant: 'destructive', title: 'Invitation Failed', description: error.message });
-        }
+            addDoc(usersRef, newUserData)
+                .then(docRef => {
+                    toast({ title: "User Invited", description: "User profile created. They must sign in to activate." });
+                    addDoc(collection(firestore, 'auditLogs'), {
+                        userId: adminUser.uid,
+                        userName: adminUser.displayName,
+                        action,
+                        details: `Invited new user: ${email}`,
+                        entity: { type: 'user', id: docRef.id },
+                        timestamp: serverTimestamp()
+                    });
+                    setIsAddUserDialogOpen(false);
+                })
+                .catch(async (serverError: any) => {
+                    const newDocPath = `${usersRef.path}/[new_user_id]`;
+                    const permissionError = new FirestorePermissionError({
+                        path: newDocPath,
+                        operation: 'create',
+                        requestResourceData: newUserData,
+                    });
+                    errorEmitter.emit('permission-error', permissionError);
+                });
+        });
     };
     
     return (
@@ -406,3 +396,9 @@ export default function UsersPage() {
         </div>
     );
 }
+
+// Define Department type locally if not imported from elsewhere
+type Department = {
+    id: string;
+    name: string;
+};

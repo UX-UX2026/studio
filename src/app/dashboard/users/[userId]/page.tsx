@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useUser, type UserProfile as MainUserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
 import { Loader, User, Shield, Building, Mail, Bell, ArrowLeft, Save, ChevronDown, History } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,6 +24,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import { errorEmitter } from "@/firebase/error-emitter";
+import { FirestorePermissionError } from "@/firebase/errors";
 
 type Department = {
     id: string;
@@ -89,7 +92,7 @@ export default function UserProfilePage() {
         handleFormChange('reportingDepartments', newDepts);
     };
 
-    const handleSaveChanges = async () => {
+    const handleSaveChanges = () => {
         if (!adminUser || !firestore) return;
         setIsSaving(true);
         
@@ -115,25 +118,31 @@ export default function UserProfilePage() {
             delete (updateData as { id?: string }).id;
         }
 
-        try {
-            await setDoc(doc(firestore, 'users', userId), updateData, { merge: true });
-            toast({ title: "User Profile Saved", description: `${formData.displayName}'s profile has been updated.` });
-            
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: adminUser.uid,
-                userName: adminUser.displayName,
-                action: 'user.update_profile',
-                details: `Updated profile for user: ${formData.displayName}`,
-                entity: { type: 'user', id: userId },
-                timestamp: serverTimestamp()
+        const docRef = doc(firestore, 'users', userId);
+
+        setDoc(docRef, updateData, { merge: true })
+            .then(() => {
+                toast({ title: "User Profile Saved", description: `${formData.displayName}'s profile has been updated.` });
+                addDoc(collection(firestore, 'auditLogs'), {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action: 'user.update_profile',
+                    details: `Updated profile for user: ${formData.displayName}`,
+                    entity: { type: 'user', id: userId },
+                    timestamp: serverTimestamp()
+                });
+            })
+            .catch(async (serverError: any) => {
+                const permissionError = new FirestorePermissionError({
+                    path: docRef.path,
+                    operation: 'update',
+                    requestResourceData: updateData,
+                });
+                errorEmitter.emit('permission-error', permissionError);
+            })
+            .finally(() => {
+                setIsSaving(false);
             });
-        } catch (error: any) {
-            console.error("Save User Profile Error:", error);
-            toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
-            await logErrorToFirestore(firestore, { userId: adminUser.uid, userName: adminUser.displayName, action: 'user.update_profile', errorMessage: error.message, errorStack: error.stack });
-        } finally {
-            setIsSaving(false);
-        }
     };
 
     if (loading) {
