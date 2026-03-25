@@ -57,12 +57,10 @@ service cloud.firestore {
       
       let userProfile = getUserData(userId);
       
-      // If 'reportingDepartments' field doesn't exist, is null, or is an empty list, they can approve all.
       if (!('reportingDepartments' in userProfile) || userProfile.reportingDepartments == null || userProfile.reportingDepartments.size() == 0) {
         return true;
       }
       
-      // Check if the departmentId is present in the reportingDepartments list.
       return departmentId in userProfile.reportingDepartments;
     }
 
@@ -87,16 +85,26 @@ service cloud.firestore {
     
     // User Profiles
     match /users/{userId} {
-      // Admins can list all users.
-      allow list: if isAdmin(request.auth.uid);
-      // Any authenticated user can get any other user's profile.
+      // ANY authenticated user can GET a user's profile.
       allow get: if isAuth();
-      // An admin can create a user, OR a user can create their own profile.
+      
+      // LISTING users is restricted to Administrators only.
+      allow list: if isAdmin(request.auth.uid);
+
+      // CREATING a profile is allowed if the user is creating their own, OR if an Admin is creating one.
       allow create: if isAdmin(request.auth.uid) || isOwner(userId);
-      // An admin can update any profile. A user can update their own.
-      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
-      // Only admins can delete users.
+
+      // DELETING a user is restricted to Administrators only.
       allow delete: if isAdmin(request.auth.uid);
+
+      // UPDATING a profile has two conditions:
+      // 1. An Administrator can update any field on any profile.
+      // 2. A user can update their own profile, but CANNOT change their own role, department, or status.
+      allow update: if (isAdmin(request.auth.uid)) ||
+                     (isOwner(userId) &&
+                      request.resource.data.role == resource.data.role &&
+                      request.resource.data.departmentId == resource.data.departmentId &&
+                      request.resource.data.status == resource.data.status);
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
@@ -192,3 +200,5 @@ service cloud.firestore {
     }
   }
 }
+
+    
