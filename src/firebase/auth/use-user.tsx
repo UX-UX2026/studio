@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useAuthentication, UserProfile } from '@/context/authentication-provider';
@@ -83,6 +84,11 @@ export function useUser() {
                         updates.status = 'Active';
                     }
 
+                    // If a user exists but somehow has no role, default them to Requester.
+                    if (!existingProfile.role) {
+                        updates.role = 'Requester';
+                    }
+
                     // If this is the designated admin, ensure their role is correct.
                     if (isSuperAdmin && existingProfile.role !== 'Administrator') {
                         updates.role = 'Administrator';
@@ -93,6 +99,8 @@ export function useUser() {
                         await setDoc(docRef, updates, { merge: true });
                         if (updates.role === 'Administrator') {
                             toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
+                        } else if (updates.role === 'Requester') {
+                            toast({ title: "Profile Corrected", description: "Your user role has been set to Requester." });
                         }
                     }
                 }
