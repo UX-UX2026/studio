@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser, type UserProfile as MainUserProfile } from "@/firebase/auth/use-user";
@@ -23,6 +22,7 @@ import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type Department = {
     id: string;
@@ -350,5 +350,3 @@ export default function UserProfilePage() {
                 </Button>
             </div>
         </div>
-    );
-}
