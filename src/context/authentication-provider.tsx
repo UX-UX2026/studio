@@ -9,7 +9,6 @@ import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/client';
-import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
 import { persistentLocalCache } from 'firebase/firestore';
 
 
@@ -162,9 +161,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       auth: firebaseServices?.auth || null,
       firestore: firebaseServices?.firestore || null,
     }}>
-      <FirebaseErrorListener>
-        {children}
-      </FirebaseErrorListener>
+      {children}
     </AuthContext.Provider>
   );
 }

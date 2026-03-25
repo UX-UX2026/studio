@@ -6,8 +6,6 @@ import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -28,6 +26,8 @@ export function useUser() {
     const { data: profile, loading: profileIsLoading, error: profileError } = useDoc<UserProfile>(userDocRef);
     
     const creationAttempted = useRef(false);
+
+    const isSuperAdmin = user?.email === 'heinrich@ubuntux.co.za';
 
     useEffect(() => {
         if (profileError) {
@@ -61,27 +61,13 @@ export function useUser() {
                         displayName: user.displayName || user.email?.split('@')[0] || 'New User',
                         email: user.email!,
                         photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                        role: 'Requester', // Default role for all new users.
-                        department: 'Unassigned',
+                        role: isSuperAdmin ? 'Administrator' : 'Requester', // Default role
+                        department: isSuperAdmin ? 'Executive' : 'Unassigned',
                         departmentId: null,
                         status: 'Active',
                     };
                     
-                    // Special case for the designated administrator.
-                    if (user.email === 'heinrich@ubuntux.co.za') {
-                        newProfileData.role = 'Administrator';
-                        newProfileData.department = 'Executive';
-                    }
-                    
-                    setDoc(docRef, newProfileData)
-                        .catch(async (serverError: any) => {
-                            const permissionError = new FirestorePermissionError({
-                                path: docRef.path,
-                                operation: 'create',
-                                requestResourceData: newProfileData,
-                            });
-                            errorEmitter.emit('permission-error', permissionError);
-                        });
+                    await setDoc(docRef, newProfileData);
 
                     toast({
                         title: "Welcome!",
@@ -98,26 +84,16 @@ export function useUser() {
                     }
 
                     // If this is the designated admin, ensure their role is correct.
-                    if (user.email === 'heinrich@ubuntux.co.za' && existingProfile.role !== 'Administrator') {
+                    if (isSuperAdmin && existingProfile.role !== 'Administrator') {
                         updates.role = 'Administrator';
                     }
 
                     // If there are updates to be made, apply them.
                     if (Object.keys(updates).length > 0) {
-                        setDoc(docRef, updates, { merge: true })
-                            .then(() => {
-                                if (updates.role === 'Administrator') {
-                                    toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
-                                }
-                            })
-                            .catch(async (serverError: any) => {
-                                const permissionError = new FirestorePermissionError({
-                                    path: docRef.path,
-                                    operation: 'update',
-                                    requestResourceData: updates,
-                                });
-                                errorEmitter.emit('permission-error', permissionError);
-                            });
+                        await setDoc(docRef, updates, { merge: true });
+                        if (updates.role === 'Administrator') {
+                            toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
+                        }
                     }
                 }
             } catch (error) {
@@ -132,7 +108,7 @@ export function useUser() {
 
         checkAndCreateProfile();
         
-    }, [user, firestore, authIsLoading, toast]);
+    }, [user, firestore, authIsLoading, toast, isSuperAdmin]);
     
     // The main loading state is true if either authentication or the initial profile fetch is in progress.
     const isLoading = authIsLoading || profileIsLoading;
@@ -140,7 +116,7 @@ export function useUser() {
     return {
         user,
         profile: profile || null,
-        role: profile?.role || null,
+        role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
         status: profile?.status || null,

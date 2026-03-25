@@ -37,8 +37,6 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { type UserProfile } from "@/context/authentication-provider";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 
 export default function UsersPage() {
@@ -137,14 +135,20 @@ export default function UsersPage() {
                     timestamp: serverTimestamp()
                 });
             })
-            .catch(async (serverError: any) => {
-                console.error("User Update Error:", serverError);
-                const permissionError = new FirestorePermissionError({
-                    path: userRef.path,
-                    operation: 'update',
-                    requestResourceData: updateData,
+            .catch(async (error: any) => {
+                console.error("User Update Error:", error);
+                toast({
+                    variant: 'destructive',
+                    title: 'Update Failed',
+                    description: error.message || 'Could not update the user profile.',
                 });
-                errorEmitter.emit('permission-error', permissionError);
+                await logErrorToFirestore(firestore, {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack
+                });
             });
     };
       
@@ -205,14 +209,20 @@ export default function UsersPage() {
                     });
                     setIsAddUserDialogOpen(false);
                 })
-                .catch(async (serverError: any) => {
-                    const newDocPath = `${usersRef.path}/[new_user_id]`;
-                    const permissionError = new FirestorePermissionError({
-                        path: newDocPath,
-                        operation: 'create',
-                        requestResourceData: newUserData,
+                .catch(async (error: any) => {
+                    console.error("Add User Error:", error);
+                    toast({
+                        variant: 'destructive',
+                        title: 'Add User Failed',
+                        description: error.message || 'Could not create the user profile.',
                     });
-                    errorEmitter.emit('permission-error', permissionError);
+                    await logErrorToFirestore(firestore, {
+                        userId: adminUser.uid,
+                        userName: adminUser.displayName,
+                        action,
+                        errorMessage: error.message,
+                        errorStack: error.stack
+                    });
                 });
         });
     };

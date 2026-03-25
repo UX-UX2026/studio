@@ -24,8 +24,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
-import { errorEmitter } from "@/firebase/error-emitter";
-import { FirestorePermissionError } from "@/firebase/errors";
 
 type Department = {
     id: string;
@@ -119,6 +117,7 @@ export default function UserProfilePage() {
         }
 
         const docRef = doc(firestore, 'users', userId);
+        const action = 'user.update_profile';
 
         setDoc(docRef, updateData, { merge: true })
             .then(() => {
@@ -126,19 +125,26 @@ export default function UserProfilePage() {
                 addDoc(collection(firestore, 'auditLogs'), {
                     userId: adminUser.uid,
                     userName: adminUser.displayName,
-                    action: 'user.update_profile',
+                    action,
                     details: `Updated profile for user: ${formData.displayName}`,
                     entity: { type: 'user', id: userId },
                     timestamp: serverTimestamp()
                 });
             })
-            .catch(async (serverError: any) => {
-                const permissionError = new FirestorePermissionError({
-                    path: docRef.path,
-                    operation: 'update',
-                    requestResourceData: updateData,
+            .catch(async (error: any) => {
+                console.error("User Profile Save Error:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Save Failed",
+                    description: error.message || "Could not save user profile."
                 });
-                errorEmitter.emit('permission-error', permissionError);
+                await logErrorToFirestore(firestore, {
+                    userId: adminUser.uid,
+                    userName: adminUser.displayName,
+                    action,
+                    errorMessage: error.message,
+                    errorStack: error.stack
+                });
             })
             .finally(() => {
                 setIsSaving(false);
