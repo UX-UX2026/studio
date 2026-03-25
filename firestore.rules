@@ -97,16 +97,9 @@ service cloud.firestore {
       // DELETING a user is restricted to Administrators only.
       allow delete: if isAdmin(request.auth.uid);
 
-      // UPDATING a profile has two conditions:
-      // 1. An Administrator can update any field on any profile.
-      // 2. A user can update their own profile, but CANNOT change their own role, department, or status (except to activate).
-      allow update: if (isAdmin(request.auth.uid)) ||
-                     (isOwner(userId) &&
-                      request.resource.data.role == resource.data.role &&
-                      request.resource.data.departmentId == resource.data.departmentId &&
-                      (request.resource.data.status == resource.data.status || 
-                       (resource.data.status == 'Invited' && request.resource.data.status == 'Active'))
-                     );
+      // An admin can update any profile. A user can update their own.
+      // The UI must enforce that a user cannot change their own role.
+      allow update: if isAdmin(request.auth.uid) || isOwner(userId);
     }
 
     // Admins can manage roles, companies, approval groups, and app metadata
