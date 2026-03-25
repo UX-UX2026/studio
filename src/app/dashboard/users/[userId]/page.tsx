@@ -241,24 +241,22 @@ export default function UserProfilePage() {
                                     </Select>
                                 </div>
                             </div>
-                             {formData.role === 'Executive' && (
-                                <div className="space-y-2 pt-2">
-                                    <Label>Reporting Departments</Label>
-                                    <p className="text-sm text-muted-foreground">Select which departments this Executive can approve requests for.</p>
-                                    <div className="p-4 border rounded-md grid grid-cols-2 gap-4">
-                                        {departments?.map(dept => (
-                                            <div key={dept.id} className="flex items-center gap-2">
-                                                <Checkbox
-                                                    id={`dept-check-${dept.id}`}
-                                                    checked={formData.reportingDepartments?.includes(dept.id) || false}
-                                                    onCheckedChange={(checked) => handleReportingDeptsChange(dept.id, !!checked)}
-                                                />
-                                                <Label htmlFor={`dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
-                                            </div>
-                                        ))}
-                                    </div>
+                            <div className="space-y-2 pt-2">
+                                <Label>Reporting Departments</Label>
+                                <p className="text-sm text-muted-foreground">Select the departments this user is responsible for reporting on. This is typically used for Executive roles.</p>
+                                <div className="p-4 border rounded-md grid grid-cols-2 gap-4">
+                                    {departments?.map(dept => (
+                                        <div key={dept.id} className="flex items-center gap-2">
+                                            <Checkbox
+                                                id={`dept-check-${dept.id}`}
+                                                checked={formData.reportingDepartments?.includes(dept.id) || false}
+                                                onCheckedChange={(checked) => handleReportingDeptsChange(dept.id, !!checked)}
+                                            />
+                                            <Label htmlFor={`dept-check-${dept.id}`} className="font-normal">{dept.name}</Label>
+                                        </div>
+                                    ))}
                                 </div>
-                            )}
+                            </div>
                         </CardContent>
                     </Card>
 

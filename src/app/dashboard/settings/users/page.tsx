@@ -261,7 +261,7 @@ export default function UsersPage() {
                             </TableHeader>
                             <TableBody>
                                 {users && users.map((u) => (
-                                    <TableRow key={u.id} className={u.role === 'Executive' ? 'bg-primary/5' : ''}>
+                                    <TableRow key={u.id}>
                                         <TableCell className="font-medium flex items-center gap-3">
                                             <Avatar>
                                                 <AvatarImage src={u.photoURL} />
