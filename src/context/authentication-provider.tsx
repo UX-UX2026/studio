@@ -3,13 +3,14 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { type Firestore, getFirestore, initializeFirestore, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
+import { type Firestore, getFirestore, initializeFirestore } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/client';
 import { FirebaseErrorListener } from '@/components/FirebaseErrorListener';
+import { persistentLocalCache } from 'firebase/firestore';
 
 
 // Define the UserProfile shape
@@ -81,9 +82,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
              console.log("Firestore offline persistence with tab synchronization enabled.");
         } catch (err: any) {
             // If persistent cache fails (e.g., multiple tabs, browser limitations),
-            // fall back to in-memory cache. This is more robust than just getFirestore().
-            console.warn(`Firestore persistence failed: ${(err as Error).message}. Falling back to memory cache.`);
-            firestore = initializeFirestore(app, { cache: memoryLocalCache() });
+            // just get the default instance. This prevents re-initialization errors.
+            console.warn(`Firestore persistence initialization failed: ${(err as Error).message}. Falling back to default Firestore instance.`);
+            firestore = getFirestore(app);
         }
         
         setFirebaseServices({ app, auth, firestore });
