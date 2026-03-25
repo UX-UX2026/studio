@@ -42,7 +42,7 @@ export function useUser() {
     useEffect(() => {
         // This effect's job is to ensure a user profile document exists in Firestore.
         // It runs a one-time check after the user is authenticated.
-        if (authIsLoading || !user || !firestore || creationAttempted.current || profile !== null) {
+        if (authIsLoading || !user || !firestore || creationAttempted.current) {
             return;
         }
 
@@ -132,7 +132,7 @@ export function useUser() {
 
         checkAndCreateProfile();
         
-    }, [user, firestore, authIsLoading, toast, profile]);
+    }, [user, firestore, authIsLoading, toast]);
     
     // The main loading state is true if either authentication or the initial profile fetch is in progress.
     const isLoading = authIsLoading || profileIsLoading;
