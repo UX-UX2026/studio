@@ -26,8 +26,6 @@ export function useUser() {
 
     const { data: profile, loading: profileIsLoading, error: profileError } = useDoc<UserProfile>(userDocRef);
     
-    const creationAttempted = useRef(false);
-
     const isSuperAdmin = user?.email === 'heinrich@ubuntux.co.za' || user?.email === 'admin@procurportal.com';
 
     useEffect(() => {
@@ -41,77 +39,103 @@ export function useUser() {
     }, [profileError, toast]);
     
     useEffect(() => {
-        if (authIsLoading || !user || !firestore || creationAttempted.current) {
+        // Wait until we have a definitive answer on auth state AND profile state
+        if (authIsLoading || profileIsLoading) {
             return;
         }
 
-        creationAttempted.current = true;
+        // Case 1: We have an authenticated user, but no profile document exists for them.
+        if (user && !profile) {
+            const createProfileForNewUser = async () => {
+                if (!firestore) return;
 
-        const checkAndCreateProfile = async () => {
-            const docRef = doc(firestore, 'users', user.uid);
-            try {
+                // To be absolutely sure and prevent race conditions, we do one final check.
+                const docRef = doc(firestore, 'users', user.uid);
                 const docSnap = await getDoc(docRef);
-                if (!docSnap.exists()) {
-                    if (isSuperAdmin) {
-                        console.log("Super admin profile not found. Creating a new one...");
-                        const newProfileData: Omit<UserProfile, 'id'> = {
-                            displayName: user.displayName || user.email?.split('@')[0] || 'New User',
-                            email: user.email!,
-                            photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
-                            role: 'Administrator',
-                            department: 'Unassigned',
-                            departmentId: null,
-                            companyIds: [],
-                            status: 'Active',
-                        };
-                        await setDoc(docRef, newProfileData);
-                        toast({ title: "Welcome, Administrator!", description: "Your admin profile has been created." });
-                    } else {
-                        console.warn(`Access denied. No profile found for user: ${user.email}. Signing out.`);
-                        toast({
-                            variant: "destructive",
-                            title: "Access Denied",
-                            description: "Your account has not been setup by an administrator. Please contact support.",
-                            duration: 9000,
-                        });
-                        if (auth) {
-                            await signOut(auth);
-                        }
-                    }
+                if (docSnap.exists()) {
+                    // This means useDoc's state is just lagging. Let it catch up.
+                    console.warn("useUser: Race condition averted. Profile exists, waiting for hook to update.");
+                    return;
+                }
+
+                // If user is a designated super admin, create their admin profile.
+                if (isSuperAdmin) {
+                    console.log("Super admin profile not found. Creating a new one...");
+                    const newProfileData: Omit<UserProfile, 'id'> = {
+                        displayName: user.displayName || user.email?.split('@')[0] || 'New User',
+                        email: user.email!,
+                        photoURL: user.photoURL || `https://i.pravatar.cc/150?u=${user.email}`,
+                        role: 'Administrator',
+                        department: 'Unassigned',
+                        departmentId: null,
+                        companyIds: [],
+                        status: 'Active',
+                    };
+                    await setDoc(docRef, newProfileData);
+                    toast({ title: "Welcome, Administrator!", description: "Your admin profile has been created." });
                 } else {
-                    const existingProfile = docSnap.data();
-                    let updates: Partial<Omit<UserProfile, 'id'>> = {};
-
-                    if (existingProfile.status === 'Invited') {
-                        updates.status = 'Active';
-                        if (!existingProfile.role) {
-                            updates.role = 'Requester'; 
-                        }
-                        toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
-                    }
-                    
-                    if (isSuperAdmin && existingProfile.role !== 'Administrator') {
-                        updates.role = 'Administrator';
-                         toast({ title: "Admin Role Corrected", description: "Your administrator role has been set." });
-                    }
-
-                    if (Object.keys(updates).length > 0) {
-                        await setDoc(docRef, updates, { merge: true });
+                    // If the user is not a super admin and has no pre-existing profile, deny access.
+                    console.warn(`Access denied. No profile found for user: ${user.email}. Signing out.`);
+                    toast({
+                        variant: "destructive",
+                        title: "Access Denied",
+                        description: "Your account has not been setup by an administrator. Please contact support.",
+                        duration: 9000,
+                    });
+                    if (auth) {
+                        await signOut(auth);
                     }
                 }
-            } catch (error) {
-                console.error("Failed to check or create user profile:", error);
-                toast({
+            };
+
+            createProfileForNewUser().catch(error => {
+                 console.error("Failed to create user profile:", error);
+                 toast({
                     variant: "destructive",
                     title: "Profile Initialization Failed",
                     description: (error as Error).message || "An unexpected error occurred while setting up your profile.",
                 });
-            }
-        };
+            });
 
-        checkAndCreateProfile();
-        
-    }, [user, firestore, auth, authIsLoading, toast, isSuperAdmin]);
+        // Case 2: We have an authenticated user AND their profile document.
+        } else if (user && profile) {
+            const updateUserProfileIfNeeded = async () => {
+                if (!firestore) return;
+                const docRef = doc(firestore, 'users', user.uid);
+                let updates: Partial<Omit<UserProfile, 'id'>> = {};
+
+                // If the user was 'Invited', activate their account.
+                if (profile.status === 'Invited') {
+                    updates.status = 'Active';
+                    // If they were invited without a role, assign a default one.
+                    if (!profile.role) {
+                        updates.role = 'Requester';
+                    }
+                    toast({ title: "Account Activated", description: "Welcome! Your user profile is now active." });
+                }
+                
+                // Always ensure super admins have the Administrator role.
+                if (isSuperAdmin && profile.role !== 'Administrator') {
+                    updates.role = 'Administrator';
+                    toast({ title: "Admin Role Verified", description: "Your administrator role has been set." });
+                }
+
+                // If there are any updates to be made, write them to the database.
+                if (Object.keys(updates).length > 0) {
+                    await setDoc(docRef, updates, { merge: true });
+                }
+            };
+            
+            updateUserProfileIfNeeded().catch(error => {
+                console.error("Failed to update user profile:", error);
+                 toast({
+                    variant: "destructive",
+                    title: "Profile Update Failed",
+                    description: (error as Error).message || "An unexpected error occurred while updating your profile.",
+                });
+            });
+        }
+    }, [user, profile, auth, firestore, authIsLoading, profileIsLoading, toast, isSuperAdmin]);
     
     const isLoading = authIsLoading || profileIsLoading;
     
