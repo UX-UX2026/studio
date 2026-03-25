@@ -97,13 +97,14 @@ service cloud.firestore {
       allow list: if isAuth();
     }
 
-    // Admins can manage roles, companies, approval groups, and app metadata
+    // Roles
     match /roles/{roleId} {
-      allow read: if isAuth();
-      allow write: if isAdmin(request.auth.uid);
-    }
-     match /roles {
-      allow list: if isAuth();
+      allow get, list: if isAuth();
+      // Allow any authenticated user to create one of the default roles if it doesn't exist.
+      // This supports the application's auto-seeding logic on first run.
+      allow create: if isAuth() && request.resource.data.name in ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester', 'Procurement Assistant'];
+      // Only admins can modify or delete roles once they exist.
+      allow update, delete: if isAdmin(request.auth.uid);
     }
     
     match /companies/{companyId} {
@@ -170,18 +171,12 @@ service cloud.firestore {
     
     // Budget Data
     match /budgetUploads/{uploadId} {
-      allow get: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
-    }
-    match /budgetUploads {
-        allow list: if isAuth();
     }
     match /budgets/{budgetId} {
-      allow get: if isAuth();
+      allow get, list: if isAuth();
       allow write: if isAdmin(request.auth.uid) || isProcurementOfficer(request.auth.uid);
-    }
-    match /budgets {
-        allow list: if isAuth();
     }
 
     // Logs can only be written by the app/user, and only read by Admins.
