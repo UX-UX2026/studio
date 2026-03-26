@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef, useMemo } from "react";
-import { Loader, Banknote, Upload, Download, AlertCircle, History } from "lucide-react";
+import { Loader, Banknote, Upload, Download, AlertCircle, History, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,6 +22,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
@@ -89,6 +99,10 @@ export default function BudgetPage() {
         forecastStart: string;
     }>({ category: '', yearTotal: '', forecastStart: '' });
     const [isDraggingOver, setIsDraggingOver] = useState(false);
+
+    // State for delete dialog
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [deletingUploadId, setDeletingUploadId] = useState<string | null>(null);
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -521,6 +535,57 @@ export default function BudgetPage() {
             setIsSaving(false);
         }
     };
+    
+    const handleDeleteUpload = async () => {
+        if (!user || !firestore || !deletingUploadId) return;
+
+        const uploadToDelete = budgetUploads?.find(u => u.id === deletingUploadId);
+        if (!uploadToDelete || uploadToDelete.isActive) {
+            toast({ variant: 'destructive', title: 'Cannot Delete', description: 'Active budgets cannot be deleted.' });
+            setIsDeleteDialogOpen(false);
+            return;
+        }
+
+        setIsSaving(true);
+        const action = 'budget.delete_revision';
+
+        try {
+            const batch = writeBatch(firestore);
+
+            // Find and delete all budget items associated with this upload
+            const budgetItemsQuery = query(collection(firestore, 'budgets'), where('budgetUploadId', '==', deletingUploadId));
+            const budgetItemsSnapshot = await getDocs(budgetItemsQuery);
+            budgetItemsSnapshot.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+
+            // Delete the budgetUpload document itself
+            const uploadRef = doc(firestore, 'budgetUploads', deletingUploadId);
+            batch.delete(uploadRef);
+
+            await batch.commit();
+
+            toast({ title: 'Budget Version Deleted', description: `Successfully deleted upload from ${uploadToDelete.uploadedByName}.` });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Deleted budget upload ${deletingUploadId} for ${uploadToDelete.departmentName} - FY${uploadToDelete.financialYear}.`,
+                entity: { type: 'budgetUpload', id: deletingUploadId },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+            console.error("Delete Budget Upload Error:", error);
+            toast({ variant: "destructive", title: "Delete Failed", description: error.message });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+        } finally {
+            setIsSaving(false);
+            setDeletingUploadId(null);
+            setIsDeleteDialogOpen(false);
+        }
+    };
 
     const allowedRoles = useMemo(() => ['Administrator', 'Procurement Officer'], []);
     if (userLoading || !user || !role || !allowedRoles.includes(role)) {
@@ -697,6 +762,15 @@ export default function BudgetPage() {
                                                         <Button variant="outline" size="sm" onClick={() => handleSetActive(upload.id)} disabled={upload.isActive || isSaving}>
                                                             {isSaving && !upload.isActive ? <Loader className="h-4 w-4 animate-spin"/> : 'Set Active' }
                                                         </Button>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            onClick={() => { setDeletingUploadId(upload.id); setIsDeleteDialogOpen(true); }}
+                                                            disabled={upload.isActive}
+                                                            title={upload.isActive ? "Cannot delete active budget" : "Delete"}
+                                                        >
+                                                            <Trash2 className="h-4 w-4 text-destructive"/>
+                                                        </Button>
                                                     </TableCell>
                                                 </TableRow>
                                             ))
@@ -821,8 +895,24 @@ export default function BudgetPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will permanently delete this budget version and all its associated line items. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel onClick={() => setDeletingUploadId(null)}>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDeleteUpload} disabled={isSaving} className="bg-destructive hover:bg-destructive/90">
+                             {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}
+                            Yes, delete it
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
-
-    
