@@ -434,20 +434,13 @@ export default function ProcurementQuickSubmitPage() {
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
 
     const recurringItemsQuery = useMemo(() => {
-        if (!firestore) return null;
-        const q = collection(firestore, 'recurringItems');
-        // Admins and POs see all active items for adding to any submission.
-        if (role === 'Administrator' || role === 'Procurement Officer') {
-            return query(q, where('active', '==', true));
-        }
-        // Other roles (Manager, Requester) only see items for their own department.
-        const userDept = departments?.find(d => d.name === userDepartment);
-        if (userDept) {
-            return query(q, where('active', '==', true), where('departmentId', '==', userDept.id));
-        }
-        // If user has no department, they see no recurring items.
-        return query(q, where('active', '==', true), where('departmentId', '==', 'non-existent-id'));
-    }, [firestore, role, userDepartment, departments]);
+        if (!firestore || !selectedDepartmentId) return null;
+        return query(
+            collection(firestore, 'recurringItems'), 
+            where('active', '==', true), 
+            where('departmentId', '==', selectedDepartmentId)
+        );
+    }, [firestore, selectedDepartmentId]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
     
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
@@ -1652,7 +1645,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
