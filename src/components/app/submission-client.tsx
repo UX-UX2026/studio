@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -72,6 +73,15 @@ type RecurringItem = {
     expenseType?: 'Operational' | 'Capital';
 };
 
+type BudgetItem = {
+    id: string;
+    departmentId: string;
+    category: string;
+    expenseType?: 'Operational' | 'Capital';
+    forecasts: number[];
+    yearTotal: number;
+};
+
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-ZA", {
     style: "currency",
@@ -89,6 +99,7 @@ const ExpenseTable = ({
     isLocked,
     onAddItem,
     onImport,
+    categories,
 } : {
     title: string;
     items: Item[];
@@ -99,6 +110,7 @@ const ExpenseTable = ({
     isLocked: boolean;
     onAddItem: () => void;
     onImport: () => void;
+    categories: string[];
 }) => {
     return (
         <div className="space-y-4">
@@ -174,7 +186,7 @@ const ExpenseTable = ({
                                         <SelectValue placeholder="Select a category" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                        {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </TableCell>
@@ -236,6 +248,7 @@ export function SubmissionClient({
     recurringLoading,
     departmentId,
     departmentName,
+    budgetItems,
 }: { 
     user: User,
     profile: UserProfile | null,
@@ -247,6 +260,7 @@ export function SubmissionClient({
     recurringLoading: boolean,
     departmentId: string,
     departmentName: string,
+    budgetItems: BudgetItem[] | null,
 }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -265,6 +279,13 @@ export function SubmissionClient({
     const submissionItemDescriptions = new Set(items.map(item => item.description));
     return recurringItems.filter(item => !submissionItemDescriptions.has(item.name));
   }, [items, recurringItems]);
+
+    const departmentCategories = useMemo(() => {
+        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
+        const categoriesFromCurrentItems = items.map(item => item.category).filter(Boolean);
+        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems, ...procurementCategories]);
+        return Array.from(combined).sort();
+    }, [budgetItems, items]);
 
   const canEditItem = (item: Item) => {
     if (isLocked) return false;
@@ -374,6 +395,7 @@ export function SubmissionClient({
         category: newRecurringCategory,
         amount: newRecurringAmount,
         frequency: newRecurringFrequency,
+        expenseType: 'Operational', // New recurring items default to Operational
         nextLoad: 'TBD',
         active: true,
         departmentId: departmentId,
@@ -527,6 +549,7 @@ export function SubmissionClient({
             isLocked={isLocked}
             onAddItem={() => handleAddItem('Operational')}
             onImport={() => handleImportClick('Operational')}
+            categories={departmentCategories}
         />
         <ExpenseTable 
             title="Capital Expenses"
@@ -538,6 +561,7 @@ export function SubmissionClient({
             isLocked={isLocked}
             onAddItem={() => handleAddItem('Capital')}
             onImport={() => handleImportClick('Capital')}
+            categories={departmentCategories}
         />
       </div>
 
@@ -672,5 +696,3 @@ export function SubmissionClient({
     </>
   );
 }
-
-    

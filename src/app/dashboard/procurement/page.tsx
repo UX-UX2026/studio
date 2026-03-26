@@ -90,6 +90,7 @@ type BudgetItem = {
     id: string;
     departmentId: string;
     category: string;
+    expenseType?: 'Operational' | 'Capital';
     forecasts: number[];
     yearTotal: number;
 };
@@ -99,6 +100,7 @@ type RecurringItem = {
     category: string;
     name: string;
     amount: number;
+    expenseType: 'Operational' | 'Capital';
     active: boolean;
     departmentId?: string;
     departmentName?: string;
@@ -602,7 +604,7 @@ export default function ProcurementQuickSubmitPage() {
         const mapRecurringToSubmissionItem = (item: RecurringItem): Item => ({
             id: item.id,
             type: "Recurring",
-            expenseType: 'Operational', // Recurring are always operational
+            expenseType: item.expenseType || 'Operational', // Use from master, default to Operational
             description: item.name,
             brand: item.name.split(" ")[0] || '',
             qty: 1,
@@ -1472,6 +1474,7 @@ export default function ProcurementQuickSubmitPage() {
                                 recurringLoading={recurringLoading}
                                 departmentId={selectedDepartmentId}
                                 departmentName={departmentName}
+                                budgetItems={budgetItems}
                             />
                         </TabsContent>
                         <TabsContent value="summary">
@@ -1717,4 +1720,3 @@ export default function ProcurementQuickSubmitPage() {
     );
 }
 
-    
