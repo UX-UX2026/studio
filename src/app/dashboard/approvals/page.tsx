@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -610,6 +611,7 @@ export default function ApprovalsPage() {
     const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
 
     const budgetProgress = useMemo(() => {
+        if (!operationalSummary.totals || !capitalSummary.totals) return 0;
         const procurement = operationalSummary.totals.procurement + capitalSummary.totals.procurement;
         const forecast = operationalSummary.totals.forecast + capitalSummary.totals.forecast;
         if (forecast <= 0) return procurement > 0 ? 100 : 0;
@@ -639,7 +641,7 @@ export default function ApprovalsPage() {
     
     const handleApprove = async () => {
         if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers || !profile) return;
-
+    
         setIsSubmittingAction(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
@@ -650,7 +652,7 @@ export default function ApprovalsPage() {
         
         const actorName = profile?.displayName || user.email || 'User';
         const actorId = user.uid;
-
+    
         const timelineUpdater = (stepName: string, nextStageName: string) => {
             return (step: ApprovalRequest['timeline'][0]) => {
                 if (step.stage === stepName) {
@@ -670,7 +672,7 @@ export default function ApprovalsPage() {
                 return step;
             };
         };
-
+    
         if (role === 'Administrator') {
             if (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Pending Executive';
@@ -685,55 +687,48 @@ export default function ApprovalsPage() {
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
                 newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
             }
-        } else if (role === 'Manager' && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
+        } else if (role === 'Manager' && canApprove && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
             toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
-        } else if (canApprove) { // Using the new canApprove logic
-            if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
-                newStatus = 'Approved';
-                toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
-                
-                const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
-                const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
-
-                if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') {
-                    newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
-                }
-                if (execApprovalIndex > -1) {
-                    newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
-                }
-                const procurementProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
-                if (procurementProcessingIndex > -1) {
-                        newTimeline[procurementProcessingIndex] = { ...newTimeline[procurementProcessingIndex], status: 'pending' };
-                }
+        } else if (role === 'Executive' && canApprove && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Queries Raised')) {
+            newStatus = 'Approved';
+            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+            
+            const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
+            const procProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
+    
+            if (execApprovalIndex > -1) {
+                newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
+            }
+            if (procProcessingIndex > -1) {
+                newTimeline[procProcessingIndex] = { ...newTimeline[procProcessingIndex], status: 'pending' };
             }
         } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
             newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
         }
-
+    
         if (!toastMessage) {
             setIsSubmittingAction(false);
             return;
         }
-
+    
         const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
-        // Add the delegatorId to the payload if this is a delegated approval
         const updateData: any = { 
             status: newStatus, 
             timeline: newTimeline,
             delegatorIdForApproval: asDelegate ? delegator?.id : null,
         };
         const action = 'request.approve';
-
+    
         const finalToastMessage = toastMessage;
         
         try {
             await updateDoc(requestRef, updateData);
             toast(finalToastMessage);
-
+    
             if (newStatus === 'Approved') {
                 const reportDataForGeneration: ApprovalRequest = {
                     ...activeRequest,
@@ -741,9 +736,9 @@ export default function ApprovalsPage() {
                 };
                 generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
             }
-
+    
             const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
-
+    
             const auditLogData = {
                 userId: user.uid,
                 userName: actorName,
@@ -753,7 +748,7 @@ export default function ApprovalsPage() {
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
-
+    
             // Special Notification for PO Acknowledgment to Procurement Assistant
             if ((role === 'Procurement Officer' || role === 'Administrator') && newStatus === 'In Fulfillment') {
                 const assistantsQuery = query(collection(firestore, 'users'), where('role', '==', 'Procurement Assistant'));
@@ -813,7 +808,7 @@ export default function ApprovalsPage() {
                     if (workflowStageConfig) {
                         const usersCollectionRef = collection(firestore, 'users');
                         let recipients: string[] = [];
-
+    
                         if (workflowStageConfig.approvalGroupId && approvalGroups) {
                             const group = approvalGroups.find(g => g.id === workflowStageConfig.approvalGroupId);
                             if (group?.memberIds && group.memberIds.length > 0) {
@@ -832,7 +827,7 @@ export default function ApprovalsPage() {
                                 if (userProfile.email) recipients.push(userProfile.email);
                             });
                         }
-
+    
                         let finalRecipients: string[] = [];
                         if (workflowStageConfig.useAlternateEmail && workflowStageConfig.alternateEmail) {
                             if (workflowStageConfig.sendToBoth) {
@@ -853,7 +848,7 @@ export default function ApprovalsPage() {
                                 nextStage.stage,
                                 link
                             );
-
+    
                             try {
                                 const response = await fetch('/api/send-email', {
                                     method: 'POST',
