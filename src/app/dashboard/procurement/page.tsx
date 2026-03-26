@@ -153,23 +153,23 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             try {
                 logoImage = await new Promise((resolve) => {
                     const img = new Image();
-                    img.crossOrigin = "Anonymous";
+                    img.crossOrigin = "Anonymous"; // Important for CORS
                     img.onload = () => resolve(img);
                     img.onerror = (err) => {
                         console.error("PDF Logo Load Error:", err);
-                        resolve(null);
+                        resolve(null); // Resolve with null on error
                     };
                     img.src = company.logoUrl;
                 });
             } catch (error) {
                 console.error("Error creating image promise for PDF:", error);
-                logoImage = null;
+                logoImage = null; // Ensure generation continues
             }
         }
         
         const doc = new jsPDF();
         
-        let tableStartY = 30;
+        let tableStartY = 30; // Default start Y for tables if no logo
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
@@ -185,7 +185,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 const imgY = 15;
                 doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8);
+                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
             } catch (e) {
                 console.error("Failed to add logo to PDF, falling back to text only.", e);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
@@ -291,6 +291,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         return;
     }
 
+    // XLSX logic
     const detailsDataForSheet = [
         { Key: "Request ID", Value: request.id },
         { Key: "Company", Value: request.companyName || 'N/A' },
@@ -302,6 +303,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     ];
     const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
 
+    // 2. Line Items
     const itemsData = request.items.map(item => ({
         'Type': item.type,
         'Description': item.description,
@@ -313,6 +315,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     }));
     const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
 
+    // 3. Budget Summary
     const summaryDataForSheet = summaryData.lines.map(line => ({
         'Category': line.category,
         'Request Total': line.procurementTotal,
@@ -327,6 +330,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     });
     const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
 
+    // 4. Approval History
     const timelineData = request.timeline.map(step => ({
         'Stage': step.stage,
         'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
@@ -335,12 +339,14 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     }));
     const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
     
+    // Create workbook and add sheets
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
     XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
     XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
     XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
 
+    // Download the file
     XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
 };
 
@@ -1256,7 +1262,7 @@ export default function ProcurementQuickSubmitPage() {
             </div>
         );
     }
-
+    
     return (
         <div className="space-y-6">
             <Card>
@@ -1645,7 +1651,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
@@ -1700,4 +1706,3 @@ export default function ProcurementQuickSubmitPage() {
     );
 }
 
-    
