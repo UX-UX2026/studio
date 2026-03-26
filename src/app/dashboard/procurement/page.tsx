@@ -745,36 +745,67 @@ export default function ProcurementQuickSubmitPage() {
 
         setLastAction(isDraft ? 'draft' : 'submit');
         setSaveStatus('saving');
-        const newStatus = isDraft ? 'Draft' : 'Pending Manager Approval';
+        
+        const isManagerSubmitting = role === 'Manager';
+        const newStatus = isDraft ? 'Draft' : isManagerSubmitting ? 'Pending Executive' : 'Pending Manager Approval';
+        
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         
         const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
         
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
-        const defaultTimeline = [
-            { stage: "Request Submission", actor: actorString, date: new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }), status: 'completed' as const },
-            { stage: "Manager Review", actor: "Manager", date: null, status: newStatus === 'Draft' ? 'waiting' : ('pending' as const) },
-            { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
-            { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
-        ];
-        
-        const timeline = departmentWorkflow && departmentWorkflow.length > 0
-          ? departmentWorkflow.map((stage, index) => ({
-              stage: stage.name,
-              actor: String(stage.role) || 'System',
-              date: index === 0 ? new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' }) : null,
-              status: index === 0 ? 'completed' as const : (index === 1 && !isDraft ? 'pending' as const : 'waiting' as const),
-          }))
-          : defaultTimeline;
-        
-        if (timeline.length > 0) {
-            timeline[0].actor = actorString;
-            if(isDraft) {
-                for (let i = 1; i < timeline.length; i++) {
-                    timeline[i].status = 'waiting';
+        let timeline;
+        const baseTimeline = departmentWorkflow && departmentWorkflow.length > 0
+            ? departmentWorkflow.map((stage) => ({
+                stage: stage.name,
+                actor: String(stage.role) || 'System',
+                date: null,
+                status: 'waiting' as const,
+            }))
+            : [
+                { stage: "Request Submission", actor: "Requester", date: null, status: 'waiting' as const },
+                { stage: "Manager Review", actor: "Manager", date: null, status: 'waiting' as const },
+                { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
+                { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
+            ];
+
+        // Always set the first stage as completed
+        if (baseTimeline.length > 0) {
+            baseTimeline[0] = { ...baseTimeline[0], actor: actorString, date: currentDate, status: 'completed' };
+        }
+
+        if (isDraft) {
+            // For drafts, all subsequent stages are 'waiting'
+            timeline = baseTimeline;
+        } else {
+            // For submissions
+            if (isManagerSubmitting) {
+                // Manager submits, so skip manager review
+                const managerReviewIndex = baseTimeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) {
+                    baseTimeline[managerReviewIndex] = { ...baseTimeline[managerReviewIndex], status: 'completed', actor: actorString, date: currentDate };
+                }
+                
+                const executiveApprovalIndex = baseTimeline.findIndex(s => s.stage === 'Executive Approval');
+                if (executiveApprovalIndex > -1) {
+                    baseTimeline[executiveApprovalIndex].status = 'pending';
+                } else if (managerReviewIndex > -1 && managerReviewIndex + 1 < baseTimeline.length) {
+                    // If no explicit Exec approval, go to next stage after manager
+                    baseTimeline[managerReviewIndex + 1].status = 'pending';
+                }
+
+            } else {
+                // Requester submits, goes to manager review
+                const managerReviewIndex = baseTimeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) {
+                    baseTimeline[managerReviewIndex].status = 'pending';
+                } else if (baseTimeline.length > 1) { // If no manager review, go to second stage
+                    baseTimeline[1].status = 'pending';
                 }
             }
+            timeline = baseTimeline;
         }
 
         const baseRequestData = {
@@ -1665,7 +1696,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
