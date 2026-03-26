@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -283,7 +282,10 @@ export function SubmissionClient({
     const departmentCategories = useMemo(() => {
         const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
         const categoriesFromCurrentItems = items.map(item => item.category).filter(Boolean);
-        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems, ...procurementCategories]);
+        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems]);
+        if (!combined.has('Uncategorized')) {
+            combined.add('Uncategorized');
+        }
         return Array.from(combined).sort();
     }, [budgetItems, items]);
 
@@ -664,7 +666,7 @@ export function SubmissionClient({
                     <Select value={newRecurringCategory} onValueChange={setNewRecurringCategory}>
                         <SelectTrigger className="col-span-3"><SelectValue placeholder="Select a category" /></SelectTrigger>
                         <SelectContent>
-                            {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                            {departmentCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>

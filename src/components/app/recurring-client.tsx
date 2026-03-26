@@ -13,7 +13,6 @@ import { useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
-import { procurementCategories } from "@/lib/procurement-categories";
 import { Label } from "../ui/label";
 
 type RecurringItem = {
@@ -30,7 +29,7 @@ type RecurringItem = {
 };
 
 // This component now only handles rendering the items
-export function RecurringClient({ items, view = 'list' }: { items: RecurringItem[], view?: 'grid' | 'list' }) {
+export function RecurringClient({ items, view = 'list', categories }: { items: RecurringItem[], view?: 'grid' | 'list', categories: string[] }) {
     const firestore = useFirestore();
     const { user, role } = useUser();
     const { toast } = useToast();
@@ -127,7 +126,7 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                                         <SelectValue placeholder="Category"/>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                        {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                                 <Switch id={`switch-grid-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status" disabled={!canManage}/>
@@ -219,7 +218,7 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                                         <SelectValue placeholder="Select Category" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                        {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </TableCell>
@@ -261,4 +260,3 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
         </div>
     );
 }
-

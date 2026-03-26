@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import { procurementCategories } from "@/lib/procurement-categories";
 
 type RecurringItem = {
     id: string;
@@ -33,6 +34,12 @@ type Department = {
     name: string;
 };
 
+type BudgetItem = {
+    id: string;
+    departmentId: string;
+    category: string;
+};
+
 export default function RecurringItemsPage() {
     const { user, role, departmentId: userDepartmentId, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
@@ -50,6 +57,12 @@ export default function RecurringItemsPage() {
     
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const budgetsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'budgets');
+    }, [firestore]);
+    const { data: allBudgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
 
     useEffect(() => {
         const allowedRoles = ['Procurement Officer', 'Administrator', 'Manager', 'Executive', 'Requester'];
@@ -87,6 +100,29 @@ export default function RecurringItemsPage() {
         return [];
 
     }, [allItems, role, selectedDepartmentId, userDepartmentId, reportingDepartments]);
+
+    const derivedCategories = useMemo(() => {
+        if (budgetsLoading || !allBudgetItems) return procurementCategories;
+        
+        let itemsToConsider = allBudgetItems;
+    
+        if (selectedDepartmentId !== '__all__') {
+          itemsToConsider = allBudgetItems.filter(item => item.departmentId === selectedDepartmentId);
+        } else {
+            // For 'All', we need to consider the user's role to scope down the list if they are not an admin.
+            if (role === 'Executive') {
+                if (reportingDepartments && reportingDepartments.length > 0) {
+                    itemsToConsider = allBudgetItems.filter(item => item.departmentId && reportingDepartments.includes(item.departmentId));
+                }
+            } else if (role === 'Manager' || role === 'Requester') {
+                itemsToConsider = allBudgetItems.filter(item => item.departmentId === userDepartmentId);
+            }
+        }
+        
+        const categoriesFromBudget = itemsToConsider.map(item => item.category).filter(Boolean);
+        const combined = new Set([...categoriesFromBudget, ...procurementCategories]); // Keep fallback
+        return Array.from(combined).sort();
+    }, [allBudgetItems, budgetsLoading, selectedDepartmentId, role, userDepartmentId, reportingDepartments]);
 
     const handleAddItem = async () => {
         let deptId: string | undefined | null = userDepartmentId;
@@ -192,7 +228,7 @@ export default function RecurringItemsPage() {
         toast({ title: "Import Clicked", description: "File import functionality is under development." });
     };
 
-    const loading = userLoading || itemsLoading || deptsLoading;
+    const loading = userLoading || itemsLoading || deptsLoading || budgetsLoading;
     
     if (loading || !user || !role) {
         return (
@@ -269,12 +305,10 @@ export default function RecurringItemsPage() {
                         <Loader className="h-8 w-8 animate-spin" />
                     </div>
                 ) : (
-                    <RecurringClient items={filteredItems || []} view={view} />
+                    <RecurringClient items={filteredItems || []} view={view} categories={derivedCategories} />
                 )}
             </CardContent>
            </Card>
         </div>
       );
 }
-
-    
