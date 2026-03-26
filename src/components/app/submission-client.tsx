@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -35,9 +36,14 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useFirestore, useUser } from "@/firebase";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { logErrorToFirestore } from "@/lib/error-logger";
+import { Label } from "@/components/ui/label";
 
 
 type Item = {
@@ -80,6 +86,8 @@ export function SubmissionClient({
     isLocked,
     recurringItems,
     recurringLoading,
+    departmentId,
+    departmentName,
 }: { 
     user: User,
     profile: UserProfile | null,
@@ -89,10 +97,20 @@ export function SubmissionClient({
     isLocked: boolean,
     recurringItems: RecurringItem[] | null,
     recurringLoading: boolean,
+    departmentId: string,
+    departmentName: string,
 }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const firestore = useFirestore();
   const [isRecurringDialogOpen, setIsRecurringDialogOpen] = useState(false);
+  const [isCreateRecurringDialogOpen, setIsCreateRecurringDialogOpen] = useState(false);
+
+  const [newRecurringName, setNewRecurringName] = useState('');
+  const [newRecurringCategory, setNewRecurringCategory] = useState('');
+  const [newRecurringAmount, setNewRecurringAmount] = useState(0);
+  const [newRecurringFrequency, setNewRecurringFrequency] = useState('Monthly');
+  const [isCreatingRecurring, setIsCreatingRecurring] = useState(false);
 
   const availableRecurringItems = useMemo(() => {
     if (!recurringItems) return [];
@@ -183,6 +201,80 @@ export function SubmissionClient({
   
   const handleImportClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleCreateNewRecurringItem = async () => {
+    if (!user || !profile || !firestore || !departmentId || !departmentName) {
+        toast({ variant: "destructive", title: "Cannot create item", description: "User or department information is missing." });
+        return;
+    }
+    if (!newRecurringName.trim() || !newRecurringCategory.trim()) {
+        toast({ variant: "destructive", title: "Missing fields", description: "Name and Category are required." });
+        return;
+    }
+
+    setIsCreatingRecurring(true);
+    const action = 'recurringItem.create_from_submission';
+
+    const newRecurringData = {
+        name: newRecurringName,
+        category: newRecurringCategory,
+        amount: newRecurringAmount,
+        frequency: newRecurringFrequency,
+        nextLoad: 'TBD',
+        active: true,
+        departmentId: departmentId,
+        departmentName: departmentName,
+    };
+
+    try {
+        const docRef = await addDoc(collection(firestore, 'recurringItems'), newRecurringData);
+        toast({ title: "New Recurring Item Created", description: `"${newRecurringName}" was added to the master list.` });
+        
+        await addDoc(collection(firestore, 'auditLogs'), {
+            userId: user.uid,
+            userName: profile.displayName || user.email,
+            action,
+            details: `Created recurring item "${newRecurringName}" from submission page for ${departmentName}`,
+            entity: { type: 'recurringItem', id: docRef.id },
+            timestamp: serverTimestamp()
+        });
+
+        const itemForSubmission: Item = {
+            id: docRef.id,
+            type: "Recurring",
+            description: newRecurringData.name,
+            brand: newRecurringData.name.split(" ")[0] || '',
+            qty: 1,
+            category: newRecurringData.category,
+            unitPrice: newRecurringData.amount,
+            fulfillmentStatus: 'Pending',
+            receivedQty: 0,
+            fulfillmentComments: [],
+            addedById: user.uid,
+            addedByName: profile.displayName || user.email || 'User',
+        };
+        setItems(prev => [...prev, itemForSubmission]);
+
+        setNewRecurringName('');
+        setNewRecurringCategory('');
+        setNewRecurringAmount(0);
+        setNewRecurringFrequency('Monthly');
+        setIsCreateRecurringDialogOpen(false);
+        setIsRecurringDialogOpen(false);
+    } catch (error: any) {
+        console.error("Create Recurring Item Error:", error);
+        toast({ variant: 'destructive', title: 'Create Failed', description: error.message });
+        await logErrorToFirestore(firestore, {
+            userId: user.uid,
+            userName: profile.displayName || user.email,
+            action,
+            errorMessage: error.message,
+            errorStack: error.stack,
+        });
+    } finally {
+        setIsCreatingRecurring(false);
+    }
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -451,6 +543,60 @@ export function SubmissionClient({
                     </Table>
                 )}
             </div>
+            <DialogFooter className="border-t pt-4 mt-4">
+                <Button variant="outline" onClick={() => setIsCreateRecurringDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create New Recurring Item
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>
+
+    <Dialog open={isCreateRecurringDialogOpen} onOpenChange={setIsCreateRecurringDialogOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Create New Master Recurring Item</DialogTitle>
+                <DialogDescription>
+                    This item will be saved to the master list for <span className="font-bold">{departmentName}</span> and can be used in future submissions.
+                </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="rec-name" className="text-right">Name</Label>
+                    <Input id="rec-name" value={newRecurringName} onChange={e => setNewRecurringName(e.target.value)} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="rec-category" className="text-right">Category</Label>
+                    <Select value={newRecurringCategory} onValueChange={setNewRecurringCategory}>
+                        <SelectTrigger className="col-span-3"><SelectValue placeholder="Select a category" /></SelectTrigger>
+                        <SelectContent>
+                            {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="rec-amount" className="text-right">Amount</Label>
+                    <Input id="rec-amount" type="number" value={newRecurringAmount} onChange={e => setNewRecurringAmount(parseFloat(e.target.value) || 0)} className="col-span-3" />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                    <Label htmlFor="rec-frequency" className="text-right">Frequency</Label>
+                    <Select value={newRecurringFrequency} onValueChange={setNewRecurringFrequency}>
+                        <SelectTrigger className="col-span-3"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="Monthly">Monthly</SelectItem>
+                            <SelectItem value="Quarterly">Quarterly</SelectItem>
+                            <SelectItem value="Annually">Annually</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateRecurringDialogOpen(false)}>Cancel</Button>
+                <Button onClick={handleCreateNewRecurringItem} disabled={isCreatingRecurring}>
+                    {isCreatingRecurring && <Loader className="h-4 w-4 mr-2 animate-spin" />}
+                    Create and Add
+                </Button>
+            </DialogFooter>
         </DialogContent>
     </Dialog>
     </>

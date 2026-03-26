@@ -1438,6 +1438,8 @@ export default function ProcurementQuickSubmitPage() {
                                 isLocked={isLocked}
                                 recurringItems={recurringItems}
                                 recurringLoading={recurringLoading}
+                                departmentId={selectedDepartmentId}
+                                departmentName={departmentName}
                             />
                         </TabsContent>
                         <TabsContent value="summary">
@@ -1705,4 +1707,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
