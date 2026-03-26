@@ -688,7 +688,7 @@ export default function BudgetPage() {
                                         {uploadsLoading ? (
                                             <TableRow><TableCell colSpan={4} className="text-center h-24"><Loader className="h-6 w-6 animate-spin mx-auto" /></TableCell></TableRow>
                                         ) : budgetUploads && budgetUploads.length > 0 ? (
-                                            budgetUploads.sort((a,b) => b.uploadedAt.seconds - a.uploadedAt.seconds).map(upload => (
+                                            budgetUploads.sort((a,b) => (b.uploadedAt?.seconds || 0) - (a.uploadedAt?.seconds || 0)).map(upload => (
                                                 <TableRow key={upload.id}>
                                                     <TableCell>{upload.uploadedAt ? format(new Date(upload.uploadedAt.seconds * 1000), "yyyy-MM-dd, HH:mm") : 'N/A'}</TableCell>
                                                     <TableCell>{upload.uploadedByName}</TableCell>
@@ -824,3 +824,5 @@ export default function BudgetPage() {
         </>
     );
 }
+
+    
