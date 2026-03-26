@@ -178,9 +178,11 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                                         readOnly={!canManage}
                                     />
                                 </div>
-                                <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)} disabled={!canManage}>
-                                    <Trash2 className="h-4 w-4 text-destructive"/>
-                                </Button>
+                                {canManage && (
+                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive"/>
+                                    </Button>
+                                )}
                             </div>
                         </CardContent>
                     </Card>
@@ -202,7 +204,7 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                         <TableHead>Next Auto-Load</TableHead>
                         <TableHead className="text-right">Amount</TableHead>
                         <TableHead className="text-center w-[100px]">Active</TableHead>
-                        <TableHead className="text-center w-[80px]">Actions</TableHead>
+                        {canManage && <TableHead className="text-center w-[80px]">Actions</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -245,11 +247,13 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                             <TableCell className="flex justify-center">
                                 <Switch id={`switch-list-${item.id}`} checked={item.active} onCheckedChange={(checked) => handleItemChange(item.id, 'active', checked)} aria-label="Toggle item status" disabled={!canManage}/>
                             </TableCell>
-                            <TableCell className="text-center">
-                                <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)} disabled={!canManage}>
-                                    <Trash2 className="h-4 w-4 text-destructive"/>
-                                </Button>
-                            </TableCell>
+                            {canManage && (
+                                <TableCell className="text-center">
+                                    <Button variant="ghost" size="icon" onClick={() => handleRemoveItem(item.id)}>
+                                        <Trash2 className="h-4 w-4 text-destructive"/>
+                                    </Button>
+                                </TableCell>
+                            )}
                         </TableRow>
                     ))}
                 </TableBody>
@@ -258,4 +262,3 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
     );
 }
 
-    
