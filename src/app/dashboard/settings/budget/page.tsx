@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -87,6 +88,7 @@ export default function BudgetPage() {
         yearTotal: string;
         forecastStart: string;
     }>({ category: '', yearTotal: '', forecastStart: '' });
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
@@ -260,7 +262,16 @@ export default function BudgetPage() {
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file || !selectedDepartmentId) return;
+        if (!file) return;
+
+        if (!selectedDepartmentId) {
+            toast({ variant: 'destructive', title: 'No Department Selected', description: 'Please select a department before importing.' });
+            return;
+        }
+        if (!financialYear) {
+            toast({ variant: 'destructive', title: 'Financial Year Not Set', description: 'Please set a financial year before importing.' });
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -305,6 +316,44 @@ export default function BudgetPage() {
             }
         };
         reader.readAsArrayBuffer(file);
+    };
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOver(true);
+    };
+    
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOver(false);
+    };
+    
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDraggingOver(false);
+    
+        if (!selectedDepartmentId) {
+            toast({ variant: 'destructive', title: 'No Department Selected', description: 'Please select a department before importing.' });
+            return;
+        }
+        if (!financialYear) {
+            toast({ variant: 'destructive', title: 'Financial Year Not Set', description: 'Please set a financial year before importing.' });
+            return;
+        }
+        
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+            // Create a synthetic event object for handleFileChange
+            const syntheticEvent = {
+                target: {
+                    files: files
+                }
+            } as unknown as React.ChangeEvent<HTMLInputElement>;
+            handleFileChange(syntheticEvent);
+        }
     };
     
     const handleConfirmImport = async () => {
@@ -503,43 +552,55 @@ export default function BudgetPage() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
-                            <div className="flex items-end gap-4 p-4 border rounded-lg bg-muted/50">
-                                <div className="grid gap-1.5">
-                                    <Label htmlFor="department-select">Department</Label>
-                                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                                        <SelectTrigger className="w-[250px] bg-background" id="department-select">
-                                            <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {departments?.map(d => (
-                                                <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-1.5">
-                                    <Label htmlFor="financial-year">Financial Year</Label>
-                                    <Input
-                                        id="financial-year"
-                                        type="number"
-                                        value={financialYear}
-                                        onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
-                                        className="w-[120px] bg-background"
-                                        placeholder="e.g., 2026"
-                                        disabled={!selectedDepartmentId}
-                                    />
-                                </div>
+                        <div className="mb-6 flex flex-wrap items-center gap-4 p-4 border rounded-lg bg-muted/50">
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="department-select">Department</Label>
+                                <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                                    <SelectTrigger className="w-[250px] bg-background" id="department-select">
+                                        <SelectValue placeholder={deptsLoading ? "Loading..." : "Select a department"} />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {departments?.map(d => (
+                                            <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                            <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={handleImportClick} disabled={!selectedDepartmentId}>
-                                    <Upload className="h-4 w-4 mr-2" /> Import Revision
-                                </Button>
-                                <Button variant="outline" onClick={handleExport} disabled={!selectedDepartmentId || !budgetItems || budgetItems.length === 0}>
-                                    <Download className="h-4 w-4 mr-2" /> Export Active Budget
-                                </Button>
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="financial-year">Financial Year</Label>
+                                <Input
+                                    id="financial-year"
+                                    type="number"
+                                    value={financialYear}
+                                    onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))}
+                                    className="w-[120px] bg-background"
+                                    placeholder="e.g., 2026"
+                                    disabled={!selectedDepartmentId}
+                                />
                             </div>
                         </div>
+
+                         {selectedDepartmentId && (
+                            <div 
+                                className={cn(
+                                    "relative flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-lg text-center cursor-pointer transition-colors mb-6",
+                                    isDraggingOver ? "border-primary bg-primary/10" : "border-muted-foreground/30 hover:border-primary/50"
+                                )}
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={handleDrop}
+                                onClick={handleImportClick}
+                            >
+                                <Upload className="mx-auto h-10 w-10 text-muted-foreground"/>
+                                <p className="mt-4 text-sm font-medium text-muted-foreground">
+                                    Drag and drop a budget file here, or click to select a file.
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    Supports .csv, .xlsx, .xls
+                                </p>
+                            </div>
+                        )}
+
                         {selectedDepartmentId && (
                             <div className="p-4 border bg-amber-50 border-amber-200 rounded-lg flex items-start gap-3 text-amber-800 mb-6 dark:bg-amber-900/20 dark:border-amber-700 dark:text-amber-300">
                                 <AlertCircle className="h-5 w-5 mt-0.5 shrink-0"/>
@@ -556,41 +617,47 @@ export default function BudgetPage() {
                                 <Loader className="h-8 w-8 animate-spin" />
                             </div>
                         ) : selectedDepartmentId ? (
-                            <div className="overflow-auto border rounded-lg">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead className="font-bold min-w-[250px]">
-                                                {`Active Budget: ${selectedDepartmentName ? ` - FY ${financialYear}` : ''}`}
-                                            </TableHead>
-                                            {monthHeaders.map(month => (
-                                                <TableHead key={month} className="text-right">{month}</TableHead>
-                                            ))}
-                                            <TableHead className="text-right font-bold">Year Total</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {budgetItems && budgetItems.length > 0 ? (
-                                            budgetItems.map((item) => (
-                                                <TableRow key={item.id}>
-                                                    <TableCell className="font-medium">{item.category}</TableCell>
-                                                    {item.forecasts.map((forecast, index) => (
-                                                        <TableCell key={index} className="text-right font-mono">
-                                                            {forecast ? formatCurrency(forecast) : '-'}
-                                                        </TableCell>
-                                                    ))}
-                                                    <TableCell className="text-right font-mono font-bold">{formatCurrency(item.yearTotal)}</TableCell>
-                                                </TableRow>
-                                            ))
-                                        ) : (
+                            <div className="space-y-2">
+                                <div className="flex justify-between items-center">
+                                    <h3 className="text-lg font-semibold">{`Active Budget: ${selectedDepartmentName ? ` - FY ${financialYear}` : ''}`}</h3>
+                                    <Button variant="outline" size="sm" onClick={handleExport} disabled={!budgetItems || budgetItems.length === 0}>
+                                        <Download className="h-4 w-4 mr-2" /> Export Active
+                                    </Button>
+                                </div>
+                                <div className="overflow-auto border rounded-lg">
+                                    <Table>
+                                        <TableHeader>
                                             <TableRow>
-                                                <TableCell colSpan={monthHeaders.length + 2} className="h-24 text-center text-muted-foreground">
-                                                    No active budget found for this department and year. Use the 'Import' button to create one.
-                                                </TableCell>
+                                                <TableHead className="font-bold min-w-[250px]">Category</TableHead>
+                                                {monthHeaders.map(month => (
+                                                    <TableHead key={month} className="text-right">{month}</TableHead>
+                                                ))}
+                                                <TableHead className="text-right font-bold">Year Total</TableHead>
                                             </TableRow>
-                                        )}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {budgetItems && budgetItems.length > 0 ? (
+                                                budgetItems.map((item) => (
+                                                    <TableRow key={item.id}>
+                                                        <TableCell className="font-medium">{item.category}</TableCell>
+                                                        {item.forecasts.map((forecast, index) => (
+                                                            <TableCell key={index} className="text-right font-mono">
+                                                                {forecast ? formatCurrency(forecast) : '-'}
+                                                            </TableCell>
+                                                        ))}
+                                                        <TableCell className="text-right font-mono font-bold">{formatCurrency(item.yearTotal)}</TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={monthHeaders.length + 2} className="h-24 text-center text-muted-foreground">
+                                                        No active budget found for this department and year. Use the 'Import' button to create one.
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                             </div>
                         ) : (
                             <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg">
