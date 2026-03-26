@@ -44,6 +44,7 @@ import { useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Label } from "@/components/ui/label";
+import * as XLSX from 'xlsx';
 
 
 type Item = {
@@ -86,6 +87,8 @@ const ExpenseTable = ({
     handleItemChange,
     handleRemoveItem,
     isLocked,
+    onAddItem,
+    onImport,
 } : {
     title: string;
     items: Item[];
@@ -94,10 +97,24 @@ const ExpenseTable = ({
     handleItemChange: (id: string | number, field: keyof Item, value: any) => void;
     handleRemoveItem: (id: string | number) => void;
     isLocked: boolean;
+    onAddItem: () => void;
+    onImport: () => void;
 }) => {
     return (
         <div className="space-y-4">
-            <h3 className="text-xl font-semibold text-foreground">{title}</h3>
+             <div className="flex justify-between items-center mb-4">
+                <h3 className="text-xl font-semibold text-foreground">{title}</h3>
+                {!isLocked && (
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={onImport}>
+                            <Upload className="h-4 w-4 mr-2" /> Import CSV
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={onAddItem}>
+                            <Plus className="w-4 h-4 mr-2" /> Add Item
+                        </Button>
+                    </div>
+                )}
+            </div>
             <div className="overflow-auto border rounded-lg">
                 <Table>
                     <TableHeader>
@@ -128,7 +145,6 @@ const ExpenseTable = ({
                                 value={item.description}
                                 onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
                                 readOnly={!canEditItem(item)}
-                                className="bg-transparent border-0"
                             />
                             </TableCell>
                             <TableCell>
@@ -137,7 +153,6 @@ const ExpenseTable = ({
                                 value={item.brand}
                                 onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
                                 readOnly={!canEditItem(item)}
-                                className="bg-transparent border-0"
                             />
                             </TableCell>
                             <TableCell>
@@ -146,7 +161,7 @@ const ExpenseTable = ({
                                 value={item.qty}
                                 onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
                                 readOnly={!canEditItem(item)}
-                                className="w-16 bg-transparent border-0"
+                                className="w-16"
                             />
                             </TableCell>
                             <TableCell>
@@ -155,7 +170,7 @@ const ExpenseTable = ({
                                     onValueChange={(value) => handleItemChange(item.id, "category", value)}
                                     disabled={!canEditItem(item)}
                                 >
-                                    <SelectTrigger className="w-full bg-transparent border-0">
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Select a category" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -169,7 +184,6 @@ const ExpenseTable = ({
                                 value={item.comments || ""}
                                 onChange={(e) => handleItemChange(item.id, "comments", e.target.value)}
                                 readOnly={isLocked}
-                                className="bg-transparent border-0"
                                 placeholder="Add a comment..."
                             />
                             </TableCell>
@@ -182,7 +196,7 @@ const ExpenseTable = ({
                                 value={item.unitPrice}
                                 onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
                                 readOnly={!canEditItem(item)}
-                                className="w-24 text-right bg-transparent border-0"
+                                className="w-24 text-right"
                             />
                             </TableCell>
                             <TableCell className="text-right font-semibold">
@@ -335,8 +349,11 @@ export function SubmissionClient({
     toast({ title: "Item Added", description: `Added "${itemToAdd.name}" to the submission.`})
   };
   
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
+  const handleImportClick = (expenseType: 'Operational' | 'Capital') => {
+    if (fileInputRef.current) {
+        fileInputRef.current.setAttribute('data-expense-type', expenseType);
+        fileInputRef.current.click();
+    }
   };
 
   const handleCreateNewRecurringItem = async () => {
@@ -415,44 +432,48 @@ export function SubmissionClient({
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const expenseType = event.currentTarget.getAttribute('data-expense-type') as 'Operational' | 'Capital' | undefined;
     const file = event.target.files?.[0];
-    if (!file) return;
+    if (!file || !expenseType) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-        const text = e.target?.result as string;
+        const data = e.target?.result;
         try {
-            const rows = text.split('\n').filter(row => row.trim());
+            const workbook = XLSX.read(data, { type: 'array' });
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
             if (rows.length < 2) throw new Error("CSV file must have a header and at least one data row.");
 
-            const headers = rows[0].split(',').map(h => h.trim().replace(/"/g, ''));
-            
-            const newItems: Item[] = rows.slice(1).map(row => {
-                const values = row.split(',').map(v => v.trim().replace(/"/g, ''));
-                let item: any = {};
-                headers.forEach((header, index) => {
-                    item[header] = values[index];
-                });
+            const headers = rows[0].map(h => String(h || '').trim().toLowerCase());
+            const descIndex = headers.indexOf('description');
+            const qtyIndex = headers.indexOf('qty');
+            const priceIndex = headers.indexOf('unitprice');
+            const brandIndex = headers.indexOf('brand');
+            const categoryIndex = headers.indexOf('category');
+            const commentsIndex = headers.indexOf('comments');
 
-                if (item.type === 'Recurring') return null; // Don't import recurring items
+            if (descIndex === -1 || qtyIndex === -1 || priceIndex === -1) {
+                throw new Error("CSV is missing required columns: description, qty, unitPrice.");
+            }
 
-                if (!item.description || !item.qty || !item.unitPrice) {
-                    throw new Error("CSV for one-off items is missing required columns: description, qty, unitPrice.");
-                }
+            const newItems: Item[] = rows.slice(1).map((row, i) => {
+                if (row.every(cell => cell === null || cell === '')) return null; // skip empty rows
 
                 return {
-                    id: item.id || Date.now() + Math.random(),
+                    id: Date.now() + i,
                     type: "One-Off",
-                    expenseType: 'Operational', // Default imported items to Operational
-                    description: item.description,
-                    brand: item.brand || '',
-                    qty: parseInt(item.qty, 10) || 1,
-                    category: item.category || '',
-                    unitPrice: parseFloat(item.unitPrice) || 0,
+                    expenseType: expenseType,
+                    description: String(row[descIndex] || ''),
+                    brand: brandIndex > -1 ? String(row[brandIndex] || '') : '',
+                    qty: parseInt(String(row[qtyIndex]), 10) || 1,
+                    category: categoryIndex > -1 ? String(row[categoryIndex] || '') : 'Uncategorized',
+                    unitPrice: parseFloat(String(row[priceIndex])) || 0,
                     fulfillmentStatus: 'Pending',
                     receivedQty: 0,
                     fulfillmentComments: [],
-                    comments: item.comments || "",
+                    comments: commentsIndex > -1 ? String(row[commentsIndex] || '') : "",
                     addedById: user.uid,
                     addedByName: profile?.displayName || user.email || 'User',
                 };
@@ -460,15 +481,15 @@ export function SubmissionClient({
             
             setItems(prev => [...prev, ...newItems]);
 
-            toast({ title: "Import Successful", description: `${newItems.length} one-off items were added.` });
+            toast({ title: "Import Successful", description: `${newItems.length} ${expenseType.toLowerCase()} items were added.` });
         } catch (error: any) {
             console.error("CSV Parsing Error:", error);
-            toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the CSV file." });
+            toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the file." });
         } finally {
             if (event.target) event.target.value = '';
         }
     };
-    reader.readAsText(file);
+    reader.readAsArrayBuffer(file);
   };
   
   const operationalItems = items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
@@ -481,7 +502,7 @@ export function SubmissionClient({
             type="file"
             ref={fileInputRef}
             className="hidden"
-            accept=".csv"
+            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
             onChange={handleFileChange}
         />
       
@@ -504,6 +525,8 @@ export function SubmissionClient({
             handleItemChange={handleItemChange}
             handleRemoveItem={handleRemoveItem}
             isLocked={isLocked}
+            onAddItem={() => handleAddItem('Operational')}
+            onImport={() => handleImportClick('Operational')}
         />
         <ExpenseTable 
             title="Capital Expenses"
@@ -513,25 +536,16 @@ export function SubmissionClient({
             handleItemChange={handleItemChange}
             handleRemoveItem={handleRemoveItem}
             isLocked={isLocked}
+            onAddItem={() => handleAddItem('Capital')}
+            onImport={() => handleImportClick('Capital')}
         />
       </div>
 
       <div className="flex items-center justify-start pt-6 mt-6 border-t">
         <div className="flex gap-2 flex-wrap">
-            <Button variant="outline" onClick={() => handleAddItem('Operational')} disabled={isLocked}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Operational Item
-            </Button>
-             <Button variant="outline" onClick={() => handleAddItem('Capital')} disabled={isLocked}>
-                <Plus className="w-4 h-4 mr-2" />
-                Add Capital Item
-            </Button>
              <Button variant="outline" onClick={() => setIsRecurringDialogOpen(true)} disabled={isLocked}>
                 <History className="w-4 h-4 mr-2" />
                 Add Recurring Item
-            </Button>
-            <Button variant="outline" onClick={handleImportClick} disabled={isLocked}>
-                <Upload className="h-4 w-4 mr-2" /> Import from CSV
             </Button>
             <TooltipProvider>
                 <Tooltip>
