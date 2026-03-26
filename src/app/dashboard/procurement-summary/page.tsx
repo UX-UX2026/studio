@@ -52,6 +52,7 @@ export default function ProcurementSummaryPage() {
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [openCategory, setOpenCategory] = useState<string | null>(null);
+    const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
     const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
 
     // Data fetching
@@ -93,7 +94,7 @@ export default function ProcurementSummaryPage() {
         return selectedRequest ? selectedRequest.items : [];
     }, [allRequests, selectedDepartmentId, selectedPeriod]);
 
-    const summaryData = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
+    const { operationalSummary, capitalSummary } = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
     
     useEffect(() => {
       const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
@@ -178,85 +179,183 @@ export default function ProcurementSummaryPage() {
                     <Loader className="h-8 w-8 animate-spin" />
                 </div>
              ) : (
-                <div className="overflow-auto rounded-lg border">
-                    <Table>
-                        <TableHeader>
-                            <TableRow className="bg-muted hover:bg-muted">
-                                <TableHead className="font-bold">Procurement Line Items</TableHead>
-                                <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
-                                <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
-                                <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
-                                <TableHead className="font-bold">Comments</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                <Fragment key={item.category}>
-                                    <TableRow 
-                                        onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
-                                        className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
-                                    >
-                                        <TableCell className="font-medium flex items-center gap-2">
-                                            <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
-                                            {item.category}
-                                        </TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
-                                            {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
-                                            {formatCurrency(item.variance)}
-                                        </TableCell>
-                                        <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
-                                    </TableRow>
-                                    {openCategory === item.category && (
-                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                            <TableCell colSpan={5} className="p-2">
-                                                <div className="p-2 bg-background rounded-md border">
-                                                    <Table>
-                                                        <TableHeader>
-                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                <TableHead>Item</TableHead>
-                                                                <TableHead>Type</TableHead>
-                                                                <TableHead className="text-center">Qty</TableHead>
-                                                                <TableHead className="text-right">Unit Price</TableHead>
-                                                                <TableHead className="text-right">Total</TableHead>
-                                                            </TableRow>
-                                                        </TableHeader>
-                                                        <TableBody>
-                                                            {item.items.map((subItem) => (
-                                                                <TableRow key={subItem.id}>
-                                                                    <TableCell>{subItem.description}</TableCell>
-                                                                    <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                    <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                </TableRow>
-                                                            ))}
-                                                        </TableBody>
-                                                    </Table>
-                                                </div>
-                                            </TableCell>
-                                        </TableRow>
-                                    )}
-                                </Fragment>
-                            )) : (
-                                <TableRow>
-                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                                        No data available for the selected department and period.
-                                    </TableCell>
+                <div className="space-y-8">
+                    {/* Operational Summary */}
+                    <div className="overflow-auto rounded-lg border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted hover:bg-muted">
+                                    <TableHead className="font-bold">Operational Line Items</TableHead>
+                                    <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
+                                    <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
+                                    <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                    <TableHead className="font-bold">Comments</TableHead>
                                 </TableRow>
-                            )}
-                        </TableBody>
+                            </TableHeader>
+                            <TableBody>
+                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
+                                    <Fragment key={item.category}>
+                                        <TableRow 
+                                            onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
+                                            className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
+                                        >
+                                            <TableCell className="font-medium flex items-center gap-2">
+                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
+                                                {item.category}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                            <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                                {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
+                                                {formatCurrency(item.variance)}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                                        </TableRow>
+                                        {openCategory === item.category && (
+                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                <TableCell colSpan={5} className="p-2">
+                                                    <div className="p-2 bg-background rounded-md border">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                    <TableHead>Item</TableHead>
+                                                                    <TableHead>Type</TableHead>
+                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {item.items.map((subItem) => (
+                                                                    <TableRow key={subItem.id}>
+                                                                        <TableCell>{subItem.description}</TableCell>
+                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </Fragment>
+                                )) : (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                            No operational data for the selected period.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                            <TableFooter>
+                                <TableRow className="bg-muted hover:bg-muted font-bold">
+                                    <TableCell>Operational Subtotal</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell>
+                                    <TableCell></TableCell>
+                                </TableRow>
+                            </TableFooter>
+                        </Table>
+                    </div>
+
+                    {/* Capital Summary */}
+                    <div className="overflow-auto rounded-lg border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow className="bg-muted hover:bg-muted">
+                                    <TableHead className="font-bold">Capital Line Items</TableHead>
+                                    <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
+                                    <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
+                                    <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                    <TableHead className="font-bold">Comments</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
+                                    <Fragment key={item.category}>
+                                        <TableRow 
+                                            onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)}
+                                            className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
+                                        >
+                                            <TableCell className="font-medium flex items-center gap-2">
+                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />
+                                                {item.category}
+                                            </TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                            <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
+                                                {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
+                                                {formatCurrency(item.variance)}
+                                            </TableCell>
+                                            <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
+                                        </TableRow>
+                                        {openCapitalCategory === item.category && (
+                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                <TableCell colSpan={5} className="p-2">
+                                                    <div className="p-2 bg-background rounded-md border">
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                    <TableHead>Item</TableHead>
+                                                                    <TableHead>Type</TableHead>
+                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {item.items.map((subItem) => (
+                                                                    <TableRow key={subItem.id}>
+                                                                        <TableCell>{subItem.description}</TableCell>
+                                                                        <TableCell><Badge variant="outline">{subItem.type}</Badge></TableCell>
+                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                    </Fragment>
+                                )) : (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
+                                            No capital data for the selected period.
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                            <TableFooter>
+                                <TableRow className="bg-muted hover:bg-muted font-bold">
+                                    <TableCell>Capital Subtotal</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell>
+                                    <TableCell></TableCell>
+                                </TableRow>
+                            </TableFooter>
+                        </Table>
+                    </div>
+
+                    {/* Grand Total */}
+                     <Table>
                         <TableFooter>
-                            <TableRow className="bg-muted hover:bg-muted font-bold">
-                                <TableCell>Subtotal</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
-                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
+                             <TableRow className="bg-card hover:bg-card text-lg font-bold border-t-2 border-primary">
+                                <TableCell>Grand Total</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement + capitalSummary.totals.procurement)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast + capitalSummary.totals.forecast)}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance + capitalSummary.totals.variance)}</TableCell>
                                 <TableCell></TableCell>
                             </TableRow>
                         </TableFooter>
-                    </Table>
+                     </Table>
                 </div>
             )}
         </CardContent>
