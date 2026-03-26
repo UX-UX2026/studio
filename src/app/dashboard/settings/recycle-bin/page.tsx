@@ -42,9 +42,9 @@ export default function RecycleBinPage() {
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
     const archivedRequestsQuery = useMemo(() => {
-        if (!firestore) return null;
+        if (!firestore || !user) return null;
         return query(collection(firestore, 'procurementRequests'), where('status', '==', 'Archived'), orderBy('updatedAt', 'desc'));
-    }, [firestore]);
+    }, [firestore, user]);
 
     const { data: archivedRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(archivedRequestsQuery);
 

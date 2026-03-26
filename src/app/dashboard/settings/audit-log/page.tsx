@@ -32,9 +32,9 @@ export default function DatabaseLogPage() {
     const firestore = useFirestore();
 
     const auditLogsQuery = useMemo(() => {
-        if (!firestore) return null;
+        if (!firestore || !user) return null;
         return query(collection(firestore, 'auditLogs'), orderBy('timestamp', 'desc'));
-    }, [firestore]);
+    }, [firestore, user]);
 
     const { data: auditLogs, loading: logsLoading } = useCollection<AuditEvent>(auditLogsQuery);
 

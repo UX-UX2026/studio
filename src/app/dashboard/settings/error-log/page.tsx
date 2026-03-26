@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -33,9 +34,9 @@ export default function ErrorLogPage() {
     const firestore = useFirestore();
 
     const errorLogsQuery = useMemo(() => {
-        if (!firestore) return null;
+        if (!firestore || !user) return null;
         return query(collection(firestore, 'errorLogs'), orderBy('timestamp', 'desc'));
-    }, [firestore]);
+    }, [firestore, user]);
 
     const { data: errorLogs, loading: logsLoading } = useCollection<ErrorLogEvent>(errorLogsQuery);
 

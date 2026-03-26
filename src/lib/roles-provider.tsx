@@ -3,7 +3,7 @@
 
 import { createContext, useContext, ReactNode, useMemo, useEffect } from 'react';
 import { useFirestore, useCollection } from '@/firebase';
-import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy, getDocs, limit } from 'firebase/firestore';
+import { collection, addDoc, doc, setDoc, deleteDoc, query, orderBy, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { useAuthentication } from '@/context/authentication-provider';
 
 export type Role = {
@@ -70,16 +70,16 @@ const defaultRolesWithPermissions: Omit<Role, 'id'>[] = [
 export function RolesProvider({ children }: { children: ReactNode }) {
   const firestore = useFirestore();
   const { user } = useAuthentication();
+
   const rolesCollection = useMemo(() => {
-    if (!firestore) return null;
+    if (!firestore || !user) return null;
     return query(collection(firestore, 'roles'), orderBy('name'));
-  }, [firestore]);
+  }, [firestore, user]);
   
   const { data: roles, loading, error } = useCollection<Role>(rolesCollection);
 
   useEffect(() => {
-    // This effect is ONLY for seeding roles and should only run once for the Super Admin.
-    if (!firestore || !user || user.email !== 'heinrich@ubuntux.co.za') {
+    if (!firestore || !user || (user.email !== 'heinrich@ubuntux.co.za' && user.email !== 'admin@procurportal.com')) {
       return;
     }
 
@@ -90,9 +90,12 @@ export function RolesProvider({ children }: { children: ReactNode }) {
         
         if (snapshot.empty) {
           console.log("Roles collection is empty. Seeding default roles...");
-          for (const roleData of defaultRolesWithPermissions) {
-            await addDoc(collection(firestore, 'roles'), roleData);
-          }
+          const batch = writeBatch(firestore);
+          defaultRolesWithPermissions.forEach(roleData => {
+            const roleRef = doc(collection(firestore, 'roles'));
+            batch.set(roleRef, roleData);
+          });
+          await batch.commit();
           console.log("Default roles seeded successfully.");
         }
       } catch (e) {
@@ -100,8 +103,6 @@ export function RolesProvider({ children }: { children: ReactNode }) {
       }
     };
     
-    // A short delay can help prevent race conditions where the check runs
-    // before Firestore rules have fully propagated after a user logs in.
     const timer = setTimeout(() => {
       seedRoles();
     }, 1500);

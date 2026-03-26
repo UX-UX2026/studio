@@ -43,7 +43,10 @@ export default function VendorsPage() {
     const router = useRouter();
     const firestore = useFirestore();
 
-    const vendorsQuery = useMemo(() => query(collection(firestore, 'vendors'), orderBy('name')), [firestore]);
+    const vendorsQuery = useMemo(() => {
+        if (!firestore || !user) return null;
+        return query(collection(firestore, 'vendors'), orderBy('name'))
+    }, [firestore, user]);
     const { data: vendors, loading: vendorsLoading } = useCollection<Vendor>(vendorsQuery);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -452,10 +455,7 @@ export default function VendorsPage() {
                         <DialogClose asChild>
                             <Button type="button" variant="outline">Cancel</Button>
                         </DialogClose>
-                        <Button onClick={handleSave} disabled={isSaving}>
-                             {isSaving && <Loader className="mr-2 h-4 w-4 animate-spin" />}
-                             Save Vendor
-                        </Button>
+                        <Button onClick={handleSave}>Save Vendor</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
