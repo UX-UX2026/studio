@@ -49,6 +49,7 @@ import { Label } from "@/components/ui/label";
 type Item = {
   id: number | string;
   type: "Recurring" | "One-Off";
+  expenseType: 'Operational' | 'Capital';
   description: string;
   brand: string;
   qty: number;
@@ -76,6 +77,139 @@ const formatCurrency = (amount: number) => {
     currency: "ZAR",
   }).format(amount);
 };
+
+const ExpenseTable = ({
+    title,
+    items,
+    canEditItem,
+    canRemoveItem,
+    handleItemChange,
+    handleRemoveItem,
+    isLocked,
+} : {
+    title: string;
+    items: Item[];
+    canEditItem: (item: Item) => boolean;
+    canRemoveItem: (item: Item) => boolean;
+    handleItemChange: (id: string | number, field: keyof Item, value: any) => void;
+    handleRemoveItem: (id: string | number) => void;
+    isLocked: boolean;
+}) => {
+    return (
+        <div className="space-y-4">
+            <h3 className="text-xl font-semibold text-foreground">{title}</h3>
+            <div className="overflow-auto border rounded-lg">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                        <TableHead className="w-[100px]">Type</TableHead>
+                        <TableHead>Item / Service Description</TableHead>
+                        <TableHead className="w-[150px]">Brand</TableHead>
+                        <TableHead className="w-[80px]">Qty</TableHead>
+                        <TableHead className="w-[250px]">Category</TableHead>
+                        <TableHead className="w-[200px]">Comments</TableHead>
+                        <TableHead className="w-[150px]">Added By</TableHead>
+                        <TableHead className="w-[120px] text-right">Unit Price</TableHead>
+                        <TableHead className="w-[120px] text-right">Total</TableHead>
+                        <TableHead className="w-[80px] text-center">Actions</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {items.map((item) => (
+                        <TableRow key={item.id} className={cn(item.type === 'Recurring' ? 'bg-muted/50' : '', isLocked && 'text-muted-foreground')}>
+                            <TableCell>
+                            <Badge variant={item.type === "Recurring" ? "secondary" : "outline"}>
+                                {item.type}
+                            </Badge>
+                            </TableCell>
+                            <TableCell>
+                            <Input
+                                type="text"
+                                value={item.description}
+                                onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
+                                readOnly={!canEditItem(item)}
+                                className="bg-transparent border-0"
+                            />
+                            </TableCell>
+                            <TableCell>
+                            <Input
+                                type="text"
+                                value={item.brand}
+                                onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
+                                readOnly={!canEditItem(item)}
+                                className="bg-transparent border-0"
+                            />
+                            </TableCell>
+                            <TableCell>
+                            <Input
+                                type="number"
+                                value={item.qty}
+                                onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
+                                readOnly={!canEditItem(item)}
+                                className="w-16 bg-transparent border-0"
+                            />
+                            </TableCell>
+                            <TableCell>
+                            <Select
+                                    value={item.category}
+                                    onValueChange={(value) => handleItemChange(item.id, "category", value)}
+                                    disabled={!canEditItem(item)}
+                                >
+                                    <SelectTrigger className="w-full bg-transparent border-0">
+                                        <SelectValue placeholder="Select a category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </TableCell>
+                            <TableCell>
+                            <Input
+                                type="text"
+                                value={item.comments || ""}
+                                onChange={(e) => handleItemChange(item.id, "comments", e.target.value)}
+                                readOnly={isLocked}
+                                className="bg-transparent border-0"
+                                placeholder="Add a comment..."
+                            />
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                                {item.addedByName || 'System'}
+                            </TableCell>
+                            <TableCell>
+                            <Input
+                                type="number"
+                                value={item.unitPrice}
+                                onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
+                                readOnly={!canEditItem(item)}
+                                className="w-24 text-right bg-transparent border-0"
+                            />
+                            </TableCell>
+                            <TableCell className="text-right font-semibold">
+                            {formatCurrency(item.qty * item.unitPrice)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                            {canRemoveItem(item) ? (
+                                <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleRemoveItem(item.id)}
+                                disabled={isLocked}
+                                >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                            ) : (
+                                <Lock className="h-4 w-4 mx-auto text-muted-foreground" />
+                            )}
+                            </TableCell>
+                        </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
+    );
+}
 
 export function SubmissionClient({ 
     user,
@@ -157,10 +291,11 @@ export function SubmissionClient({
     );
   };
 
-  const handleAddItem = () => {
+  const handleAddItem = (expenseType: 'Operational' | 'Capital') => {
     const newItem: Item = {
       id: Date.now(),
       type: "One-Off",
+      expenseType: expenseType,
       description: "",
       brand: "",
       qty: 1,
@@ -184,6 +319,7 @@ export function SubmissionClient({
     const newItem: Item = {
       id: itemToAdd.id, // Use master item ID
       type: "Recurring",
+      expenseType: 'Operational', // Recurring items are always operational
       description: itemToAdd.name,
       brand: itemToAdd.name.split(" ")[0] || '',
       qty: 1,
@@ -243,6 +379,7 @@ export function SubmissionClient({
         const itemForSubmission: Item = {
             id: docRef.id,
             type: "Recurring",
+            expenseType: 'Operational',
             description: newRecurringData.name,
             brand: newRecurringData.name.split(" ")[0] || '',
             qty: 1,
@@ -306,6 +443,7 @@ export function SubmissionClient({
                 return {
                     id: item.id || Date.now() + Math.random(),
                     type: "One-Off",
+                    expenseType: 'Operational', // Default imported items to Operational
                     description: item.description,
                     brand: item.brand || '',
                     qty: parseInt(item.qty, 10) || 1,
@@ -332,6 +470,9 @@ export function SubmissionClient({
     };
     reader.readAsText(file);
   };
+  
+  const operationalItems = items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
+  const capitalItems = items.filter(item => item.expenseType === 'Capital');
 
   return (
     <>
@@ -354,121 +495,36 @@ export function SubmissionClient({
           </div>
       )}
 
-      <div className="overflow-auto border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[100px]">Type</TableHead>
-              <TableHead>Item / Service Description</TableHead>
-              <TableHead className="w-[150px]">Brand</TableHead>
-              <TableHead className="w-[80px]">Qty</TableHead>
-              <TableHead className="w-[250px]">Category</TableHead>
-              <TableHead className="w-[200px]">Comments</TableHead>
-              <TableHead className="w-[150px]">Added By</TableHead>
-              <TableHead className="w-[120px] text-right">Unit Price</TableHead>
-              <TableHead className="w-[120px] text-right">Total</TableHead>
-              <TableHead className="w-[80px] text-center">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.map((item, index) => (
-              <TableRow key={item.id} className={cn(item.type === 'Recurring' ? 'bg-muted/50' : '', isLocked && 'text-muted-foreground')}>
-                <TableCell>
-                  <Badge variant={item.type === "Recurring" ? "secondary" : "outline"}>
-                    {item.type}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="text"
-                    value={item.description}
-                    onChange={(e) => handleItemChange(item.id, "description", e.target.value)}
-                    readOnly={!canEditItem(item)}
-                    className="bg-transparent border-0"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="text"
-                    value={item.brand}
-                    onChange={(e) => handleItemChange(item.id, "brand", e.target.value)}
-                    readOnly={!canEditItem(item)}
-                    className="bg-transparent border-0"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    value={item.qty}
-                    onChange={(e) => handleItemChange(item.id, "qty", parseInt(e.target.value, 10))}
-                    readOnly={!canEditItem(item)}
-                    className="w-16 bg-transparent border-0"
-                  />
-                </TableCell>
-                <TableCell>
-                   <Select
-                        value={item.category}
-                        onValueChange={(value) => handleItemChange(item.id, "category", value)}
-                        disabled={!canEditItem(item)}
-                    >
-                        <SelectTrigger className="w-full bg-transparent border-0">
-                            <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                        </SelectContent>
-                    </Select>
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="text"
-                    value={item.comments || ""}
-                    onChange={(e) => handleItemChange(item.id, "comments", e.target.value)}
-                    readOnly={isLocked}
-                    className="bg-transparent border-0"
-                    placeholder="Add a comment..."
-                  />
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                    {item.addedByName || 'System'}
-                </TableCell>
-                <TableCell>
-                  <Input
-                    type="number"
-                    value={item.unitPrice}
-                    onChange={(e) => handleItemChange(item.id, "unitPrice", parseFloat(e.target.value))}
-                    readOnly={!canEditItem(item)}
-                    className="w-24 text-right bg-transparent border-0"
-                  />
-                </TableCell>
-                <TableCell className="text-right font-semibold">
-                  {formatCurrency(item.qty * item.unitPrice)}
-                </TableCell>
-                <TableCell className="text-center">
-                  {canRemoveItem(item) ? (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleRemoveItem(item.id)}
-                      disabled={isLocked}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
-                  ) : (
-                    <Lock className="h-4 w-4 mx-auto text-muted-foreground" />
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="space-y-8">
+        <ExpenseTable 
+            title="Operational Expenses"
+            items={operationalItems}
+            canEditItem={canEditItem}
+            canRemoveItem={canRemoveItem}
+            handleItemChange={handleItemChange}
+            handleRemoveItem={handleRemoveItem}
+            isLocked={isLocked}
+        />
+        <ExpenseTable 
+            title="Capital Expenses"
+            items={capitalItems}
+            canEditItem={canEditItem}
+            canRemoveItem={canRemoveItem}
+            handleItemChange={handleItemChange}
+            handleRemoveItem={handleRemoveItem}
+            isLocked={isLocked}
+        />
       </div>
 
-      <div className="flex items-center justify-start pt-4">
-        <div className="flex gap-2">
-            <Button variant="outline" onClick={handleAddItem} disabled={isLocked}>
+      <div className="flex items-center justify-start pt-6 mt-6 border-t">
+        <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" onClick={() => handleAddItem('Operational')} disabled={isLocked}>
                 <Plus className="w-4 h-4 mr-2" />
-                Add Manual Item
+                Add Operational Item
+            </Button>
+             <Button variant="outline" onClick={() => handleAddItem('Capital')} disabled={isLocked}>
+                <Plus className="w-4 h-4 mr-2" />
+                Add Capital Item
             </Button>
              <Button variant="outline" onClick={() => setIsRecurringDialogOpen(true)} disabled={isLocked}>
                 <History className="w-4 h-4 mr-2" />
@@ -602,3 +658,5 @@ export function SubmissionClient({
     </>
   );
 }
+
+    

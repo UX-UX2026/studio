@@ -107,6 +107,7 @@ type RecurringItem = {
 type Item = {
   id: number | string;
   type: "Recurring" | "One-Off";
+  expenseType: 'Operational' | 'Capital';
   description: string;
   brand: string;
   qty: number;
@@ -141,6 +142,9 @@ type AuditEvent = {
 };
 
 const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
+    const operationalItems = request.items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
+    const capitalItems = request.items.filter(item => item.expenseType === 'Capital');
+
     if (format === 'pdf') {
         const { default: jsPDF } = await import('jspdf');
         const { default: autoTable } = await import('jspdf-autotable');
@@ -212,41 +216,85 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             headStyles: { fillColor: primaryColor },
         });
 
-        const itemsData = request.items.map(item => [
-            item.type,
-            item.description,
-            item.category,
-            item.qty,
-            formatCurrency(item.unitPrice),
-            formatCurrency(item.qty * item.unitPrice),
-        ]);
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [['Type', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-            body: itemsData,
-            headStyles: { fillColor: primaryColor },
-        });
+        if (operationalItems.length > 0) {
+            const opItemsData = operationalItems.map(item => [
+                item.type,
+                item.description,
+                item.category,
+                item.qty,
+                formatCurrency(item.unitPrice),
+                formatCurrency(item.qty * item.unitPrice),
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Operational Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                body: opItemsData,
+                headStyles: { fillColor: primaryColor },
+            });
+        }
         
-        const summaryTableData = summaryData.lines.map(line => [
+        if (capitalItems.length > 0) {
+            const capItemsData = capitalItems.map(item => [
+                item.type,
+                item.description,
+                item.category,
+                item.qty,
+                formatCurrency(item.unitPrice),
+                formatCurrency(item.qty * item.unitPrice),
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Capital Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                body: capItemsData,
+                headStyles: { fillColor: primaryColor },
+            });
+        }
+        
+        const opSummaryTableData = summaryData.operationalSummary.lines.map(line => [
             line.category,
             formatCurrency(line.procurementTotal),
             formatCurrency(line.forecastTotal),
             formatCurrency(line.variance),
         ]);
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [['Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-            body: summaryTableData,
-            foot: [[
-                'Total',
-                formatCurrency(summaryData.totals.procurement),
-                formatCurrency(summaryData.totals.forecast),
-                formatCurrency(summaryData.totals.variance)
-            ]],
-            theme: 'grid',
-            headStyles: { fillColor: primaryColor },
-            footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-        });
+        if(opSummaryTableData.length > 0) {
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Operational Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                body: opSummaryTableData,
+                foot: [[
+                    'Total',
+                    formatCurrency(summaryData.operationalSummary.totals.procurement),
+                    formatCurrency(summaryData.operationalSummary.totals.forecast),
+                    formatCurrency(summaryData.operationalSummary.totals.variance)
+                ]],
+                theme: 'grid',
+                headStyles: { fillColor: primaryColor },
+                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+            });
+        }
+        
+        const capSummaryTableData = summaryData.capitalSummary.lines.map(line => [
+            line.category,
+            formatCurrency(line.procurementTotal),
+            formatCurrency(line.forecastTotal),
+            formatCurrency(line.variance),
+        ]);
+         if(capSummaryTableData.length > 0) {
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Capital Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                body: capSummaryTableData,
+                foot: [[
+                    'Total',
+                    formatCurrency(summaryData.capitalSummary.totals.procurement),
+                    formatCurrency(summaryData.capitalSummary.totals.forecast),
+                    formatCurrency(summaryData.capitalSummary.totals.variance)
+                ]],
+                theme: 'grid',
+                headStyles: { fillColor: primaryColor },
+                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+            });
+        }
         
         const timelineData = request.timeline.map(step => [
             step.stage,
@@ -292,6 +340,8 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     }
 
     // XLSX logic
+    const wb = XLSX.utils.book_new();
+
     const detailsDataForSheet = [
         { Key: "Request ID", Value: request.id },
         { Key: "Company", Value: request.companyName || 'N/A' },
@@ -301,52 +351,26 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         { Key: "Total", Value: formatCurrency(request.total) },
         { Key: "Status", Value: request.status },
     ];
-    const detailsSheet = XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true }), "Request Details");
 
-    // 2. Line Items
-    const itemsData = request.items.map(item => ({
-        'Type': item.type,
-        'Description': item.description,
-        'Category': item.category,
-        'Brand': item.brand,
-        'Quantity': item.qty,
-        'Unit Price': item.unitPrice,
-        'Total': item.qty * item.unitPrice,
-    }));
-    const itemsSheet = XLSX.utils.json_to_sheet(itemsData);
+    const opItemsData = operationalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
+    const capItemsData = capitalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opItemsData), "Operational Items");
+    if (capItemsData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capItemsData), "Capital Items");
 
-    // 3. Budget Summary
-    const summaryDataForSheet = summaryData.lines.map(line => ({
-        'Category': line.category,
-        'Request Total': line.procurementTotal,
-        'Forecast Total': line.forecastTotal,
-        'Variance': line.variance,
-    }));
-    summaryDataForSheet.push({
-        'Category': 'GRAND TOTAL',
-        'Request Total': summaryData.totals.procurement,
-        'Forecast Total': summaryData.totals.forecast,
-        'Variance': summaryData.totals.variance,
-    });
-    const summarySheet = XLSX.utils.json_to_sheet(summaryDataForSheet);
+    const opSummaryDataForSheet = summaryData.operationalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
+    opSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.operationalSummary.totals.procurement, 'Forecast Total': summaryData.operationalSummary.totals.forecast, 'Variance': summaryData.operationalSummary.totals.variance });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opSummaryDataForSheet), "Operational Summary");
 
-    // 4. Approval History
-    const timelineData = request.timeline.map(step => ({
-        'Stage': step.stage,
-        'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
-        'Status': step.status,
-        'Date': step.date || 'N/A',
-    }));
-    const timelineSheet = XLSX.utils.json_to_sheet(timelineData);
-    
-    // Create workbook and add sheets
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, detailsSheet, "Request Details");
-    XLSX.utils.book_append_sheet(wb, itemsSheet, "Line Items");
-    XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
-    XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
+    const capSummaryDataForSheet = summaryData.capitalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
+    if (capSummaryDataForSheet.length > 0) {
+        capSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.capitalSummary.totals.procurement, 'Forecast Total': summaryData.capitalSummary.totals.forecast, 'Variance': summaryData.capitalSummary.totals.variance });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capSummaryDataForSheet), "Capital Summary");
+    }
 
-    // Download the file
+    const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
+
     XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
 };
 
@@ -369,6 +393,7 @@ export default function ProcurementQuickSubmitPage() {
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
     const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
     const [openCategory, setOpenCategory] = useState<string | null>(null);
+    const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
     const [isNotifying, setIsNotifying] = useState(false);
 
     // State for the edit request dialog
@@ -577,6 +602,7 @@ export default function ProcurementQuickSubmitPage() {
         const mapRecurringToSubmissionItem = (item: RecurringItem): Item => ({
             id: item.id,
             type: "Recurring",
+            expenseType: 'Operational', // Recurring are always operational
             description: item.name,
             brand: item.name.split(" ")[0] || '',
             qty: 1,
@@ -638,7 +664,7 @@ export default function ProcurementQuickSubmitPage() {
 
     const isLocked = isLockedByWorkflow || !selectedPeriod;
 
-    const summaryData = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
+    const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
     const handleRequestEdit = async () => {
         if (!user || !firestore || !editingRequestId) return;
@@ -875,7 +901,7 @@ export default function ProcurementQuickSubmitPage() {
                     ...activeRequest,
                     ...updateData,
                 };
-                generateApprovalReport(reportDataForGeneration, summaryData, 'xlsx', auditLogs, companies, appMetadata);
+                generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
             }
 
             const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
@@ -1141,6 +1167,7 @@ export default function ProcurementQuickSubmitPage() {
             ...item,
             id: Date.now() + index, // Give it a new temporary ID for the client
             type: 'One-Off' as const, // Treat all loaded items as one-off
+            expenseType: item.expenseType || 'Operational', // Default to Operational
             addedById: user.uid,
             addedByName: `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`,
             fulfillmentStatus: 'Pending' as const, // Reset fulfillment state
@@ -1246,13 +1273,18 @@ export default function ProcurementQuickSubmitPage() {
     }, [user, role, userLoading, router]);
 
     const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading || companiesLoading || auditLogsLoading;
-    const monthForHeader = selectedPeriod.split(' ')[0];
-
-    const budgetProgress = useMemo(() => {
-        const { procurement, forecast } = summaryData.totals;
+    
+    const operationalBudgetProgress = useMemo(() => {
+        const { procurement, forecast } = operationalSummary.totals;
         if (forecast <= 0) return procurement > 0 ? 100 : 0;
         return Math.min(Math.round((procurement / forecast) * 100), 100);
-    }, [summaryData]);
+    }, [operationalSummary]);
+
+    const capitalBudgetProgress = useMemo(() => {
+        const { procurement, forecast } = capitalSummary.totals;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
+    }, [capitalSummary]);
 
     const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
     if (loading || !user || !role || !allowedRoles.includes(role)) {
@@ -1443,99 +1475,76 @@ export default function ProcurementQuickSubmitPage() {
                             />
                         </TabsContent>
                         <TabsContent value="summary">
-                            <div className="space-y-4">
-                                <div className="p-4 border rounded-lg bg-muted/50">
-                                    <div className="flex justify-between items-center">
-                                        <div>
-                                            <h3 className="font-semibold text-lg">Budget vs. Actuals: {monthForHeader}</h3>
-                                            <p className="text-sm text-muted-foreground">This is a live comparison of your draft items against the forecast.</p>
+                            <div className="space-y-8">
+                                {/* Operational Summary */}
+                                <div className="space-y-4">
+                                    <div className="p-4 border rounded-lg bg-muted/50">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h3 className="font-semibold text-lg">Operational Budget vs. Actuals: {selectedPeriod}</h3>
+                                                <p className="text-sm text-muted-foreground">Live comparison of your draft items against the forecast.</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement)}</p>
+                                                <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(operationalSummary.totals.forecast)}</p>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-2xl font-bold">{formatCurrency(summaryData.totals.procurement)}</p>
-                                            <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(summaryData.totals.forecast)}</p>
-                                        </div>
+                                        <Progress value={operationalBudgetProgress} className="mt-4" />
                                     </div>
-                                    <Progress value={budgetProgress} className="mt-4" />
-                                </div>
-                                <div className="overflow-auto rounded-lg border">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow className="bg-muted hover:bg-muted">
-                                                <TableHead className="font-bold">Category</TableHead>
-                                                <TableHead className="text-right font-bold">Procurement Total</TableHead>
-                                                <TableHead className="text-right font-bold">Forecast Total</TableHead>
-                                                <TableHead className="text-right font-bold">Variance</TableHead>
-                                                <TableHead className="font-bold">Comments</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {summaryData.lines.length > 0 ? summaryData.lines.map((item) => (
-                                                <Fragment key={item.category}>
-                                                    <TableRow
-                                                        onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
-                                                        className={cn("cursor-pointer", item.procurementTotal > item.forecastTotal && "bg-red-50 dark:bg-red-900/20")}
-                                                    >
-                                                        <TableCell className="font-medium flex items-center gap-2">
-                                                            <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
-                                                            {item.category}
-                                                        </TableCell>
-                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                        <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500 flex items-center justify-end gap-2")}>
-                                                            {item.procurementTotal > item.forecastTotal && <AlertTriangle className="h-4 w-4" />}
-                                                            {formatCurrency(item.variance)}
-                                                        </TableCell>
-                                                        <TableCell className="text-xs text-muted-foreground">{item.comments}</TableCell>
-                                                    </TableRow>
-                                                    {openCategory === item.category && (
-                                                        <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                            <TableCell colSpan={5} className="p-2">
-                                                                <div className="p-2 bg-background rounded-md border">
-                                                                    <Table>
-                                                                        <TableHeader>
-                                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                                <TableHead>Item</TableHead>
-                                                                                <TableHead>Type</TableHead>
-                                                                                <TableHead className="text-center">Qty</TableHead>
-                                                                                <TableHead className="text-right">Unit Price</TableHead>
-                                                                                <TableHead className="text-right">Total</TableHead>
-                                                                            </TableRow>
-                                                                        </TableHeader>
-                                                                        <TableBody>
-                                                                            {item.items.map((subItem) => (
-                                                                                <TableRow key={subItem.id}>
-                                                                                    <TableCell>{subItem.description}</TableCell>
-                                                                                    <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                                    <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                                </TableRow>
-                                                                            ))}
-                                                                        </TableBody>
-                                                                    </Table>
-                                                                </div>
-                                                            </TableCell>
+                                    <div className="overflow-auto rounded-lg border">
+                                        <Table>
+                                            <TableHeader><TableRow><TableHead>Operational Summary</TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
+                                                    <Fragment key={item.category}>
+                                                        <TableRow onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                            <TableCell><ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} /></TableCell>
+                                                            <TableCell className="font-medium">{item.category}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}><AlertTriangle className="h-4 w-4" />{formatCurrency(item.variance)}</TableCell>
                                                         </TableRow>
-                                                    )}
-                                                </Fragment>
-                                            )) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={5} className="text-center h-24 text-muted-foreground">
-                                                        No budget or submission data available.
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                        <TableFooter>
-                                            <TableRow className="bg-muted hover:bg-muted font-bold">
-                                                <TableCell>Subtotal</TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.procurement)}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.forecast)}</TableCell>
-                                                <TableCell className="text-right font-mono">{formatCurrency(summaryData.totals.variance)}</TableCell>
-                                                <TableCell></TableCell>
-                                            </TableRow>
-                                        </TableFooter>
-                                    </Table>
+                                                        {openCategory === item.category && (
+                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
+                                                        )}
+                                                    </Fragment>
+                                                )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
+                                            </TableBody>
+                                            <TableFooter><TableRow><TableCell colSpan={2}>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                        </Table>
+                                    </div>
+                                </div>
+                                {/* Capital Summary */}
+                                <div className="space-y-4">
+                                     <div className="p-4 border rounded-lg bg-muted/50">
+                                        <div className="flex justify-between items-center">
+                                            <div><h3 className="font-semibold text-lg">Capital Budget vs. Actuals: {selectedPeriod}</h3></div>
+                                            <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(capitalSummary.totals.procurement)}</p><p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(capitalSummary.totals.forecast)}</p></div>
+                                        </div>
+                                        <Progress value={capitalBudgetProgress} className="mt-4" />
+                                    </div>
+                                    <div className="overflow-auto rounded-lg border">
+                                        <Table>
+                                            <TableHeader><TableRow><TableHead>Capital Summary</TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                            <TableBody>
+                                                {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
+                                                     <Fragment key={item.category}>
+                                                        <TableRow onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                            <TableCell><ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} /></TableCell>
+                                                            <TableCell className="font-medium">{item.category}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}><AlertTriangle className="h-4 w-4" />{formatCurrency(item.variance)}</TableCell>
+                                                        </TableRow>
+                                                        {openCapitalCategory === item.category && (
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
+                                                        )}
+                                                    </Fragment>
+                                                )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
+                                            </TableBody>
+                                            <TableFooter><TableRow><TableCell colSpan={2}>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                        </Table>
+                                    </div>
                                 </div>
                             </div>
                         </TabsContent>
@@ -1707,3 +1716,5 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+
+    

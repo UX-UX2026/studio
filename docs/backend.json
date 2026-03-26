@@ -147,6 +147,14 @@
                   "One-Off"
                 ]
               },
+              "expenseType": {
+                "type": "string",
+                "enum": [
+                  "Operational",
+                  "Capital"
+                ],
+                "description": "Defines if the item is an operational or capital expense."
+              },
               "description": {
                 "type": "string"
               },
@@ -197,7 +205,8 @@
                 "type": "string",
                 "description": "The name of the user who added this line item."
               }
-            }
+            },
+            "required": ["id", "type", "expenseType", "description", "qty", "category", "unitPrice"]
           }
         },
         "delegatorIdForApproval": {
@@ -897,3 +906,5 @@
     }
   }
 }
+
+    

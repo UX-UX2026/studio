@@ -1,6 +1,7 @@
 export type ApprovalItem = {
     id: number | string;
     type: "Recurring" | "One-Off";
+    expenseType: 'Operational' | 'Capital';
     description: string;
     category: string;
     brand: string;
@@ -40,3 +41,5 @@ export type ApprovalRequest = {
     createdAt?: { seconds: number, nanoseconds: number };
     updatedAt?: { seconds: number, nanoseconds: number };
 };
+
+    
