@@ -524,6 +524,14 @@
         "amount": {
           "type": "number"
         },
+        "expenseType": {
+          "type": "string",
+          "enum": [
+            "Operational",
+            "Capital"
+          ],
+          "description": "Defines if the item is an operational or capital expense."
+        },
         "nextLoad": {
           "type": "string"
         },
@@ -731,6 +739,14 @@
         "isActive": {
           "type": "boolean",
           "description": "Whether this is the currently active budget for the department and year."
+        },
+        "uploadType": {
+          "type": "string",
+          "enum": [
+            "Operational",
+            "Capital"
+          ],
+          "description": "The type of budget being uploaded."
         }
       },
       "required": ["departmentId", "financialYear", "uploadedAt", "uploadedById", "isActive"]
@@ -755,6 +771,11 @@
         "category": {
           "type": "string",
           "description": "The expense category (e.g., 'Salaries - SA')."
+        },
+        "expenseType": {
+            "type": "string",
+            "enum": ["Operational", "Capital"],
+            "description": "The type of budget this item belongs to."
         },
         "forecasts": {
           "type": "array",

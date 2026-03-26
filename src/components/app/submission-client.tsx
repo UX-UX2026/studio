@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -70,6 +69,7 @@ type RecurringItem = {
     name: string;
     amount: number;
     active: boolean;
+    expenseType?: 'Operational' | 'Capital';
 };
 
 const formatCurrency = (amount: number) => {
@@ -333,7 +333,7 @@ export function SubmissionClient({
     const newItem: Item = {
       id: itemToAdd.id, // Use master item ID
       type: "Recurring",
-      expenseType: 'Operational', // Recurring items are always operational
+      expenseType: itemToAdd.expenseType || 'Operational', // Use from master, default to Operational
       description: itemToAdd.name,
       brand: itemToAdd.name.split(" ")[0] || '',
       qty: 1,

@@ -14,12 +14,14 @@ import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from "fir
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { procurementCategories } from "@/lib/procurement-categories";
+import { Label } from "../ui/label";
 
 type RecurringItem = {
     id: string;
     category: string;
     name: string;
     amount: number;
+    expenseType: 'Operational' | 'Capital';
     nextLoad: string;
     active: boolean;
     frequency: string;
@@ -147,6 +149,18 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                                 placeholder="Amount"
                                 readOnly={!canManage}
                             />
+                             <div className="mt-2">
+                                <Label className="text-xs text-muted-foreground">Expense Type</Label>
+                                <Select value={item.expenseType || 'Operational'} onValueChange={(value) => handleItemChange(item.id, 'expenseType', value as any)} disabled={!canManage}>
+                                    <SelectTrigger className="text-xs h-8 mt-1">
+                                        <SelectValue/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Operational">Operational</SelectItem>
+                                        <SelectItem value="Capital">Capital</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
                             <div className="flex justify-between items-end mt-2">
                                 <div className="space-y-1">
                                      <Input 
@@ -182,6 +196,7 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                     <TableRow>
                         <TableHead>Name</TableHead>
                         <TableHead>Category</TableHead>
+                        <TableHead>Expense Type</TableHead>
                         {(role === 'Administrator' || role === 'Procurement Officer') && <TableHead>Department</TableHead>}
                         <TableHead>Frequency</TableHead>
                         <TableHead>Next Auto-Load</TableHead>
@@ -203,6 +218,17 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
                                     </SelectTrigger>
                                     <SelectContent>
                                         {procurementCategories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </TableCell>
+                            <TableCell>
+                                <Select value={item.expenseType || 'Operational'} onValueChange={(value) => handleItemChange(item.id, 'expenseType', value as any)} disabled={!canManage}>
+                                    <SelectTrigger className="bg-transparent border-0">
+                                        <SelectValue/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Operational">Operational</SelectItem>
+                                        <SelectItem value="Capital">Capital</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </TableCell>
@@ -231,3 +257,5 @@ export function RecurringClient({ items, view = 'list' }: { items: RecurringItem
         </div>
     );
 }
+
+    

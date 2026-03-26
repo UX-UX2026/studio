@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -19,6 +20,7 @@ type RecurringItem = {
     category: string;
     name: string;
     amount: number;
+    expenseType: 'Operational' | 'Capital';
     nextLoad: string;
     active: boolean;
     frequency: string;
@@ -115,6 +117,7 @@ export default function RecurringItemsPage() {
           name: "New Item",
           category: "Uncategorized",
           amount: 0,
+          expenseType: 'Operational',
           nextLoad: "TBD",
           frequency: "Monthly",
           active: true,
@@ -273,3 +276,5 @@ export default function RecurringItemsPage() {
         </div>
       );
 }
+
+    

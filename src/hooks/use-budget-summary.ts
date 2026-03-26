@@ -19,6 +19,7 @@ type BudgetItem = {
     id: string;
     departmentId: string;
     category: string;
+    expenseType?: 'Operational' | 'Capital';
     forecasts: number[];
     yearTotal: number;
 };
@@ -51,10 +52,12 @@ export function useBudgetSummary(
             ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
             : -1;
 
-        const calculateSummary = (itemsToSummarize: Item[]) => {
+        const calculateSummary = (itemsToSummarize: Item[], expenseType: 'Operational' | 'Capital') => {
+            const budgetItemsForType = budgetItems.filter(bi => bi.expenseType === expenseType);
+
             const allCategories = new Set([
                 ...itemsToSummarize.map(item => item.category),
-                ...budgetItems.map(item => item.category)
+                ...budgetItemsForType.map(item => item.category)
             ]);
 
             const lines = Array.from(allCategories).map(category => {
@@ -62,10 +65,12 @@ export function useBudgetSummary(
 
                 const itemsForCategory = itemsToSummarize.filter(item => item.category === category);
                 const procurementTotal = itemsForCategory.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
-                const budgetItem = budgetItems.find(item => item.category === category);
+                
+                const budgetItem = budgetItemsForType.find(item => item.category === category);
                 const forecastTotal = (budgetItem && monthIndex !== -1 && budgetItem.forecasts.length > monthIndex)
                     ? budgetItem.forecasts[monthIndex]
                     : 0;
+                
                 const variance = procurementTotal - forecastTotal;
                 const isOverBudget = procurementTotal > forecastTotal;
                 const comments = itemsForCategory.filter(item => item.comments).map(item => item.comments).join('; ');
@@ -86,8 +91,8 @@ export function useBudgetSummary(
         const operationalItems = procurementItems.filter(item => item.expenseType === 'Operational' || !item.expenseType);
         const capitalItems = procurementItems.filter(item => item.expenseType === 'Capital');
 
-        const operationalSummary = calculateSummary(operationalItems);
-        const capitalSummary = calculateSummary(capitalItems);
+        const operationalSummary = calculateSummary(operationalItems, 'Operational');
+        const capitalSummary = calculateSummary(capitalItems, 'Capital');
 
         return { operationalSummary, capitalSummary };
 
