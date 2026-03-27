@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -80,6 +79,8 @@ import {
   ChartLegendContent,
   type ChartConfig
 } from "@/components/ui/chart";
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type Department = {
     id: string;
@@ -161,28 +162,11 @@ export default function DashboardPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
+  const [monthFilter, setMonthFilter] = useState<string>('current_month');
+  const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState('overview');
+
   const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
-
-  const monthlyRequestsQuery = useMemo(() => {
-    if (!firestore) return null;
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    
-    let q = query(collection(firestore, 'procurementRequests'), where('createdAt', '>=', startOfMonth));
-
-    if (role === 'Manager' || role === 'Requester') {
-        if (!userDepartmentId) return null;
-        q = query(q, where('departmentId', '==', userDepartmentId));
-    } else if (role === 'Executive') {
-        if (reportingDepartments && reportingDepartments.length > 0) {
-            q = query(q, where('departmentId', 'in', reportingDepartments));
-        }
-    }
-    
-    return q;
-  }, [firestore, role, userDepartmentId, reportingDepartments]);
-
-  const { data: monthlyRequests, loading: monthlyRequestsLoading } = useCollection<ApprovalRequest>(monthlyRequestsQuery);
 
   const allRequestsForUserQuery = useMemo(() => {
     if (!firestore) return null;
@@ -203,11 +187,19 @@ export default function DashboardPage() {
   
   const { data: allRequestsForUser, loading: allRequestsLoading } = useCollection<ApprovalRequest>(allRequestsForUserQuery);
 
-
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
-  }, [firestore]);
+    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
+
+    if (role === 'Executive') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            q = query(q, where('departmentId', 'in', reportingDepartments));
+        }
+    } else if ((role === 'Manager' || role === 'Requester') && userDepartmentId) {
+        q = query(q, where('departmentId', '==', userDepartmentId));
+    }
+    return q;
+  }, [firestore, role, userDepartmentId, reportingDepartments]);
 
   const { data: fulfillmentRequests, loading: fulfillmentLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
 
@@ -251,6 +243,42 @@ export default function DashboardPage() {
         .slice(0, 5);
   }, [user, allDrafts, role, userDepartment]);
 
+  const availableMonths = useMemo(() => {
+    if (!allRequestsForUser) return [{label: 'Current Month', value: 'current_month'}, {label: 'All Time', value: 'all_time'}];
+    const months = new Set(allRequestsForUser.map(req => req.period));
+    const sortedMonths = [...Array.from(months)].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    return [{label: 'Current Month', value: 'current_month'}, {label: 'All Time', value: 'all_time'}, ...sortedMonths.map(m => ({label: m, value: m}))];
+  }, [allRequestsForUser]);
+
+  const departmentsForFilter = useMemo(() => {
+    if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            return allDepartments?.filter(d => reportingDepartments.includes(d.id)) || [];
+        }
+        return allDepartments || [];
+    }
+    return [];
+  }, [role, allDepartments, reportingDepartments]);
+
+  const filteredRequests = useMemo(() => {
+    if (!allRequestsForUser) return [];
+    let requests = allRequestsForUser;
+
+    if (departmentFilter !== 'all') {
+        requests = requests.filter(req => req.departmentId === departmentFilter);
+    }
+
+    if (monthFilter === 'current_month') {
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime() / 1000;
+        return requests.filter(req => req.createdAt && req.createdAt.seconds >= startOfMonth);
+    } else if (monthFilter === 'all_time') {
+        return requests;
+    } else {
+        return requests.filter(req => req.period === monthFilter);
+    }
+  }, [allRequestsForUser, monthFilter, departmentFilter]);
+
 
   const allFulfillmentItems = useMemo(() => {
       if (!fulfillmentRequests) return [];
@@ -258,60 +286,67 @@ export default function DashboardPage() {
   }, [fulfillmentRequests]);
   
   const fulfillmentSummary = useMemo(() => allFulfillmentItems.reduce((acc, item) => {
-    acc[item.fulfillmentStatus] = (acc[item.fulfillmentStatus] || 0) + 1;
+    const status = item.fulfillmentStatus || 'Pending';
+    acc[status] = (acc[status] || 0) + 1;
     return acc;
   }, {} as Record<string, number>), [allFulfillmentItems]);
 
     const dashboardStats = useMemo(() => {
-        const totalSpendCurrentMonth = monthlyRequests?.reduce((sum, req) => sum + req.total, 0) || 0;
+        const periodRequests = filteredRequests || [];
+        const totalSpend = periodRequests.reduce((sum, req) => sum + req.total, 0) || 0;
         
-        const openRequestsForMonth = monthlyRequests?.filter(req => openStatuses.includes(req.status)) || [];
+        const openRequests = periodRequests.filter(req => openStatuses.includes(req.status)) || [];
 
-        const pendingManager = openRequestsForMonth.filter(req => req.status === 'Pending Manager Approval').length;
-        const pendingExecutive = openRequestsForMonth.filter(req => req.status === 'Pending Executive').length;
-        const queriesRaised = openRequestsForMonth.filter(req => req.status === 'Queries Raised').length;
-        const approvedCount = openRequestsForMonth.filter(req => req.status === 'Approved').length;
-        const fulfillmentCount = openRequestsForMonth.filter(req => req.status === 'In Fulfillment').length;
+        const pendingManager = openRequests.filter(req => req.status === 'Pending Manager Approval').length;
+        const pendingExecutive = openRequests.filter(req => req.status === 'Pending Executive').length;
+        const queriesRaised = openRequests.filter(req => req.status === 'Queries Raised').length;
+        const approvedCount = openRequests.filter(req => req.status === 'Approved').length;
+        const fulfillmentCount = openRequests.filter(req => req.status === 'In Fulfillment').length;
 
-        return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised, approvedCount, fulfillmentCount, openRequestsForMonth };
-    }, [monthlyRequests, openStatuses]);
+        return { totalSpend, pendingManager, pendingExecutive, queriesRaised, approvedCount, fulfillmentCount, openRequests };
+    }, [filteredRequests, openStatuses]);
     
     const allUserOpenRequests = useMemo(() => allRequestsForUser?.filter(req => openStatuses.includes(req.status)) || [], [allRequestsForUser, openStatuses]);
 
 
-    const requestsLoading = allRequestsLoading || monthlyRequestsLoading || deptsLoading || budgetsLoading;
+    const requestsLoading = allRequestsLoading || deptsLoading || budgetsLoading;
     
-    // Chart data
     const spendByDeptVsBudgetData = useMemo(() => {
-        if (!monthlyRequests || !allDepartments || !allBudgetItems) return [];
+        if (!filteredRequests || !allDepartments || !allBudgetItems) return [];
         
-        const now = new Date();
-        const currentMonthName = format(now, "MMMM");
-        
-        const visibleDepartments = role === 'Executive' && reportingDepartments.length > 0
-            ? allDepartments.filter(dept => reportingDepartments.includes(dept.id))
-            : allDepartments;
+        const periodForBudget = (monthFilter === 'current_month' || monthFilter === 'all_time')
+            ? format(new Date(), "MMMM yyyy")
+            : monthFilter;
+
+        const budgetMonthName = periodForBudget.split(' ')[0];
+        const budgetProcurementYear = parseInt(periodForBudget.split(' ')[1], 10);
+
+        const visibleDepartments = (departmentFilter !== 'all')
+            ? allDepartments.filter(d => d.id === departmentFilter)
+            : departmentsForFilter;
 
         const dataByDept = visibleDepartments.map(dept => {
-            const deptSpend = monthlyRequests
+            const deptSpend = filteredRequests
                 .filter(req => req.departmentId === dept.id)
                 .reduce((sum, req) => sum + req.total, 0);
 
             const budgetYear = dept.budgetYear;
-            const procurementYear = now.getFullYear();
             
-            const monthIndex = (budgetYear === procurementYear)
-                ? dept.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(currentMonthName.toLowerCase().substring(0,3))) ?? -1
-                : -1;
-
-            const deptBudget = allBudgetItems
-                .filter(item => item.departmentId === dept.id)
-                .reduce((sum, item) => {
-                    const forecast = (monthIndex !== -1 && item.forecasts.length > monthIndex)
-                        ? item.forecasts[monthIndex]
-                        : 0;
-                    return sum + forecast;
-                }, 0);
+            let deptBudget = 0;
+            if (monthFilter !== 'all_time') {
+                const monthIndex = (budgetYear === budgetProcurementYear)
+                    ? dept.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(budgetMonthName.toLowerCase().substring(0, 3))) ?? -1
+                    : -1;
+                
+                deptBudget = allBudgetItems
+                    .filter(item => item.departmentId === dept.id)
+                    .reduce((sum, item) => {
+                        const forecast = (monthIndex !== -1 && item.forecasts.length > monthIndex)
+                            ? item.forecasts[monthIndex]
+                            : 0;
+                        return sum + forecast;
+                    }, 0);
+            }
             
             return {
                 name: dept.name,
@@ -320,10 +355,9 @@ export default function DashboardPage() {
             };
         });
         
-        // Filter out departments with no spend and no budget to keep the chart clean
         return dataByDept.filter(d => d.spend > 0 || d.budget > 0);
 
-    }, [monthlyRequests, allDepartments, allBudgetItems, role, reportingDepartments]);
+    }, [filteredRequests, allDepartments, allBudgetItems, role, departmentsForFilter, monthFilter, departmentFilter]);
 
     const spendByDeptChartConfig = {
         spend: {
@@ -381,6 +415,11 @@ export default function DashboardPage() {
         Completed: { label: "Completed", color: "hsl(var(--chart-4))" },
         Pending: { label: "Pending", color: "hsl(var(--chart-5))" },
     } satisfies ChartConfig;
+
+    const filterTitle = useMemo(() => {
+        const month = availableMonths.find(m => m.value === monthFilter);
+        return month ? month.label : 'Current Month';
+    }, [monthFilter, availableMonths]);
 
 
   const formatCurrency = (amount: number) => {
@@ -683,371 +722,403 @@ export default function DashboardPage() {
     
   return (
     <>
-    <Tabs defaultValue="overview">
-        <div className="flex justify-end mb-4">
-            <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="visualizations">Visualizations</TabsTrigger>
-            </TabsList>
+    <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+        <div className="flex flex-wrap items-center gap-4">
+            {(role === 'Administrator' || role === 'Executive') && departmentsForFilter.length > 0 && (
+                <div className="grid gap-1.5">
+                    <Label htmlFor="department-filter">Department</Label>
+                    <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                        <SelectTrigger id="department-filter" className="w-[220px]">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">All Departments</SelectItem>
+                            {departmentsForFilter.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+            )}
+            <div className="grid gap-1.5">
+                <Label htmlFor="month-filter">Period</Label>
+                <Select value={monthFilter} onValueChange={setMonthFilter}>
+                    <SelectTrigger id="month-filter" className="w-[180px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableMonths.map(month => (
+                            <SelectItem key={month.value} value={month.value}>{month.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
         </div>
-        <TabsContent value="overview">
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      New Request
-                    </CardTitle>
-                     <Rocket className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">Start a New Cycle</div>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      Begin a new procurement submission for any department.
-                    </p>
-                    <Button asChild className="w-full">
-                      <Link href="/dashboard/procurement">
-                        <Rocket className="mr-2 h-4 w-4" />
-                        Quick Submit
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Spend (Current Month)
-                    </CardTitle>
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {requestsLoading ? (
-                         <div className="flex items-center justify-center h-24">
-                          <Loader className="h-6 w-6 animate-spin" />
-                        </div>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{formatCurrency(dashboardStats.totalSpendCurrentMonth)}</div>
-                        <p className="text-xs text-muted-foreground">Total value of all requests created this month.</p>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Requests Awaiting Action (Current Month)
-                    </CardTitle>
-                    <AlertCircle className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {requestsLoading ? (
-                         <div className="flex items-center justify-center h-24">
-                          <Loader className="h-6 w-6 animate-spin" />
-                        </div>
-                    ) : (
-                        <>
-                        <div className="text-2xl font-bold">{dashboardStats.openRequestsForMonth.length || 0} Open Requests</div>
-                         <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            <div>Manager Review</div>
-                            <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
-                            <div>Executive Review</div>
-                            <div className="font-semibold text-right text-foreground">{dashboardStats.pendingExecutive || 0}</div>
-                            <div>Queries Raised</div>
-                            <div className="font-semibold text-right text-foreground">{dashboardStats.queriesRaised || 0}</div>
-                        </div>
-                        </>
-                    )}
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">
-                      Fulfillment Overview
-                    </CardTitle>
-                    <ClipboardCheck className="h-4 w-4 text-muted-foreground" />
-                  </CardHeader>
-                  <CardContent>
-                    {fulfillmentLoading ? (
-                        <div className="flex items-center justify-center h-24">
-                          <Loader className="h-6 w-6 animate-spin" />
-                        </div>
-                    ) : (
-                      <>
-                        <div className="text-2xl font-bold">{allFulfillmentItems.filter(i => i.fulfillmentStatus !== 'Completed').length} Open Tasks</div>
-                        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                            <div>Sourcing</div>
-                            <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Sourcing || 0}</div>
-                            <div>Quoted</div>
-                            <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Quoted || 0}</div>
-                            <div>Ordered</div>
-                            <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Ordered || 0}</div>
-                            <div>Completed</div>
-                            <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Completed || 0}</div>
-                        </div>
-                      </>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <Card className="lg:col-span-2">
-                  <CardHeader className="flex flex-row items-center justify-between">
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          <Briefcase className="h-5 w-5 text-primary"/>
-                          Open Submissions
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <div className="flex justify-end mb-4">
+                <TabsList>
+                    <TabsTrigger value="overview">Overview</TabsTrigger>
+                    <TabsTrigger value="visualizations">Visualizations</TabsTrigger>
+                </TabsList>
+            </div>
+            <TabsContent value="overview">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          New Request
                         </CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                          A summary of all submissions currently in the approval pipeline for you.
+                         <Rocket className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">Start a New Cycle</div>
+                        <p className="text-xs text-muted-foreground mb-4">
+                          Begin a new procurement submission for any department.
                         </p>
-                      </div>
-                      <Button asChild variant="outline">
-                        <Link href="/dashboard/approvals">View All Requests</Link>
-                      </Button>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Request ID</TableHead>
-                            <TableHead>Period</TableHead>
-                            <TableHead>Submitted By</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Value</TableHead>
-                            <TableHead className="text-right w-16">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {allRequestsLoading ? (
+                        <Button asChild className="w-full">
+                          <Link href="/dashboard/procurement">
+                            <Rocket className="mr-2 h-4 w-4" />
+                            Quick Submit
+                          </Link>
+                        </Button>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          Spend ({filterTitle})
+                        </CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        {requestsLoading ? (
+                             <div className="flex items-center justify-center h-24">
+                              <Loader className="h-6 w-6 animate-spin" />
+                            </div>
+                        ) : (
+                          <>
+                            <div className="text-2xl font-bold">{formatCurrency(dashboardStats.totalSpend)}</div>
+                            <p className="text-xs text-muted-foreground">Total value of requests in the selected period.</p>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">
+                          Awaiting Action ({filterTitle})
+                        </CardTitle>
+                        <AlertCircle className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        {requestsLoading ? (
+                             <div className="flex items-center justify-center h-24">
+                              <Loader className="h-6 w-6 animate-spin" />
+                            </div>
+                        ) : (
+                            <>
+                            <div className="text-2xl font-bold">{dashboardStats.openRequests.length || 0} Open Requests</div>
+                             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <div>Manager Review</div>
+                                <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
+                                <div>Executive Review</div>
+                                <div className="font-semibold text-right text-foreground">{dashboardStats.pendingExecutive || 0}</div>
+                                <div>Queries Raised</div>
+                                <div className="font-semibold text-right text-foreground">{dashboardStats.queriesRaised || 0}</div>
+                            </div>
+                            </>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-sm font-medium">
+                          Fulfillment Overview
+                        </CardTitle>
+                        <CardDescription className="text-xs">All active fulfillment tasks.</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {fulfillmentLoading ? (
+                            <div className="flex items-center justify-center h-24">
+                              <Loader className="h-6 w-6 animate-spin" />
+                            </div>
+                        ) : (
+                          <>
+                            <div className="text-2xl font-bold">{allFulfillmentItems.filter(i => i.fulfillmentStatus !== 'Completed').length} Open Tasks</div>
+                            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                <div>Sourcing</div>
+                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Sourcing || 0}</div>
+                                <div>Quoted</div>
+                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Quoted || 0}</div>
+                                <div>Ordered</div>
+                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Ordered || 0}</div>
+                                <div>Completed</div>
+                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Completed || 0}</div>
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <Card className="lg:col-span-2">
+                      <CardHeader className="flex flex-row items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center gap-2">
+                              <Briefcase className="h-5 w-5 text-primary"/>
+                              All My Open Submissions
+                            </CardTitle>
+                            <p className="text-sm text-muted-foreground">
+                              A summary of all submissions currently in the approval pipeline for you.
+                            </p>
+                          </div>
+                          <Button asChild variant="outline">
+                            <Link href="/dashboard/approvals">View All Requests</Link>
+                          </Button>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="overflow-auto">
+                          <Table>
+                            <TableHeader>
                               <TableRow>
-                                  <TableCell colSpan={6} className="text-center h-24">
-                                      <Loader className="h-6 w-6 animate-spin mx-auto" />
-                                  </TableCell>
-                              </TableRow>
-                          ) : allUserOpenRequests && allUserOpenRequests.length > 0 ? (
-                            allUserOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
-                              <TableRow key={req.id}>
-                                <TableCell className="font-medium">
-                                  <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id}</Link>
-                                </TableCell>
-                                <TableCell>{req.period}</TableCell>
-                                <TableCell>{req.submittedBy || 'N/A'}</TableCell>
-                                <TableCell>{getStatusBadge(req.status)}</TableCell>
-                                <TableCell className="text-right font-mono">
-                                  {formatCurrency(req.total)}
-                                </TableCell>
-                                <TableCell className="text-right">
-                                  {['Approved', 'In Fulfillment', 'Completed'].includes(req.status) && (
-                                      <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                              <Button variant="ghost" size="icon">
-                                                  <Download className="h-4 w-4" />
-                                              </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent>
-                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'xlsx')}>
-                                                  Export as Excel (.xlsx)
-                                              </DropdownMenuItem>
-                                              <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'pdf')}>
-                                                  Export as PDF (.pdf)
-                                              </DropdownMenuItem>
-                                          </DropdownMenuContent>
-                                      </DropdownMenu>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                              <TableRow>
-                                  <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
-                                      No open submissions found.
-                                  </TableCell>
-                              </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                   <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Workflow className="h-5 w-5 text-primary"/>
-                        Approval Pipeline (Current Month)
-                      </CardTitle>
-                      <CardDescription>Live view of requests awaiting action this month.</CardDescription>
-                  </CardHeader>
-                  <CardContent className="pt-4">
-                    {requestsLoading ? (
-                      <div className="flex items-center justify-center h-24">
-                        <Loader className="h-6 w-6 animate-spin" />
-                      </div>
-                    ) : (
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-center">
-                            <PipelineStage name="Manager" count={dashboardStats.pendingManager} highlight={dashboardStats.pendingManager > 0} />
-                            <PipelineArrow highlight={dashboardStats.pendingManager > 0} />
-                            <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
-                            <PipelineArrow highlight={dashboardStats.pendingExecutive > 0} />
-                            <PipelineStage name="Procurement" count={dashboardStats.approvedCount} highlight={dashboardStats.approvedCount > 0}/>
-                        </div>
-                        
-                        {(dashboardStats.queriesRaised > 0 || dashboardStats.fulfillmentCount > 0) && <Separator className="my-4"/>}
-
-                        <div className="flex justify-around items-center text-center text-sm gap-4">
-                            {dashboardStats.fulfillmentCount > 0 && (
-                                <Link href={`/dashboard/approvals?status=In%20Fulfillment`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
-                                    <div className="font-bold text-lg text-indigo-500">{dashboardStats.fulfillmentCount}</div>
-                                    <div className="text-muted-foreground text-xs">In Fulfillment</div>
-                                </Link>
-                            )}
-                            {dashboardStats.queriesRaised > 0 && (
-                                 <Link href={`/dashboard/approvals?status=Queries%20Raised`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
-                                    <div className="font-bold text-lg text-yellow-500">{dashboardStats.queriesRaised}</div>
-                                    <div className="text-muted-foreground text-xs">With Queries</div>
-                                </Link>
-                            )}
-                        </div>
-                    </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="lg:col-span-3">
-                  <CardHeader>
-                      <CardTitle>My Drafts</CardTitle>
-                      <CardDescription>
-                        Resume or delete your recent draft submissions.
-                      </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                     {draftsLoading ? (
-                        <div className="flex items-center justify-center h-full">
-                          <Loader className="h-6 w-6 animate-spin" />
-                        </div>
-                    ) : userDrafts && userDrafts.length > 0 ? (
-                      <Table>
-                        <TableHeader>
-                            <TableRow>
+                                <TableHead>Request ID</TableHead>
                                 <TableHead>Period</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
-                                <TableHead className="text-right">Last Saved</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {userDrafts.map(draft => (
-                                <TableRow key={draft.id}>
-                                    <TableCell>
-                                        <Link href={`/dashboard/procurement?deptId=${draft.departmentId}&period=${encodeURIComponent(draft.period)}`} className="hover:underline text-primary font-medium">{draft.period}</Link>
-                                        <div className="text-xs text-muted-foreground">{draft.department}</div>
+                                <TableHead>Submitted By</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Value</TableHead>
+                                <TableHead className="text-right w-16">Actions</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {allRequestsLoading ? (
+                                  <TableRow>
+                                      <TableCell colSpan={6} className="text-center h-24">
+                                          <Loader className="h-6 w-6 animate-spin mx-auto" />
+                                      </TableCell>
+                                  </TableRow>
+                              ) : allUserOpenRequests && allUserOpenRequests.length > 0 ? (
+                                allUserOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
+                                  <TableRow key={req.id}>
+                                    <TableCell className="font-medium">
+                                      <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id}</Link>
                                     </TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
-                                    <TableCell className="text-right text-muted-foreground">{draft.updatedAt ? formatDistanceToNow(new Date(draft.updatedAt.seconds * 1000), { addSuffix: true }) : 'N/A'}</TableCell>
+                                    <TableCell>{req.period}</TableCell>
+                                    <TableCell>{req.submittedBy || 'N/A'}</TableCell>
+                                    <TableCell>{getStatusBadge(req.status)}</TableCell>
+                                    <TableCell className="text-right font-mono">
+                                      {formatCurrency(req.total)}
+                                    </TableCell>
                                     <TableCell className="text-right">
-                                        <Button variant="ghost" size="icon" onClick={() => { setDeletingRequestId(draft.id); setIsDeleteDialogOpen(true); }}>
-                                            <Trash2 className="h-4 w-4 text-destructive" />
-                                        </Button>
+                                      {['Approved', 'In Fulfillment', 'Completed'].includes(req.status) && (
+                                          <DropdownMenu>
+                                              <DropdownMenuTrigger asChild>
+                                                  <Button variant="ghost" size="icon">
+                                                      <Download className="h-4 w-4" />
+                                                  </Button>
+                                              </DropdownMenuTrigger>
+                                              <DropdownMenuContent>
+                                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'xlsx')}>
+                                                      Export as Excel (.xlsx)
+                                                  </DropdownMenuItem>
+                                                  <DropdownMenuItem onSelect={(e) => e.preventDefault()} onClick={() => generateApprovalReport(req, 'pdf')}>
+                                                      Export as PDF (.pdf)
+                                                  </DropdownMenuItem>
+                                              </DropdownMenuContent>
+                                          </DropdownMenu>
+                                      )}
                                     </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                      </Table>
-                    ) : (
-                        <div className="flex items-center justify-center h-24 text-muted-foreground">
-                          You have no saved drafts.
+                                  </TableRow>
+                                ))
+                              ) : (
+                                  <TableRow>
+                                      <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
+                                          No open submissions found.
+                                      </TableCell>
+                                  </TableRow>
+                              )}
+                            </TableBody>
+                          </Table>
                         </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-        </TabsContent>
-        <TabsContent value="visualizations">
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Spend vs. Budget by Department (Current Month)</CardTitle>
-                        <CardDescription>Comparison of total spend against the forecasted budget for each department.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ChartContainer config={spendByDeptChartConfig} className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                {spendByDeptVsBudgetData.length > 0 ? (
-                                <BarChart data={spendByDeptVsBudgetData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
-                                    <CartesianGrid vertical={false} />
-                                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} interval={0} />
-                                    <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} />
-                                    <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                                    <Legend content={<ChartLegendContent />} />
-                                    <Bar dataKey="budget" fill="var(--color-budget)" radius={4} />
-                                    <Bar dataKey="spend" fill="var(--color-spend)" radius={4} />
-                                </BarChart>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">No data for this month.</div>
-                                )}
-                            </ResponsiveContainer>
-                        </ChartContainer>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Open Requests by Status</CardTitle>
-                        <CardDescription>Distribution of all open procurement requests by their current status.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ChartContainer config={requestsByStatusChartConfig} className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                                {requestsByStatusData.length > 0 ? (
-                                    <PieChart>
-                                        <Tooltip content={<ChartTooltipContent />} />
-                                        <Pie data={requestsByStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
-                                            {requestsByStatusData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                                            ))}
-                                        </Pie>
-                                        <ChartLegend content={<ChartLegendContent nameKey="name" />} />
-                                    </PieChart>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">No open requests.</div>
-                                )}
-                            </ResponsiveContainer>
-                        </ChartContainer>
-                    </CardContent>
-                </Card>
-                <Card className="lg:col-span-2">
-                    <CardHeader>
-                        <CardTitle>Fulfillment Status Overview</CardTitle>
-                        <CardDescription>Breakdown of all fulfillment tasks across active requests.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ChartContainer config={fulfillmentStatusChartConfig} className="h-[300px] w-full">
-                             <ResponsiveContainer width="100%" height="100%">
-                                {fulfillmentStatusData.length > 0 ? (
-                                    <PieChart>
-                                        <Tooltip content={<ChartTooltipContent />} />
-                                        <Pie data={fulfillmentStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
-                                            {fulfillmentStatusData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={entry.fill} />
-                                            ))}
-                                        </Pie>
-                                        <ChartLegend content={<ChartLegendContent nameKey="name" />} />
-                                    </PieChart>
-                                ) : (
-                                    <div className="flex items-center justify-center h-full text-muted-foreground">No items in fulfillment.</div>
-                                )}
-                            </ResponsiveContainer>
-                        </ChartContainer>
-                    </CardContent>
-                </Card>
-            </div>
-        </TabsContent>
-    </Tabs>
+                      </CardContent>
+                    </Card>
 
+                    <Card>
+                       <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <Workflow className="h-5 w-5 text-primary"/>
+                            Approval Pipeline ({filterTitle})
+                          </CardTitle>
+                          <CardDescription>Live view of requests awaiting action.</CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-4">
+                        {requestsLoading ? (
+                          <div className="flex items-center justify-center h-24">
+                            <Loader className="h-6 w-6 animate-spin" />
+                          </div>
+                        ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-center">
+                                <PipelineStage name="Manager" count={dashboardStats.pendingManager} highlight={dashboardStats.pendingManager > 0} />
+                                <PipelineArrow highlight={dashboardStats.pendingManager > 0} />
+                                <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
+                                <PipelineArrow highlight={dashboardStats.pendingExecutive > 0} />
+                                <PipelineStage name="Procurement" count={dashboardStats.approvedCount} highlight={dashboardStats.approvedCount > 0}/>
+                            </div>
+                            
+                            {(dashboardStats.queriesRaised > 0 || dashboardStats.fulfillmentCount > 0) && <Separator className="my-4"/>}
+
+                            <div className="flex justify-around items-center text-center text-sm gap-4">
+                                {dashboardStats.fulfillmentCount > 0 && (
+                                    <Link href={`/dashboard/approvals?status=In%20Fulfillment`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
+                                        <div className="font-bold text-lg text-indigo-500">{dashboardStats.fulfillmentCount}</div>
+                                        <div className="text-muted-foreground text-xs">In Fulfillment</div>
+                                    </Link>
+                                )}
+                                {dashboardStats.queriesRaised > 0 && (
+                                     <Link href={`/dashboard/approvals?status=Queries%20Raised`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
+                                        <div className="font-bold text-lg text-yellow-500">{dashboardStats.queriesRaised}</div>
+                                        <div className="text-muted-foreground text-xs">With Queries</div>
+                                    </Link>
+                                )}
+                            </div>
+                        </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    <Card className="lg:col-span-3">
+                      <CardHeader>
+                          <CardTitle>My Drafts</CardTitle>
+                          <CardDescription>
+                            Resume or delete your recent draft submissions.
+                          </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                         {draftsLoading ? (
+                            <div className="flex items-center justify-center h-full">
+                              <Loader className="h-6 w-6 animate-spin" />
+                            </div>
+                        ) : userDrafts && userDrafts.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Period</TableHead>
+                                    <TableHead className="text-right">Total</TableHead>
+                                    <TableHead className="text-right">Last Saved</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {userDrafts.map(draft => (
+                                    <TableRow key={draft.id}>
+                                        <TableCell>
+                                            <Link href={`/dashboard/procurement?deptId=${draft.departmentId}&period=${encodeURIComponent(draft.period)}`} className="hover:underline text-primary font-medium">{draft.period}</Link>
+                                            <div className="text-xs text-muted-foreground">{draft.department}</div>
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
+                                        <TableCell className="text-right text-muted-foreground">{draft.updatedAt ? formatDistanceToNow(new Date(draft.updatedAt.seconds * 1000), { addSuffix: true }) : 'N/A'}</TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="icon" onClick={() => { setDeletingRequestId(draft.id); setIsDeleteDialogOpen(true); }}>
+                                                <Trash2 className="h-4 w-4 text-destructive" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                            <div className="flex items-center justify-center h-24 text-muted-foreground">
+                              You have no saved drafts.
+                            </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+            </TabsContent>
+            <TabsContent value="visualizations">
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Spend vs. Budget by Department ({filterTitle})</CardTitle>
+                            <CardDescription>
+                                {monthFilter === 'all_time' ? "Total spend across all departments." : "Comparison of spend against forecasted budget for each department."}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ChartContainer config={spendByDeptChartConfig} className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    {spendByDeptVsBudgetData.length > 0 ? (
+                                    <BarChart data={spendByDeptVsBudgetData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+                                        <CartesianGrid vertical={false} />
+                                        <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} interval={0} />
+                                        <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} />
+                                        <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+                                        <Legend content={<ChartLegendContent />} />
+                                        {monthFilter !== 'all_time' && <Bar dataKey="budget" fill="var(--color-budget)" radius={4} />}
+                                        <Bar dataKey="spend" fill="var(--color-spend)" radius={4} />
+                                    </BarChart>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">No data for the selected period.</div>
+                                    )}
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Open Requests by Status</CardTitle>
+                            <CardDescription>Distribution of all open procurement requests by their current status.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ChartContainer config={requestsByStatusChartConfig} className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    {requestsByStatusData.length > 0 ? (
+                                        <PieChart>
+                                            <Tooltip content={<ChartTooltipContent />} />
+                                            <Pie data={requestsByStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                                                {requestsByStatusData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Pie>
+                                            <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                                        </PieChart>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">No open requests.</div>
+                                    )}
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                    <Card className="lg:col-span-2">
+                        <CardHeader>
+                            <CardTitle>Fulfillment Status Overview</CardTitle>
+                            <CardDescription>Breakdown of all fulfillment tasks across active requests, filtered by your role.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ChartContainer config={fulfillmentStatusChartConfig} className="h-[300px] w-full">
+                                 <ResponsiveContainer width="100%" height="100%">
+                                    {fulfillmentStatusData.length > 0 ? (
+                                        <PieChart>
+                                            <Tooltip content={<ChartTooltipContent />} />
+                                            <Pie data={fulfillmentStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                                                {fulfillmentStatusData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Pie>
+                                            <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                                        </PieChart>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">No items in fulfillment.</div>
+                                    )}
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                </div>
+            </TabsContent>
+        </Tabs>
+    </div>
      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
             <AlertDialogHeader>
