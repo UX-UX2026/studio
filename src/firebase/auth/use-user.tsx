@@ -145,6 +145,7 @@ export function useUser() {
         role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
+        reportingDepartments: profile?.reportingDepartments || [],
         companyIds: profile?.companyIds || [],
         status: profile?.status || null,
         loading: isLoading,

@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -39,7 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
 import * as XLSX from 'xlsx';
-import { PlaceHolderImages } from "@/lib/placeholder-images";
+import { PlaceHolderImages } from '@/lib/placeholder-images';
 import { type PdfSettings } from "../settings/pdf-design/page";
 
 const formatCurrency = (amount: number) => {
@@ -377,7 +376,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, loading: userLoading } = useUser();
+    const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -548,20 +547,27 @@ export default function ProcurementQuickSubmitPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [searchParams, departments]);
 
+    const departmentsForUser = useMemo(() => {
+        if (!departments) return [];
+        if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) {
+            return departments;
+        }
+        if (role === 'Executive') {
+            return departments.filter(d => reportingDepartments.includes(d.id));
+        }
+        if (role === 'Manager' || role === 'Requester') {
+            return departments.filter(d => d.name === userDepartment);
+        }
+        return [];
+    }, [departments, role, userDepartment, reportingDepartments]);
+
     // Set default department based on user role and data
     useEffect(() => {
-        if (deptsLoading || !departments) return;
-        if (role === 'Manager' || role === 'Requester') {
-            const userDept = departments.find(d => d.name === userDepartment);
-            if (userDept) {
-                setSelectedDepartmentId(userDept.id);
-                return;
-            }
+        if (deptsLoading || !departmentsForUser) return;
+        if (!selectedDepartmentId && departmentsForUser.length > 0) {
+            setSelectedDepartmentId(departmentsForUser[0].id);
         }
-        if (!selectedDepartmentId && departments.length > 0) {
-            setSelectedDepartmentId(departments[0].id);
-        }
-    }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
+    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
 
     // Update the list of open periods when the department changes
     useEffect(() => {
@@ -1356,16 +1362,12 @@ export default function ProcurementQuickSubmitPage() {
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
                         <div className="grid items-center gap-1.5">
                             <Label htmlFor="department">Department</Label>
-                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || ((role === 'Manager' || role === 'Requester') && !!userDepartment)}>
+                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || departmentsForUser.length <= 1}>
                                 <SelectTrigger id="department">
                                     <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer' ? (
-                                        departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)
-                                    ) : (
-                                        <SelectItem value={selectedDepartmentId}>{departments?.find(d => d.id === selectedDepartmentId)?.name}</SelectItem>
-                                    )}
+                                    {departmentsForUser?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -1543,35 +1545,34 @@ export default function ProcurementQuickSubmitPage() {
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="w-12"></TableHead>
-                                                    <TableHead>Category</TableHead>
-                                                    <TableHead className="text-right">Request Total</TableHead>
-                                                    <TableHead className="text-right">Forecast Total</TableHead>
-                                                    <TableHead className="text-right">Variance</TableHead>
+                                                    <TableHead className="font-bold">Category</TableHead>
+                                                    <TableHead className="text-right font-bold">Request Total</TableHead>
+                                                    <TableHead className="text-right font-bold">Forecast Total</TableHead>
+                                                    <TableHead className="text-right font-bold">Variance</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
                                                     <Fragment key={item.category}>
                                                         <TableRow onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                                            <TableCell><ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} /></TableCell>
-                                                            <TableCell className="font-medium">{item.category}</TableCell>
+                                                            <TableCell className="font-medium flex items-center gap-2">
+                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
+                                                                {item.category}
+                                                            </TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500")}>
-                                                                <span className="flex items-center justify-end gap-2">
-                                                                  {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                  {formatCurrency(item.variance)}
-                                                                </span>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                {formatCurrency(item.variance)}
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCategory === item.category && (
-                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"></TableCell></TableRow>
+                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"></TableCell></TableRow>
                                                         )}
                                                     </Fragment>
-                                                )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
+                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
                                             </TableBody>
-                                            <TableFooter><TableRow><TableCell colSpan={2}>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                            <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
                                     </div>
                                 </div>
@@ -1587,35 +1588,34 @@ export default function ProcurementQuickSubmitPage() {
                                         <Table>
                                             <TableHeader>
                                                 <TableRow>
-                                                    <TableHead className="w-12"></TableHead>
-                                                    <TableHead>Category</TableHead>
-                                                    <TableHead className="text-right">Request Total</TableHead>
-                                                    <TableHead className="text-right">Forecast Total</TableHead>
-                                                    <TableHead className="text-right">Variance</TableHead>
+                                                    <TableHead className="font-bold">Category</TableHead>
+                                                    <TableHead className="text-right font-bold">Request Total</TableHead>
+                                                    <TableHead className="text-right font-bold">Forecast Total</TableHead>
+                                                    <TableHead className="text-right font-bold">Variance</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
                                                 {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
                                                      <Fragment key={item.category}>
                                                         <TableRow onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                                            <TableCell><ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} /></TableCell>
-                                                            <TableCell className="font-medium">{item.category}</TableCell>
+                                                            <TableCell className="font-medium flex items-center gap-2">
+                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />
+                                                                {item.category}
+                                                            </TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500")}>
-                                                                <span className="flex items-center justify-end gap-2">
-                                                                  {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                  {formatCurrency(item.variance)}
-                                                                </span>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                                {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                {formatCurrency(item.variance)}
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCapitalCategory === item.category && (
-                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"></TableCell></TableRow>
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"></TableCell></TableRow>
                                                         )}
                                                     </Fragment>
-                                                )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
+                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
                                             </TableBody>
-                                            <TableFooter><TableRow><TableCell colSpan={2}>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                            <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
                                     </div>
                                 </div>

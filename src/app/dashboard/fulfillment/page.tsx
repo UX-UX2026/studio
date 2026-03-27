@@ -35,7 +35,7 @@ export type FulfillmentItem = ApprovalItem & {
 };
 
 export default function FulfillmentPage() {
-    const { user, profile, role, department, loading: userLoading } = useUser();
+    const { user, profile, role, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { roles, loading: rolesLoading } = useRoles();
@@ -43,8 +43,15 @@ export default function FulfillmentPage() {
     const fulfillmentQuery = useMemo(() => {
         if (!firestore) return null;
         const statuses = ['In Fulfillment', 'Completed'];
-        return query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses));
-    }, [firestore]);
+
+        let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', statuses));
+
+        if (role === 'Executive' && reportingDepartments && reportingDepartments.length > 0) {
+            q = query(q, where('departmentId', 'in', reportingDepartments));
+        }
+
+        return q;
+    }, [firestore, role, reportingDepartments]);
 
     const { data: fulfillmentRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(fulfillmentQuery);
     

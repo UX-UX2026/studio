@@ -155,7 +155,7 @@ const PipelineArrow = ({ highlight }: { highlight?: boolean }) => (
 export default function DashboardPage() {
   const router = useRouter();
   const firestore = useFirestore();
-  const { user, role, department: userDepartment, departmentId: userDepartmentId } = useUser();
+  const { user, role, department: userDepartment, departmentId: userDepartmentId, reportingDepartments } = useUser();
   const { toast } = useToast();
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -166,21 +166,20 @@ export default function DashboardPage() {
   const openRequestsQuery = useMemo(() => {
     if (!firestore) return null;
     
-    const baseQuery = collection(firestore, 'procurementRequests');
+    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
 
     if (role === 'Manager' || role === 'Requester') {
-        if (!userDepartmentId) return null; // Wait for department ID
-        return query(
-            baseQuery,
-            where('status', 'in', openStatuses),
-            where('departmentId', '==', userDepartmentId)
-        );
+        if (!userDepartmentId) return null;
+        q = query(q, where('departmentId', '==', userDepartmentId));
+    } else if (role === 'Executive') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            q = query(q, where('departmentId', 'in', reportingDepartments));
+        }
     }
     
-    // For Admin, Exec, PO, fetch all open requests (their rules allow this)
-    return query(baseQuery, where('status', 'in', openStatuses));
+    return q;
 
-  }, [firestore, role, userDepartmentId, openStatuses]);
+  }, [firestore, role, userDepartmentId, openStatuses, reportingDepartments]);
   
   const { data: userOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
 
@@ -189,22 +188,19 @@ export default function DashboardPage() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     
-    const baseQuery = collection(firestore, 'procurementRequests');
+    let q = query(collection(firestore, 'procurementRequests'), where('createdAt', '>=', startOfMonth));
 
     if (role === 'Manager' || role === 'Requester') {
         if (!userDepartmentId) return null;
-        return query(
-            baseQuery,
-            where('createdAt', '>=', startOfMonth),
-            where('departmentId', '==', userDepartmentId)
-        );
+        q = query(q, where('departmentId', '==', userDepartmentId));
+    } else if (role === 'Executive') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            q = query(q, where('departmentId', 'in', reportingDepartments));
+        }
     }
     
-    return query(
-      baseQuery,
-      where('createdAt', '>=', startOfMonth)
-    );
-  }, [firestore, role, userDepartmentId]);
+    return q;
+  }, [firestore, role, userDepartmentId, reportingDepartments]);
 
   const { data: monthlyRequests, loading: monthlyRequestsLoading } = useCollection<ApprovalRequest>(monthlyRequestsQuery);
 
@@ -287,8 +283,12 @@ export default function DashboardPage() {
         
         const now = new Date();
         const currentMonthName = format(now, "MMMM");
+        
+        const visibleDepartments = role === 'Executive' && reportingDepartments.length > 0
+            ? allDepartments.filter(dept => reportingDepartments.includes(dept.id))
+            : allDepartments;
 
-        const dataByDept = allDepartments.map(dept => {
+        const dataByDept = visibleDepartments.map(dept => {
             const deptSpend = monthlyRequests
                 .filter(req => req.departmentId === dept.id)
                 .reduce((sum, req) => sum + req.total, 0);
@@ -319,7 +319,7 @@ export default function DashboardPage() {
         // Filter out departments with no spend and no budget to keep the chart clean
         return dataByDept.filter(d => d.spend > 0 || d.budget > 0);
 
-    }, [monthlyRequests, allDepartments, allBudgetItems]);
+    }, [monthlyRequests, allDepartments, allBudgetItems, role, reportingDepartments]);
 
     const spendByDeptChartConfig = {
         spend: {

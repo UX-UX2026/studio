@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -383,7 +382,7 @@ const getFulfillmentStatusBadge = (status: string) => {
 };
 
 export default function ApprovalsPage() {
-    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId } = useUser();
+    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
     const { toast } = useToast();
@@ -391,17 +390,24 @@ export default function ApprovalsPage() {
     const { roles, loading: rolesLoading } = useRoles();
 
     const requestsQuery = useMemo(() => {
-        if (!firestore || !role) return null;
-
+        if (!firestore || !role || !profile) return null;
+    
         const baseQuery = collection(firestore, 'procurementRequests');
-
+    
         if (role === 'Administrator') {
-            // Exclude completed and archived requests to improve performance for admins.
-            // They can still be accessed via direct link/search if needed.
             return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
         }
         if (role === 'Executive') {
-            return query(baseQuery, where('status', 'in', ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed']));
+            const statuses = ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed'];
+            if (reportingDepartments && reportingDepartments.length > 0) {
+                return query(
+                    baseQuery,
+                    where('status', 'in', statuses),
+                    where('departmentId', 'in', reportingDepartments)
+                );
+            }
+            // If no specific departments, they can see all in these statuses
+            return query(baseQuery, where('status', 'in', statuses));
         }
         if (role === 'Manager') {
             if (!userDepartmentId) return null; // Manager must have a department
@@ -414,9 +420,9 @@ export default function ApprovalsPage() {
             if (!userDepartmentId) return null; // Requester must have a department
             return query(baseQuery, where('departmentId', '==', userDepartmentId));
         }
-
+    
         return null; // No requests for other roles on this page
-    }, [firestore, role, userDepartmentId]);
+    }, [firestore, role, userDepartmentId, profile, reportingDepartments]);
 
     const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
     
@@ -519,11 +525,8 @@ export default function ApprovalsPage() {
             return { can: true, asDelegate: false, delegator: null };
         }
         
-        // New Rule: Prevent self-approval by the submitting manager.
-        if (
-            pendingTimelineStage.stage === 'Manager Review' &&
-            submittedById === user.uid
-        ) {
+        // New Rule: Prevent self-approval by the submitting user.
+        if (submittedById === user.uid) {
             return { can: false, asDelegate: false, delegator: null };
         }
     
@@ -620,7 +623,7 @@ export default function ApprovalsPage() {
     const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
 
     const budgetProgress = useMemo(() => {
-        if (!operationalSummary.totals || !capitalSummary.totals) return 0;
+        if (!operationalSummary || !capitalSummary) return 0;
         const procurement = operationalSummary.totals.procurement + capitalSummary.totals.procurement;
         const forecast = operationalSummary.totals.forecast + capitalSummary.totals.forecast;
         if (forecast <= 0) return procurement > 0 ? 100 : 0;
@@ -1387,7 +1390,30 @@ export default function ApprovalsPage() {
                                                                             {openCategory === item.category && (
                                                                                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                                                                                     <TableCell colSpan={4} className="p-2">
-                                                                                        <div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div>
+                                                                                        <div className="p-2 bg-background rounded-md border">
+                                                                                             <Table>
+                                                                                                <TableHeader>
+                                                                                                    <TableRow>
+                                                                                                        <TableHead>Item</TableHead>
+                                                                                                        <TableHead>Type</TableHead>
+                                                                                                        <TableHead className="text-center">Qty</TableHead>
+                                                                                                        <TableHead className="text-right">Unit Price</TableHead>
+                                                                                                        <TableHead className="text-right">Total</TableHead>
+                                                                                                    </TableRow>
+                                                                                                </TableHeader>
+                                                                                                <TableBody>
+                                                                                                    {item.items.map((subItem) => (
+                                                                                                        <TableRow key={subItem.id}>
+                                                                                                            <TableCell>{subItem.description}</TableCell>
+                                                                                                            <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                                        </TableRow>
+                                                                                                    ))}
+                                                                                                </TableBody>
+                                                                                            </Table>
+                                                                                        </div>
                                                                                     </TableCell>
                                                                                 </TableRow>
                                                                             )}
@@ -1437,7 +1463,30 @@ export default function ApprovalsPage() {
                                                                             {openCapitalCategory === item.category && (
                                                                                 <TableRow className="bg-muted/50 hover:bg-muted/50">
                                                                                     <TableCell colSpan={4} className="p-2">
-                                                                                        <div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div>
+                                                                                         <div className="p-2 bg-background rounded-md border">
+                                                                                             <Table>
+                                                                                                <TableHeader>
+                                                                                                    <TableRow>
+                                                                                                        <TableHead>Item</TableHead>
+                                                                                                        <TableHead>Type</TableHead>
+                                                                                                        <TableHead className="text-center">Qty</TableHead>
+                                                                                                        <TableHead className="text-right">Unit Price</TableHead>
+                                                                                                        <TableHead className="text-right">Total</TableHead>
+                                                                                                    </TableRow>
+                                                                                                </TableHeader>
+                                                                                                <TableBody>
+                                                                                                    {item.items.map((subItem) => (
+                                                                                                        <TableRow key={subItem.id}>
+                                                                                                            <TableCell>{subItem.description}</TableCell>
+                                                                                                            <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                                        </TableRow>
+                                                                                                    ))}
+                                                                                                </TableBody>
+                                                                                            </Table>
+                                                                                        </div>
                                                                                     </TableCell>
                                                                                 </TableRow>
                                                                             )}

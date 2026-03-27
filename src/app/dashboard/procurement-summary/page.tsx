@@ -45,7 +45,7 @@ type BudgetItem = {
 };
 
 export default function ProcurementSummaryPage() {
-    const { user, role, department: userDepartment, loading: userLoading } = useUser();
+    const { user, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     
@@ -71,21 +71,30 @@ export default function ProcurementSummaryPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
 
-    // Set default department based on user role and data
+    const visibleDepartments = useMemo(() => {
+        if (!departments) return [];
+        if (role === 'Administrator' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) {
+            return departments;
+        }
+        if (role === 'Executive') {
+            return departments.filter(d => reportingDepartments.includes(d.id));
+        }
+        if (role === 'Manager' || role === 'Requester') {
+            return departments.filter(d => d.name === userDepartment);
+        }
+        return [];
+    }, [departments, role, reportingDepartments, userDepartment]);
+
     useEffect(() => {
-        if (deptsLoading || !departments) return;
-        if (role !== 'Administrator' && userDepartment) {
-            const userDept = departments.find(d => d.name === userDepartment);
-            if (userDept) {
-                setSelectedDepartmentId(userDept.id);
-                return;
-            }
+        if (deptsLoading || !visibleDepartments) return;
+    
+        if (!selectedDepartmentId && visibleDepartments.length > 0) {
+            setSelectedDepartmentId(visibleDepartments[0].id);
+        } else if (selectedDepartmentId && !visibleDepartments.some(d => d.id === selectedDepartmentId)) {
+            setSelectedDepartmentId(visibleDepartments[0]?.id || '');
         }
-        // Fallback for admins or if user dept not found
-        if (!selectedDepartmentId && departments.length > 0) {
-            setSelectedDepartmentId(departments[0].id);
-        }
-    }, [role, userDepartment, departments, deptsLoading, selectedDepartmentId]);
+    
+    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
 
 
     const procurementItemsForSummary = useMemo(() => {
@@ -132,16 +141,12 @@ export default function ProcurementSummaryPage() {
             <div className="flex flex-wrap items-end gap-4 mb-6 p-4 border rounded-lg bg-muted/50">
                 <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
                     <Label htmlFor="department">Department</Label>
-                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || (role !== 'Administrator' && !!userDepartment)}>
+                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId} disabled={deptsLoading || visibleDepartments.length <= 1}>
                         <SelectTrigger id="department">
                             <SelectValue placeholder={deptsLoading ? "Loading..." : "Select department"} />
                         </SelectTrigger>
                         <SelectContent>
-                            {role === 'Administrator' ? (
-                                departments?.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)
-                            ) : (
-                                <SelectItem value={selectedDepartmentId}>{departments?.find(d => d.id === selectedDepartmentId)?.name}</SelectItem>
-                            )}
+                           {visibleDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
                 </div>
