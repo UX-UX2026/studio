@@ -484,7 +484,7 @@ export default function DashboardPage() {
             
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(12);
-            doc.text(`ID: ${request.id.substring(0, 8)}...`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
+            doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
             
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(16);
@@ -578,7 +578,7 @@ export default function DashboardPage() {
                 }
             });
             
-            doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+            doc.save(`Procurement-Request-${request.id}.pdf`);
             return;
         }
 
@@ -633,7 +633,7 @@ export default function DashboardPage() {
         XLSX.utils.book_append_sheet(wb, summarySheet, "Budget Summary");
         XLSX.utils.book_append_sheet(wb, timelineSheet, "Approval History");
 
-        XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
+        XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
     };
 
     const handleDeleteDraft = async () => {
@@ -827,7 +827,7 @@ export default function DashboardPage() {
                             userOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
                               <TableRow key={req.id}>
                                 <TableCell className="font-medium">
-                                  <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id.substring(0,8)}...</Link>
+                                  <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id}</Link>
                                 </TableCell>
                                 <TableCell>{req.period}</TableCell>
                                 <TableCell>{req.submittedBy || 'N/A'}</TableCell>

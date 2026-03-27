@@ -154,7 +154,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
-        doc.text(`ID: ${request.id.substring(0, 8)}...`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
+        doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
         
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
@@ -314,7 +314,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             }
         }
 
-        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+        doc.save(`Procurement-Request-${request.id}.pdf`);
         return;
     }
 
@@ -350,7 +350,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
 
-    XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
+    XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
 };
 
 
@@ -698,11 +698,11 @@ export default function ApprovalsPage() {
             }
         } else if (role === 'Manager' && canApprove && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
-            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been forwarded for executive approval.` };
+            toastMessage = { title: "Request Approved", description: `Request ${activeRequest.id} has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
         } else if (role === 'Executive' && canApprove && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Queries Raised')) {
             newStatus = 'Approved';
-            toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+            toastMessage = { title: "Request Approved", description: `Request ${activeRequest.id} has been approved and sent for processing.` };
             
             const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
             const procProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
@@ -715,7 +715,7 @@ export default function ApprovalsPage() {
             }
         } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && activeRequest.status === 'Approved') {
             newStatus = 'In Fulfillment';
-            toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id.substring(0,8)}... is now in fulfillment.` };
+            toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id} is now in fulfillment.` };
             newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
         }
     
@@ -746,7 +746,7 @@ export default function ApprovalsPage() {
                 generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
             }
     
-            const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
+            const auditDetails = `Approved request ${activeRequest.id}, new status "${newStatus}"`;
     
             const auditLogData = {
                 userId: user.uid,
@@ -778,7 +778,7 @@ export default function ApprovalsPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 to: assistantEmails.join(','),
-                                subject: `Request Now In Fulfillment: ${activeRequest.id.substring(0,8)}...`,
+                                subject: `Request Now In Fulfillment: ${activeRequest.id}`,
                                 html: emailHtml,
                             })
                         });
@@ -864,7 +864,7 @@ export default function ApprovalsPage() {
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                         to: uniqueRecipients.join(','),
-                                        subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
+                                        subject: `Procurement Request Action Required: ${activeRequest.id}`,
                                         html: emailHtml,
                                     })
                                 });
@@ -971,14 +971,14 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast({
                 title: "Request Rejected",
-                description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
+                description: `Request ${activeRequest.id} has been rejected.`,
             });
             
             const auditLogData = {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
+                details: `Rejected request ${activeRequest.id}`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
@@ -995,7 +995,7 @@ export default function ApprovalsPage() {
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id}`, html: emailHtml })
                     });
                 }
             }
@@ -1059,14 +1059,14 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast({
                 title: "Query Raised",
-                description: `A query has been raised on request ${activeRequest.id.substring(0,8)}...`,
+                description: `A query has been raised on request ${activeRequest.id}`,
             });
             
             const auditLogData = {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Raised query on request ${activeRequest.id.substring(0,8)}...`,
+                details: `Raised query on request ${activeRequest.id}`,
                 entity: { type: 'procurementRequest', id: selectedRequestId },
                 timestamp: serverTimestamp()
             };
@@ -1083,7 +1083,7 @@ export default function ApprovalsPage() {
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${activeRequest.id}`, html: emailHtml })
                     });
                 }
             }
@@ -1137,7 +1137,7 @@ export default function ApprovalsPage() {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Added comment to request ${activeRequest.id.substring(0,8)}...`,
+                details: `Added comment to request ${activeRequest.id}`,
                 entity: { type: 'procurementRequest', id: activeRequest.id },
                 timestamp: serverTimestamp()
             };
@@ -1223,7 +1223,7 @@ export default function ApprovalsPage() {
                                             >
                                                 <CardContent className="p-3">
                                                     <div className="flex justify-between items-start">
-                                                        <p className="font-semibold">{req.id.substring(0,8)}...</p>
+                                                        <p className="font-semibold truncate">{req.id}</p>
                                                         {getStatusBadge(req.status)}
                                                     </div>
                                                     <div className="flex justify-between items-end mt-2">
@@ -1250,7 +1250,7 @@ export default function ApprovalsPage() {
                             <Card>
                                 <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                     <div className="flex-1">
-                                        <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id.substring(0,8)}...</h3>
+                                        <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id}</h3>
                                         <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
                                     </div>
                                 </AccordionTrigger>
