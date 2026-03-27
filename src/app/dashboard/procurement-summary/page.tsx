@@ -13,10 +13,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Badge } from "@/components/ui/badge";
 
@@ -50,10 +46,9 @@ export default function ProcurementSummaryPage() {
     const firestore = useFirestore();
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
-    const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+    const [selectedPeriod, setSelectedPeriod] = useState<string>('');
     const [openCategory, setOpenCategory] = useState<string | null>(null);
     const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
-    const selectedPeriod = useMemo(() => format(selectedDate, "MMMM yyyy"), [selectedDate]);
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -61,7 +56,8 @@ export default function ProcurementSummaryPage() {
     
     const requestsQuery = useMemo(() => {
         if (!firestore) return null;
-        return collection(firestore, 'procurementRequests');
+        const activeStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Completed'];
+        return query(collection(firestore, 'procurementRequests'), where('status', 'in', activeStatuses));
     }, [firestore]);
     const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
 
@@ -85,6 +81,19 @@ export default function ProcurementSummaryPage() {
         return [];
     }, [departments, role, reportingDepartments, userDepartment]);
 
+    const availablePeriods = useMemo(() => {
+        if (!allRequests || !selectedDepartmentId) return [];
+        
+        const periods = new Set<string>();
+        allRequests.forEach(req => {
+            if (req.departmentId === selectedDepartmentId) {
+                periods.add(req.period);
+            }
+        });
+    
+        return Array.from(periods).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+    }, [allRequests, selectedDepartmentId]);
+
     useEffect(() => {
         if (deptsLoading || !visibleDepartments) return;
     
@@ -96,6 +105,15 @@ export default function ProcurementSummaryPage() {
     
     }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
 
+    useEffect(() => {
+        if (availablePeriods.length > 0 && !selectedPeriod) {
+            setSelectedPeriod(availablePeriods[0]);
+        } else if (availablePeriods.length > 0 && !availablePeriods.includes(selectedPeriod)) {
+            setSelectedPeriod(availablePeriods[0]);
+        } else if (availablePeriods.length === 0) {
+            setSelectedPeriod('');
+        }
+    }, [availablePeriods, selectedPeriod]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
@@ -118,7 +136,7 @@ export default function ProcurementSummaryPage() {
     }, [user, role, userLoading, router]);
 
     const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
-    const monthForHeader = selectedPeriod.split(' ')[0];
+    const monthForHeader = selectedPeriod ? selectedPeriod.split(' ')[0] : '';
 
     const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
     if (loading || !user || !role || !allowedRoles.includes(role)) {
@@ -152,30 +170,18 @@ export default function ProcurementSummaryPage() {
                 </div>
                  <div className="grid flex-1 min-w-[200px] items-center gap-1.5">
                     <Label htmlFor="period">Procurement Period</Label>
-                     <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !selectedDate && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {selectedDate ? format(selectedDate, "MMMM yyyy") : <span>Pick a date</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={selectedDate}
-                                onSelect={(date) => {
-                                    if (date) setSelectedDate(date)
-                                }}
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
+                     <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={availablePeriods.length === 0}>
+                        <SelectTrigger id="period">
+                            <SelectValue placeholder="Select a period..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {availablePeriods.length > 0 ? (
+                                availablePeriods.map(period => <SelectItem key={period} value={period}>{period}</SelectItem>)
+                            ) : (
+                                <div className="p-4 text-sm text-muted-foreground">No submissions found.</div>
+                            )}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
             
