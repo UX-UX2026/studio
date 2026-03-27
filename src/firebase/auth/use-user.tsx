@@ -11,6 +11,8 @@ import { signOut } from 'firebase/auth';
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
 
+const EMPTY_ARRAY: string[] = [];
+
 /**
  * This hook is the definitive source for user and profile information.
  * It uses a realtime listener for the user's profile and creates it if it doesn't exist.
@@ -145,8 +147,8 @@ export function useUser() {
         role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
-        reportingDepartments: profile?.reportingDepartments || [],
-        companyIds: profile?.companyIds || [],
+        reportingDepartments: profile?.reportingDepartments || EMPTY_ARRAY,
+        companyIds: profile?.companyIds || EMPTY_ARRAY,
         status: profile?.status || null,
         loading: isLoading,
     };
