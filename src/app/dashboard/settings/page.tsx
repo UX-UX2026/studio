@@ -8,10 +8,7 @@ import { Loader, Settings, Workflow, Building, Shield, History, AlertTriangle, B
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { cn } from "@/lib/utils";
-import { FontSwitcher } from "@/components/font-switcher";
-import { Separator } from "@/components/ui/separator";
 
 export default function SettingsPage() {
     const { user, role, loading } = useUser();
@@ -70,13 +67,6 @@ export default function SettingsPage() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                       <ThemeSwitcher />
-                       <FontSwitcher />
-                     </div>
-                     
-                     <Separator />
-
                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {settingLinks.map(link => (
                             <Card key={link.href} className="flex flex-col">

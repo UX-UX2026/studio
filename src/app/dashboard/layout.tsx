@@ -18,12 +18,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import Link from "next/link";
 import { useUser, useAuth, useFirestore, useDoc } from "@/firebase";
-import { Loader, LogOut } from "lucide-react";
+import { Loader, LogOut, Palette, Type, Monitor, Moon, Sun } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
@@ -31,6 +39,8 @@ import { cn } from "@/lib/utils";
 import useInactivityTimeout from "@/hooks/use-inactivity-timeout";
 import type { AppMetadata } from '@/app/dashboard/settings/security/page';
 import { doc } from "firebase/firestore";
+import { useTheme } from "next-themes";
+import { useFont } from "@/context/font-provider";
 
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -39,6 +49,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const { theme, themes, setTheme } = useTheme();
+  const { font, setFont } = useFont();
 
   const appMetadataRef = useMemo(() => {
     if (!firestore) return null;
@@ -86,6 +98,8 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
       </div>
     );
   }
+
+  const fonts = ['inter', 'poppins', 'source-sans-pro', 'roboto', 'lato'];
 
   return (
     <SidebarProvider>
@@ -137,6 +151,39 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               </div>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Palette className="mr-2 h-4 w-4" />
+                    <span>Theme</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                       <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
+                        {themes.map(t => (
+                          <DropdownMenuRadioItem key={t} value={t} className="capitalize">{t}</DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+
+                <DropdownMenuSub>
+                  <DropdownMenuSubTrigger>
+                    <Type className="mr-2 h-4 w-4" />
+                    <span>Font</span>
+                  </DropdownMenuSubTrigger>
+                  <DropdownMenuPortal>
+                    <DropdownMenuSubContent>
+                      <DropdownMenuRadioGroup value={font} onValueChange={(v) => setFont(v as any)}>
+                        {fonts.map(f => (
+                          <DropdownMenuRadioItem key={f} value={f} className="capitalize font-sans">{f}</DropdownMenuRadioItem>
+                        ))}
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuSubContent>
+                  </DropdownMenuPortal>
+                </DropdownMenuSub>
+
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => handleSignOut(false)} className="cursor-pointer">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Sign out</span>
