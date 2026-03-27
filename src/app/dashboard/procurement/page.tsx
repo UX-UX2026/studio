@@ -746,12 +746,21 @@ export default function ProcurementQuickSubmitPage() {
         setLastAction(isDraft ? 'draft' : 'submit');
         setSaveStatus('saving');
         
-        const isManagerSubmitting = role === 'Manager';
-        const newStatus = isDraft ? 'Draft' : isManagerSubmitting ? 'Pending Executive' : 'Pending Manager Approval';
+        const department = departments?.find(d => d.id === selectedDepartmentId);
+        if (!department) {
+            toast({ variant: "destructive", title: "Cannot save", description: "Selected department not found." });
+            setSaveStatus('idle');
+            return;
+        }
+
+        const isSubmitterTheDeptManager = user.uid === department.managerId;
+        const shouldSkipManagerApproval = role === 'Administrator' || isSubmitterTheDeptManager;
+        
+        const newStatus = isDraft ? 'Draft' : shouldSkipManagerApproval ? 'Pending Executive' : 'Pending Manager Approval';
         
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         
-        const departmentWorkflow = departments?.find(d => d.id === selectedDepartmentId)?.workflow;
+        const departmentWorkflow = department?.workflow;
         
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
@@ -781,8 +790,8 @@ export default function ProcurementQuickSubmitPage() {
             timeline = baseTimeline;
         } else {
             // For submissions
-            if (isManagerSubmitting) {
-                // Manager submits, so skip manager review
+            if (shouldSkipManagerApproval) {
+                // Manager or Admin submits, so skip manager review
                 const managerReviewIndex = baseTimeline.findIndex(s => s.stage === 'Manager Review');
                 if (managerReviewIndex > -1) {
                     baseTimeline[managerReviewIndex] = { ...baseTimeline[managerReviewIndex], status: 'completed', actor: actorString, date: currentDate };
@@ -1750,4 +1759,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
