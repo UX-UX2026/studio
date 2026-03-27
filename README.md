@@ -10,36 +10,49 @@ This is a multi-user application designed to bring efficiency, transparency, and
 
 ## Core Features & Functionality
 
-**1. Role-Based Access Control (RBAC):**
-The application's functionality is dictated by the user's assigned role. The primary roles include:
-*   **Administrator:** Full access to all features, settings, and data.
-*   **Requester:** Can create and submit procurement requests.
-*   **Manager:** Can approve or reject requests from their department.
-*   **Executive:** Higher-level approval authority.
-*   **Procurement Officer / Assistant:** Manages the fulfillment process and vendor interactions.
+### 1. Role-Based Access Control (RBAC)
+The application's functionality is dictated by the user's assigned role. This ensures that users only see and interact with the data and features relevant to their position.
 
-**2. Procurement & Submission:**
-*   **Quick Submit:** A centralized page for creating and managing procurement requests.
-*   **Recurring Items:** A master list of items (e.g., monthly subscriptions) automatically added to new requests.
-*   **Budget vs. Actuals Summary:** Real-time comparison of submitted requests against pre-loaded budget forecasts.
-*   **Import/Export:** Ability to import line items from a CSV file.
+-   **Administrator:** Has unrestricted access to all features, settings, and data. Responsible for system configuration, user management, and overall oversight.
+-   **Requester:** The primary role for initiating procurement. Can create, save, and submit procurement requests for their assigned department.
+-   **Manager:** The first line of approval. Can review, approve, reject, or raise queries on requests submitted by users within their department.
+-   **Executive:** Provides a higher level of approval, typically for requests that exceed a certain value or fall under specific categories, after they have been approved by a manager.
+-   **Procurement Officer / Assistant:** Manages the entire fulfillment process for approved requests, including sourcing from vendors, tracking orders, and logging received goods.
 
-**3. Approval Workflow:**
-*   A multi-stage approval pipeline (e.g., Manager Review -> Executive Approval).
-*   Approvers can review line items, see request history, and add comments or queries.
-*   The workflow is fully customizable by an administrator on a per-department basis.
+### 2. Procurement & Submission (`Quick Submit` Page)
+A centralized hub for creating and managing procurement requests.
 
-**4. Fulfillment Management:**
-*   A dedicated dashboard for procurement officers to manage approved requests.
-*   Track and update the status of each individual line item (Sourcing, Quoted, Ordered, Completed).
-*   Log received quantities and add fulfillment-specific comments.
+-   **Start a New Request:** Select a department and a procurement period (e.g., 'August 2026') to begin a new submission.
+-   **Automated Recurring Items:** A master list of recurring monthly expenses (like subscriptions or service contracts) is automatically added to each new submission, saving time and ensuring consistency.
+-   **Add & Manage Line Items:** Easily add "One-Off" items, specifying description, category, quantity, and price. Edit or remove items as needed before submission.
+-   **Save as Draft:** Save your progress at any time. The request will be available on your dashboard to resume later.
+-   **Import from CSV:** Quickly populate a submission by importing a list of line items from a CSV file.
+-   **Budget vs. Actuals Summary:** A real-time, color-coded summary compares the total value of your request against the department's pre-loaded budget forecast for the selected period, helping to prevent overspending.
 
-**5. System Administration & Settings:**
-*   **User Management:** Administrators can manage user roles and department assignments.
-*   **Department Management:** Create and manage departments and their annual budgets.
-*   **Workflow Customization:** A drag-and-drop interface to define approval stages for each department.
-*   **Budget Integration:** A tool to import departmental budget forecasts from CSV or Excel.
-*   **Audit & Error Logging:** Comprehensive logs to track all user actions and capture client-side errors.
+### 3. Approval Workflow (`Approvals` Page)
+A multi-stage approval pipeline designed for clarity and accountability.
+
+-   **Pipeline View:** Requests move through a clear workflow (e.g., Manager Review → Executive Approval → Approved for Procurement).
+-   **Detailed Review:** Approvers can drill down into any request to view all line items, see the budget impact, and review the full history.
+-   **Action-Oriented Interface:** Approvers can approve, reject, or raise queries on a request with a single click. Rejections and queries require comments, ensuring clear communication.
+-   **Digital Fingerprints:** Every approval or rejection action generates a unique cryptographic fingerprint (a SHA-256 hash) of the entire request data at that moment. This fingerprint is stored with the action, providing a verifiable, tamper-evident audit trail.
+-   **Automated Notifications:** Email notifications are sent to the relevant users when an action is required on a request.
+
+### 4. Fulfillment Management (`Fulfillment` Page)
+A dedicated dashboard for procurement staff to manage the final stage of the process.
+
+-   **Fulfillment Tracking:** For each line item in an approved request, procurement officers can update the status: **Sourcing, Quoted, Ordered,** and **Completed**.
+-   **Quantity & Comment Logging:** Track the quantity of items received and add fulfillment-specific comments or notes for each line item.
+-   **AI-Powered Recommendations:** Leverage AI to get suggestions for optimal fulfillment strategies, including potential vendors and estimated lead times.
+
+### 5. System Administration & Settings (`Settings` Pages)
+A comprehensive suite of tools for administrators to configure and maintain the application.
+
+-   **User Management:** Create users, assign roles, and manage department associations.
+-   **Department & Company Management:** Create and manage departments and legal entities.
+-   **Workflow Customization:** A drag-and-drop interface to define the approval stages and permissions for each department.
+-   **Budget Integration:** Import departmental budget forecasts from CSV or Excel files for real-time comparison against procurement requests.
+-   **Audit & Error Logging:** Comprehensive logs to track all significant user actions and capture client-side errors for debugging.
 
 ---
 
@@ -50,14 +63,7 @@ The application's functionality is dictated by the user's assigned role. The pri
 *   **Styling:** Tailwind CSS with ShadCN UI
 *   **Database:** Cloud Firestore (NoSQL) for real-time data.
 *   **Authentication:** Firebase Authentication (Google & Email/Password).
-*   **Hosting:** Configured for **Firebase Hosting** (free tier).
-
-## Enhanced Features
-
-*   **Real-time Data:** The UI updates instantly for all users as data changes in the backend.
-*   **Offline Capability:** The app works offline, syncing any changes once a connection is restored.
-*   **Dynamic Theming:** Switch between modern Light, Dark, and "Classic" themes.
-*   **Data Integrity with Digital Fingerprints:** Every approval or rejection action generates a unique cryptographic fingerprint (a SHA-256 hash) of the entire request data at that moment. This fingerprint is stored with the action and included in PDF exports, providing a verifiable, tamper-evident audit trail.
+*   **Hosting:** Configured for seamless deployment on Vercel or Firebase Hosting.
 
 ---
 
@@ -125,11 +131,11 @@ This application uses environment variables to handle sensitive information like
 
 ### Publishing the Application
 
-This application is configured for deployment using **Firebase App Hosting**.
+This application is configured for deployment using **Vercel** or **Firebase App Hosting**.
 
 For your live, deployed application to connect to Firebase and send emails, you **MUST** provide your credentials using **Environment Variables** in your hosting provider's settings dashboard.
 
-1.  Go to your hosting provider's dashboard (e.g., Firebase App Hosting, Vercel).
+1.  Go to your hosting provider's dashboard (e.g., Vercel).
 2.  Navigate to the environment variable settings for your project.
 3.  Add all the variables from your `.env` file (both Firebase and Email variables) with their corresponding production values.
 

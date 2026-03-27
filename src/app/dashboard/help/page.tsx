@@ -5,24 +5,66 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useUser } from "@/firebase/auth/use-user";
-import { LifeBuoy } from "lucide-react";
+import { LifeBuoy, FileText, PenLine, ClipboardCheck, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Data extracted from README.md and project structure
 const rolesData = [
-    { role: "Administrator", description: "Full access to all features, settings, and data. Manages users, departments, and system configurations." },
-    { role: "Requester", description: "Can create and submit procurement requests for their assigned department." },
-    { role: "Manager", description: "Can approve or reject requests submitted by users in their department." },
-    { role: "Executive", description: "Has higher-level approval authority, typically for high-value requests, after a manager's approval." },
-    { role: "Procurement Officer / Assistant", description: "Manages the fulfillment process for approved requests, interacts with vendors, and tracks item delivery." },
+    { role: "Administrator", description: "Has unrestricted access to all features, settings, and data. Responsible for system configuration, user management, and overall oversight." },
+    { role: "Requester", description: "The primary role for initiating procurement. Can create, save, and submit procurement requests for their assigned department." },
+    { role: "Manager", description: "The first line of approval. Can review, approve, reject, or raise queries on requests submitted by users within their department." },
+    { role: "Executive", description: "Provides a higher level of approval, typically for high-value requests, after they have been approved by a manager." },
+    { role: "Procurement Officer / Assistant", description: "Manages the entire fulfillment process for approved requests, including sourcing from vendors, tracking orders, and logging received goods." },
 ];
 
 const featuresData = [
-    { feature: "Quick Submit", description: "A centralized page for creating and managing procurement requests, with support for adding recurring items and importing from CSV." },
-    { feature: "Approval Workflow", description: "A multi-stage approval pipeline (e.g., Manager Review -> Executive Approval). Approvers can review line items, see request history, and add comments or queries." },
-    { feature: "Fulfillment Management", description: "A dedicated dashboard for procurement officers to manage approved requests, track item status (Sourcing, Quoted, Ordered, Completed), and log received quantities." },
-    { feature: "System Administration", description: "A suite of tools for Administrators to manage users, departments, budgets, workflows, and view system logs." },
-    { feature: "Digital Fingerprints", description: "Every approval and rejection is secured with a unique SHA-256 cryptographic hash of the request data. This 'digital fingerprint' provides a tamper-evident audit trail, ensuring data integrity throughout the workflow." },
+    { 
+        feature: "Procurement & Submission", 
+        icon: FileText,
+        description: "The 'Quick Submit' page is your starting point for all procurement activities.",
+        guide: [
+            "1. **Select Department & Period**: Choose the department and the month for your submission.",
+            "2. **Automated Items**: Notice that recurring monthly items (like subscriptions) are automatically added for you.",
+            "3. **Add Items**: Click 'Add Item' to create a new line item. Fill in the description, category, quantity, and unit price.",
+            "4. **Save Draft**: You can click 'Save as Draft' at any time to save your progress and return later. Find your drafts on the main dashboard.",
+            "5. **Submit for Approval**: Once you've added all your items, click 'Submit For Approval'. If you are a Requester, you can use the 'Notify Manager' button to send an email notification."
+        ]
+    },
+    { 
+        feature: "Approval Workflow", 
+        icon: PenLine,
+        description: "The 'Approvals' page is where requests are reviewed and actioned.",
+        guide: [
+            "1. **Select a Request**: Click on a request from the list to view its details.",
+            "2. **Review Details**: The expanded view shows the approval timeline, line items, and a budget summary.",
+            "3. **Take Action**: Use the buttons at the bottom of the card to 'Approve', 'Reject', or 'Raise Query'.",
+            "4. **Communicate**: Queries and rejection reasons are logged in the 'Communication Log' tab, ensuring transparency.",
+            "5. **Export**: Once a request is approved, you can export a detailed report in PDF or Excel format using the 'Export Report' button."
+        ]
+    },
+    { 
+        feature: "Fulfillment Management", 
+        icon: ClipboardCheck,
+        description: "The 'Fulfillment' page is for tracking the delivery of approved items.",
+        guide: [
+            "1. **View Items**: All items from 'In Fulfillment' requests are listed here, grouped by department.",
+            "2. **Update Status**: For each item, you can update the fulfillment status (Sourcing, Quoted, Ordered, Completed).",
+            "3. **Log Quantities**: As items arrive, update the 'Rcvd Qty' (Received Quantity) field.",
+            "4. **Add Comments**: Use the 'Comments' button to add notes about the fulfillment process for a specific item.",
+            "5. **Automatic Completion**: When all items in a request are marked as 'Completed', the request itself will automatically be marked as 'Completed'."
+        ]
+    },
+     { 
+        feature: "System Administration", 
+        icon: Settings,
+        description: "The 'Settings' area contains powerful tools for administrators to configure the application.",
+        guide: [
+            "• **User Management**: Create users, assign roles, and manage department associations.",
+            "• **Workflow**: Customize the approval stages and permissions for each department.",
+            "• **Budget Integration**: Import departmental budget forecasts from CSV files.",
+            "• **Audit & Error Logs**: Monitor all significant user actions and track application errors.",
+            "• **Data Management**: Export backups of all data or perform system-wide data clearing operations."
+        ]
+    },
 ];
 
 const techStack = [
@@ -31,7 +73,7 @@ const techStack = [
     { item: "Styling", value: "Tailwind CSS with ShadCN UI" },
     { item: "Database", value: "Cloud Firestore (NoSQL)" },
     { item: "Authentication", value: "Firebase Authentication" },
-    { item: "Hosting", value: "Firebase Hosting" },
+    { item: "Hosting", value: "Configured for Vercel or Firebase Hosting" },
 ];
 
 const dbSchema = [
@@ -45,6 +87,7 @@ const dbSchema = [
     { path: "/budgets/{budgetId}", description: "Stores individual budget line items from an imported forecast." },
     { path: "/auditLogs/{logId}", description: "A complete log of all significant user actions for security and tracking." },
     { path: "/errorLogs/{errorLogId}", description: "A log of all client-side application errors for debugging purposes." },
+    { path: "/app/metadata", description: "A single document for storing global application settings." },
 ];
 
 
@@ -56,7 +99,7 @@ export default function HelpPage() {
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <LifeBuoy className="h-6 w-6 text-primary" />
-                    Help Center
+                    Help & Documentation
                 </CardTitle>
                 <CardDescription>
                     Guides and information to help you use the Procurement Portal effectively.
@@ -87,15 +130,26 @@ export default function HelpPage() {
                                     </div>
                                 </AccordionContent>
                             </AccordionItem>
-                            <AccordionItem value="item-2">
-                                <AccordionTrigger className="text-lg font-semibold">Core Features Overview</AccordionTrigger>
+                             <AccordionItem value="item-2">
+                                <AccordionTrigger className="text-lg font-semibold">How-To Guides</AccordionTrigger>
                                 <AccordionContent>
-                                    <p className="mb-4 text-muted-foreground">Key features that streamline the procurement lifecycle.</p>
-                                    <div className="space-y-3">
+                                    <p className="mb-4 text-muted-foreground">Step-by-step guides for the application's core features.</p>
+                                    <div className="space-y-4">
                                         {featuresData.map(f => (
-                                            <div key={f.feature} className="p-3 border rounded-md">
-                                                <h4 className="font-semibold">{f.feature}</h4>
-                                                <p className="text-sm text-muted-foreground">{f.description}</p>
+                                            <div key={f.feature} className="p-4 border rounded-md">
+                                                <h4 className="font-semibold flex items-center gap-2 text-md mb-2">
+                                                    <f.icon className="h-5 w-5 text-primary" />
+                                                    {f.feature}
+                                                </h4>
+                                                <p className="text-sm text-muted-foreground mb-3">{f.description}</p>
+                                                <ul className="space-y-2 text-sm list-inside">
+                                                    {f.guide.map((step, i) => (
+                                                        <li key={i} className="flex items-start">
+                                                            <span className="mr-2 text-primary font-semibold">•</span>
+                                                            <span>{step}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </div>
                                         ))}
                                     </div>
