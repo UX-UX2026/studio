@@ -525,6 +525,12 @@ export default function ProcurementQuickSubmitPage() {
         return validStatus.includes(activeRequest.status);
     }, [role, activeRequest]);
 
+    const departmentCategories = useMemo(() => {
+        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
+        const combined = new Set([...categoriesFromBudget, 'Uncategorized']);
+        return Array.from(combined).sort();
+    }, [budgetItems]);
+
     // Handle incoming query params to resume a draft
     useEffect(() => {
         const deptId = searchParams.get('deptId');
@@ -762,7 +768,7 @@ export default function ProcurementQuickSubmitPage() {
         
         const departmentWorkflow = department?.workflow;
         
-        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
         let timeline;
@@ -1519,7 +1525,6 @@ export default function ProcurementQuickSubmitPage() {
                         </TabsContent>
                         <TabsContent value="summary">
                             <div className="space-y-8">
-                                {/* Operational Summary */}
                                 <div className="space-y-4">
                                     <div className="p-4 border rounded-lg bg-muted/50">
                                         <div className="flex justify-between items-center">
@@ -1536,7 +1541,15 @@ export default function ProcurementQuickSubmitPage() {
                                     </div>
                                     <div className="overflow-auto rounded-lg border">
                                         <Table>
-                                            <TableHeader><TableRow><TableHead>Operational Summary</TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-12"></TableHead>
+                                                    <TableHead>Category</TableHead>
+                                                    <TableHead className="text-right">Request Total</TableHead>
+                                                    <TableHead className="text-right">Forecast Total</TableHead>
+                                                    <TableHead className="text-right">Variance</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
                                             <TableBody>
                                                 {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
                                                     <Fragment key={item.category}>
@@ -1553,7 +1566,7 @@ export default function ProcurementQuickSubmitPage() {
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCategory === item.category && (
-                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
+                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"></TableCell></TableRow>
                                                         )}
                                                     </Fragment>
                                                 )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
@@ -1562,7 +1575,6 @@ export default function ProcurementQuickSubmitPage() {
                                         </Table>
                                     </div>
                                 </div>
-                                {/* Capital Summary */}
                                 <div className="space-y-4">
                                      <div className="p-4 border rounded-lg bg-muted/50">
                                         <div className="flex justify-between items-center">
@@ -1573,7 +1585,15 @@ export default function ProcurementQuickSubmitPage() {
                                     </div>
                                     <div className="overflow-auto rounded-lg border">
                                         <Table>
-                                            <TableHeader><TableRow><TableHead>Capital Summary</TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead><TableHead></TableHead></TableRow></TableHeader>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead className="w-12"></TableHead>
+                                                    <TableHead>Category</TableHead>
+                                                    <TableHead className="text-right">Request Total</TableHead>
+                                                    <TableHead className="text-right">Forecast Total</TableHead>
+                                                    <TableHead className="text-right">Variance</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
                                             <TableBody>
                                                 {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
                                                      <Fragment key={item.category}>
@@ -1590,7 +1610,7 @@ export default function ProcurementQuickSubmitPage() {
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCapitalCategory === item.category && (
-                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"></TableCell></TableRow>
                                                         )}
                                                     </Fragment>
                                                 )) : <TableRow><TableCell colSpan={5} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
@@ -1715,7 +1735,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
