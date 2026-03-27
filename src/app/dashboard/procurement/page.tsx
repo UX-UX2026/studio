@@ -179,7 +179,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
-        doc.text(`ID: ${request.id.substring(0, 8)}...`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
+        doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
         
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(16);
@@ -337,7 +337,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             }
         }
 
-        doc.save(`Procurement-Request-${request.id.substring(0, 8)}.pdf`);
+        doc.save(`Procurement-Request-${request.id}.pdf`);
         return;
     }
 
@@ -373,7 +373,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
     const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
 
-    XLSX.writeFile(wb, `Procurement-Request-${request.id.substring(0, 8)}.xlsx`);
+    XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
 };
 
 export default function ProcurementQuickSubmitPage() {
@@ -905,7 +905,7 @@ export default function ProcurementQuickSubmitPage() {
         if (role === 'Executive' || role === 'Administrator') {
             if(activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
                 newStatus = 'Approved';
-                toastMessage = { title: "Request Approved", description: `${activeRequest.id.substring(0,8)}... has been approved and sent for processing.` };
+                toastMessage = { title: "Request Approved", description: `${activeRequest.id}... has been approved and sent for processing.` };
                 
                 const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
                 const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
@@ -946,7 +946,7 @@ export default function ProcurementQuickSubmitPage() {
                 generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
             }
 
-            const auditDetails = `Approved request ${activeRequest.id.substring(0,8)}..., new status "${newStatus}"`;
+            const auditDetails = `Approved request ${activeRequest.id}, new status "${newStatus}"`;
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
@@ -990,7 +990,7 @@ export default function ProcurementQuickSubmitPage() {
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                     to: uniqueRecipients.join(','),
-                                    subject: `Procurement Request Action Required: ${activeRequest.id.substring(0,8)}...`,
+                                    subject: `Procurement Request Action Required: ${activeRequest.id}`,
                                     html: emailHtml,
                                 })
                             });
@@ -1056,14 +1056,14 @@ export default function ProcurementQuickSubmitPage() {
             });
             toast({
                 title: "Request Rejected",
-                description: `Request ${activeRequest.id.substring(0,8)}... has been rejected.`,
+                description: `Request ${activeRequest.id} has been rejected.`,
             });
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: actorString,
                 action: 'request.reject',
-                details: `Rejected request ${activeRequest.id.substring(0,8)}...`,
+                details: `Rejected request ${activeRequest.id}`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
                 timestamp: serverTimestamp()
             });
@@ -1078,7 +1078,7 @@ export default function ProcurementQuickSubmitPage() {
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id.substring(0,8)}...`, html: emailHtml })
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id}`, html: emailHtml })
                     });
                 }
             }
@@ -1415,7 +1415,7 @@ export default function ProcurementQuickSubmitPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {previousSubmissions && previousSubmissions.length > 0 ? previousSubmissions.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>{s.period} - {s.id.substring(0, 8)} ({s.items.length} items)</SelectItem>
+                                        <SelectItem key={s.id} value={s.id}>{s.period} - {s.id} ({s.items.length} items)</SelectItem>
                                     )) : <div className="p-4 text-sm text-muted-foreground">No previous submissions found.</div>}
                                 </SelectContent>
                             </Select>
@@ -1545,7 +1545,12 @@ export default function ProcurementQuickSubmitPage() {
                                                             <TableCell className="font-medium">{item.category}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}><AlertTriangle className="h-4 w-4" />{formatCurrency(item.variance)}</TableCell>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500")}>
+                                                                <span className="flex items-center justify-end gap-2">
+                                                                  {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                  {formatCurrency(item.variance)}
+                                                                </span>
+                                                            </TableCell>
                                                         </TableRow>
                                                         {openCategory === item.category && (
                                                              <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
@@ -1577,7 +1582,12 @@ export default function ProcurementQuickSubmitPage() {
                                                             <TableCell className="font-medium">{item.category}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
                                                             <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}><AlertTriangle className="h-4 w-4" />{formatCurrency(item.variance)}</TableCell>
+                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500")}>
+                                                                <span className="flex items-center justify-end gap-2">
+                                                                  {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                                  {formatCurrency(item.variance)}
+                                                                </span>
+                                                            </TableCell>
                                                         </TableRow>
                                                         {openCapitalCategory === item.category && (
                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={5} className="p-2"><div className="p-2 bg-background rounded-md border">{/*... sub-item table ...*/}</div></TableCell></TableRow>
