@@ -506,12 +506,25 @@ export default function ApprovalsPage() {
     const canApproveResult = useMemo(() => {
         if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return { can: false, asDelegate: false, delegator: null };
     
-        const { departmentId, timeline } = activeRequest;
+        const { departmentId, timeline, submittedById } = activeRequest;
     
         const pendingTimelineStage = timeline.find(t => t.status === 'pending');
         if (!pendingTimelineStage) {
             const canAcknowledge = activeRequest.status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant' || role === 'Administrator');
             return { can: canAcknowledge, asDelegate: false, delegator: null };
+        }
+
+        // Admins can always approve, regardless of other rules
+        if (role === 'Administrator') {
+            return { can: true, asDelegate: false, delegator: null };
+        }
+        
+        // New Rule: Prevent self-approval by the submitting manager.
+        if (
+            pendingTimelineStage.stage === 'Manager Review' &&
+            submittedById === user.uid
+        ) {
+            return { can: false, asDelegate: false, delegator: null };
         }
     
         const department = departments.find(d => d.id === departmentId);
@@ -534,10 +547,6 @@ export default function ApprovalsPage() {
             }
         } else if (stageConfig.role) {
             potentialApprovers = allUsers.filter(u => u.role === stageConfig.role);
-        }
-    
-        if (role === 'Administrator') {
-            return { can: true, asDelegate: false, delegator: null };
         }
     
         for (const approver of potentialApprovers) {
