@@ -190,6 +190,13 @@
     --sidebar-ring: var(--ring);
   }
 
+  .colorful main, .dark .colorful main {
+    @apply animate-fade-in;
+  }
+  .colorful .bg-primary:not(:disabled), .dark .colorful .bg-primary:not(:disabled) {
+    @apply animate-pulse-primary;
+  }
+
   .glass {
     --background: 180 100% 94%; /* Very light cyan */
     --foreground: 222.2 47.4% 11.2%;
