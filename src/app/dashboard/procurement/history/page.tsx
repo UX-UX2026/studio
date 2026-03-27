@@ -1,0 +1,177 @@
+
+'use client';
+
+import { useUser } from "@/firebase/auth/use-user";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import { Loader, History } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useFirestore, useCollection } from "@/firebase";
+import { collection, query, where, orderBy } from "firebase/firestore";
+import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+
+const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-ZA", {
+        style: "currency",
+        currency: "ZAR",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(amount);
+};
+
+export default function ProcurementHistoryPage() {
+    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
+    const router = useRouter();
+    const firestore = useFirestore();
+
+    const [departmentFilter, setDepartmentFilter] = useState<string>('all');
+    const [periodFilter, setPeriodFilter] = useState<string>('all');
+
+    const historyQuery = useMemo(() => {
+        if (!firestore || !profile) return null;
+        
+        let q = query(
+            collection(firestore, 'procurementRequests'), 
+            where('status', 'in', ['Completed', 'Archived']),
+            orderBy('updatedAt', 'desc')
+        );
+
+        if (role === 'Manager' || role === 'Requester') {
+            if (!userDepartmentId) return null;
+            q = query(q, where('departmentId', '==', userDepartmentId));
+        } else if (role === 'Executive') {
+            if (reportingDepartments && reportingDepartments.length > 0) {
+                q = query(q, where('departmentId', 'in', reportingDepartments));
+            }
+        }
+        return q;
+    }, [firestore, profile, role, userDepartmentId, reportingDepartments]);
+
+    const { data: requests, loading: requestsLoading } = useCollection<ApprovalRequest>(historyQuery);
+
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const filteredRequests = useMemo(() => {
+        if (!requests) return [];
+        let filtered = requests;
+        if (departmentFilter !== 'all') {
+            filtered = filtered.filter(req => req.departmentId === departmentFilter);
+        }
+        if (periodFilter !== 'all') {
+            filtered = filtered.filter(req => req.period === periodFilter);
+        }
+        return filtered;
+    }, [requests, departmentFilter, periodFilter]);
+
+    const availablePeriods = useMemo(() => {
+        if (!requests) return [];
+        return ['all', ...Array.from(new Set(requests.map(r => r.period)))];
+    }, [requests]);
+
+    const visibleDepartments = useMemo(() => {
+        if (!departments) return [];
+        if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) {
+            return departments;
+        }
+        if (role === 'Executive') {
+            return departments.filter(d => reportingDepartments.includes(d.id));
+        }
+        if (role === 'Manager' || role === 'Requester') {
+            return departments.filter(d => d.id === userDepartmentId);
+        }
+        return [];
+    }, [departments, role, reportingDepartments, userDepartmentId]);
+    
+    const loading = userLoading || requestsLoading || deptsLoading;
+    
+    if (loading) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+                <Loader className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
+    
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><History />Procurement History</CardTitle>
+                <CardDescription>
+                    Review completed and archived procurement requests.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <div className="flex items-center gap-4 p-4 mb-6 border rounded-lg bg-muted/50">
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="dept-filter">Department</Label>
+                        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
+                            <SelectTrigger id="dept-filter" className="w-[200px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Departments</SelectItem>
+                                {visibleDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="period-filter">Period</Label>
+                        <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                            <SelectTrigger id="period-filter" className="w-[200px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {availablePeriods.map(p => <SelectItem key={p} value={p}>{p === 'all' ? 'All Periods' : p}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                <div className="overflow-auto border rounded-lg">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Request ID</TableHead>
+                                <TableHead>Department</TableHead>
+                                <TableHead>Period</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead className="text-right">Total</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {filteredRequests.length > 0 ? filteredRequests.map(req => (
+                                <TableRow key={req.id}>
+                                    <TableCell className="font-medium">{req.id}</TableCell>
+                                    <TableCell>{req.department}</TableCell>
+                                    <TableCell>{req.period}</TableCell>
+                                    <TableCell>
+                                        <Badge variant={req.status === 'Completed' ? 'default' : 'secondary'}>{req.status}</Badge>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
+                                    <TableCell className="text-right">
+                                        <Button asChild variant="outline" size="sm">
+                                            <Link href={`/dashboard/approvals?id=${req.id}`}>View Details</Link>
+                                        </Button>
+                                    </TableCell>
+                                </TableRow>
+                            )) : (
+                                <TableRow>
+                                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                                        No historical records found for the selected filters.
+                                    </TableCell>
+                                </TableRow>
+                            )}
+                        </TableBody>
+                    </Table>
+                </div>
+            </CardContent>
+        </Card>
+    );
+}

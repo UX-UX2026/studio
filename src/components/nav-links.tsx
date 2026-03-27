@@ -61,6 +61,7 @@ const allLinks = [
       { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit', iconClass: "text-blue-500" },
       { href: '/dashboard/procurement-summary', label: 'Summary', icon: FilePieChart, permission: 'procurement:summary', iconClass: "text-orange-500" },
       { href: '/dashboard/recurring', label: 'Recurring Items', icon: History, permission: 'procurement:recurring', iconClass: "text-purple-500" },
+      { href: '/dashboard/procurement/history', label: 'History', icon: History, permission: 'procurement:summary', iconClass: "text-gray-500" },
     ]
   },
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },

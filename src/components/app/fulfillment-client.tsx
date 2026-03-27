@@ -82,16 +82,24 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           const requestSnap = await getDoc(requestRef);
           if (!requestSnap.exists()) throw new Error("Procurement request not found");
           
-          const requestData = requestSnap.data() as ApprovalRequest;
+          let requestData = requestSnap.data() as ApprovalRequest;
+          
           const updatedItems = requestData.items.map(i => {
               if (i.id === itemId) {
                   return { ...i, [field]: value };
               }
               return i;
           });
-          
-          const updatePayload = { items: updatedItems };
 
+          const allItemsCompleted = updatedItems.every(item => item.fulfillmentStatus === 'Completed');
+          const updatePayload: Partial<ApprovalRequest> = { items: updatedItems };
+
+          if (allItemsCompleted && requestData.status !== 'Completed') {
+              updatePayload.status = 'Completed';
+              updatePayload.updatedAt = serverTimestamp();
+              toast({ title: "Request Completed", description: `Request ${itemToUpdate.procurementRequestId} automatically marked as complete.` });
+          }
+          
           await updateDoc(requestRef, updatePayload);
 
           toast({ title: "Fulfillment item updated." });
@@ -256,4 +264,3 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
     </>
   );
 }
-

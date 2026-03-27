@@ -163,26 +163,6 @@ export default function DashboardPage() {
 
   const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
 
-  const openRequestsQuery = useMemo(() => {
-    if (!firestore) return null;
-    
-    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
-
-    if (role === 'Manager' || role === 'Requester') {
-        if (!userDepartmentId) return null;
-        q = query(q, where('departmentId', '==', userDepartmentId));
-    } else if (role === 'Executive') {
-        if (reportingDepartments && reportingDepartments.length > 0) {
-            q = query(q, where('departmentId', 'in', reportingDepartments));
-        }
-    }
-    
-    return q;
-
-  }, [firestore, role, userDepartmentId, openStatuses, reportingDepartments]);
-  
-  const { data: userOpenRequests, loading: openRequestsLoading } = useCollection<ApprovalRequest>(openRequestsQuery);
-
   const monthlyRequestsQuery = useMemo(() => {
     if (!firestore) return null;
     const now = new Date();
@@ -203,6 +183,26 @@ export default function DashboardPage() {
   }, [firestore, role, userDepartmentId, reportingDepartments]);
 
   const { data: monthlyRequests, loading: monthlyRequestsLoading } = useCollection<ApprovalRequest>(monthlyRequestsQuery);
+
+  const allRequestsForUserQuery = useMemo(() => {
+    if (!firestore) return null;
+    
+    let q = query(collection(firestore, 'procurementRequests'));
+
+    if (role === 'Manager' || role === 'Requester') {
+        if (!userDepartmentId) return null;
+        q = query(q, where('departmentId', '==', userDepartmentId));
+    } else if (role === 'Executive') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            q = query(q, where('departmentId', 'in', reportingDepartments));
+        }
+    }
+    
+    return q;
+  }, [firestore, role, userDepartmentId, reportingDepartments]);
+  
+  const { data: allRequestsForUser, loading: allRequestsLoading } = useCollection<ApprovalRequest>(allRequestsForUserQuery);
+
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
@@ -265,17 +265,21 @@ export default function DashboardPage() {
     const dashboardStats = useMemo(() => {
         const totalSpendCurrentMonth = monthlyRequests?.reduce((sum, req) => sum + req.total, 0) || 0;
         
-        const pendingManager = userOpenRequests?.filter(req => req.status === 'Pending Manager Approval').length || 0;
-        const pendingExecutive = userOpenRequests?.filter(req => req.status === 'Pending Executive').length || 0;
-        const queriesRaised = userOpenRequests?.filter(req => req.status === 'Queries Raised').length || 0;
+        const openRequestsForMonth = monthlyRequests?.filter(req => openStatuses.includes(req.status)) || [];
 
-        return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised };
-    }, [monthlyRequests, userOpenRequests]);
+        const pendingManager = openRequestsForMonth.filter(req => req.status === 'Pending Manager Approval').length;
+        const pendingExecutive = openRequestsForMonth.filter(req => req.status === 'Pending Executive').length;
+        const queriesRaised = openRequestsForMonth.filter(req => req.status === 'Queries Raised').length;
+        const approvedCount = openRequestsForMonth.filter(req => req.status === 'Approved').length;
+        const fulfillmentCount = openRequestsForMonth.filter(req => req.status === 'In Fulfillment').length;
 
-    const approvedCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'Approved').length || 0, [userOpenRequests]);
-    const fulfillmentCount = useMemo(() => userOpenRequests?.filter(req => req.status === 'In Fulfillment').length || 0, [userOpenRequests]);
+        return { totalSpendCurrentMonth, pendingManager, pendingExecutive, queriesRaised, approvedCount, fulfillmentCount, openRequestsForMonth };
+    }, [monthlyRequests, openStatuses]);
+    
+    const allUserOpenRequests = useMemo(() => allRequestsForUser?.filter(req => openStatuses.includes(req.status)) || [], [allRequestsForUser, openStatuses]);
 
-    const requestsLoading = openRequestsLoading || monthlyRequestsLoading || deptsLoading || budgetsLoading;
+
+    const requestsLoading = allRequestsLoading || monthlyRequestsLoading || deptsLoading || budgetsLoading;
     
     // Chart data
     const spendByDeptVsBudgetData = useMemo(() => {
@@ -334,8 +338,8 @@ export default function DashboardPage() {
 
 
     const requestsByStatusData = useMemo(() => {
-        if (!userOpenRequests) return [];
-        const statusCounts = userOpenRequests.reduce((acc, req) => {
+        if (!allUserOpenRequests) return [];
+        const statusCounts = allUserOpenRequests.reduce((acc, req) => {
             acc[req.status] = (acc[req.status] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -345,11 +349,11 @@ export default function DashboardPage() {
             value: value, 
             fill: `var(--color-${name.replace(/ /g, "")})` 
         }));
-    }, [userOpenRequests]);
+    }, [allUserOpenRequests]);
     
     const requestsByStatusChartConfig = useMemo(() => {
-        if (!userOpenRequests) return {} as ChartConfig;
-        const statusSet = new Set(userOpenRequests.map(req => req.status));
+        if (!allUserOpenRequests) return {} as ChartConfig;
+        const statusSet = new Set(allUserOpenRequests.map(req => req.status));
         const config: ChartConfig = {};
         let i = 1;
         statusSet.forEach(status => {
@@ -360,7 +364,7 @@ export default function DashboardPage() {
             i = (i % 5) + 1;
         });
         return config;
-    }, [userOpenRequests]);
+    }, [allUserOpenRequests]);
 
     const fulfillmentStatusData = useMemo(() => {
         return Object.entries(fulfillmentSummary).map(([name, value]) => ({ 
@@ -732,7 +736,7 @@ export default function DashboardPage() {
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">
-                      Requests Awaiting Action
+                      Requests Awaiting Action (Current Month)
                     </CardTitle>
                     <AlertCircle className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
@@ -743,7 +747,7 @@ export default function DashboardPage() {
                         </div>
                     ) : (
                         <>
-                        <div className="text-2xl font-bold">{userOpenRequests?.length || 0} Open Requests</div>
+                        <div className="text-2xl font-bold">{dashboardStats.openRequestsForMonth.length || 0} Open Requests</div>
                          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             <div>Manager Review</div>
                             <div className="font-semibold text-right text-foreground">{dashboardStats.pendingManager || 0}</div>
@@ -796,7 +800,7 @@ export default function DashboardPage() {
                           Open Submissions
                         </CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          A summary of submissions currently in the approval pipeline.
+                          A summary of all submissions currently in the approval pipeline for you.
                         </p>
                       </div>
                       <Button asChild variant="outline">
@@ -817,14 +821,14 @@ export default function DashboardPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {openRequestsLoading ? (
+                          {allRequestsLoading ? (
                               <TableRow>
                                   <TableCell colSpan={6} className="text-center h-24">
                                       <Loader className="h-6 w-6 animate-spin mx-auto" />
                                   </TableCell>
                               </TableRow>
-                          ) : userOpenRequests && userOpenRequests.length > 0 ? (
-                            userOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
+                          ) : allUserOpenRequests && allUserOpenRequests.length > 0 ? (
+                            allUserOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
                               <TableRow key={req.id}>
                                 <TableCell className="font-medium">
                                   <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id}</Link>
@@ -873,9 +877,9 @@ export default function DashboardPage() {
                    <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Workflow className="h-5 w-5 text-primary"/>
-                        Approval Pipeline
+                        Approval Pipeline (Current Month)
                       </CardTitle>
-                      <CardDescription>Live view of requests awaiting action.</CardDescription>
+                      <CardDescription>Live view of requests awaiting action this month.</CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
                     {requestsLoading ? (
@@ -889,15 +893,15 @@ export default function DashboardPage() {
                             <PipelineArrow highlight={dashboardStats.pendingManager > 0} />
                             <PipelineStage name="Executive" count={dashboardStats.pendingExecutive} highlight={dashboardStats.pendingExecutive > 0} />
                             <PipelineArrow highlight={dashboardStats.pendingExecutive > 0} />
-                            <PipelineStage name="Procurement" count={approvedCount} highlight={approvedCount > 0}/>
+                            <PipelineStage name="Procurement" count={dashboardStats.approvedCount} highlight={dashboardStats.approvedCount > 0}/>
                         </div>
                         
-                        {(dashboardStats.queriesRaised > 0 || fulfillmentCount > 0) && <Separator className="my-4"/>}
+                        {(dashboardStats.queriesRaised > 0 || dashboardStats.fulfillmentCount > 0) && <Separator className="my-4"/>}
 
                         <div className="flex justify-around items-center text-center text-sm gap-4">
-                            {fulfillmentCount > 0 && (
+                            {dashboardStats.fulfillmentCount > 0 && (
                                 <Link href={`/dashboard/approvals?status=In%20Fulfillment`} className="flex items-center gap-2 cursor-pointer transition-transform duration-200 hover:scale-110">
-                                    <div className="font-bold text-lg text-indigo-500">{fulfillmentCount}</div>
+                                    <div className="font-bold text-lg text-indigo-500">{dashboardStats.fulfillmentCount}</div>
                                     <div className="text-muted-foreground text-xs">In Fulfillment</div>
                                 </Link>
                             )}

@@ -4,7 +4,7 @@
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo, Fragment } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download, List, LayoutGrid } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download, List, LayoutGrid, CalendarIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type PdfSettings } from "../settings/pdf-design/page";
 import type { User } from "firebase/auth";
+import { format } from "date-fns";
 
 type Company = {
     id: string;
@@ -1026,8 +1027,37 @@ const RequestDetailsView = ({
         }
     };
 
-    const showFooterActions = request && (request.status.startsWith('Pending') || request.status === 'Approved' || request.status === 'Queries Raised');
+    const handleMarkComplete = async () => {
+        if (!request || !user || !firestore || !profile) return;
+        
+        setIsSubmittingAction(true);
+        const requestRef = doc(firestore, 'procurementRequests', request.id);
+        const updateData = { status: 'Completed' as const, updatedAt: serverTimestamp() };
+        const action = 'request.manual_complete';
+
+        try {
+            await updateDoc(requestRef, updateData);
+            toast({ title: "Request Marked as Complete", description: `${request.id} is now complete.` });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: `${profile?.displayName || user.email} (${role})`,
+                action,
+                details: `Manually marked request as complete.`,
+                entity: { type: 'procurementRequest', id: request.id },
+                timestamp: serverTimestamp()
+            });
+        } catch (error: any) {
+             console.error("Manual Complete Error:", error);
+             toast({ variant: "destructive", title: "Operation Failed", description: error.message });
+        } finally {
+            setIsSubmittingAction(false);
+        }
+    };
+
+    const showFooterActions = request && (request.status.startsWith('Pending') || ['Approved', 'In Fulfillment', 'Queries Raised'].includes(request.status));
     const showExportAction = request && ['Approved', 'In Fulfillment', 'Completed'].includes(request.status);
+    const canComplete = (role === 'Procurement Officer' || role === 'Procurement Assistant' || role === 'Administrator') && request.status === 'In Fulfillment';
 
     if (budgetsLoading || auditLogsLoading) {
         return <div className="flex justify-center items-center p-8"><Loader className="h-6 w-6 animate-spin" /></div>
@@ -1226,6 +1256,12 @@ const RequestDetailsView = ({
                             </DropdownMenu>
                         )}
                         {showFooterActions && (<>
+                            {canComplete && (
+                                <Button onClick={handleMarkComplete} disabled={isSubmittingAction}>
+                                    {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                    <Check className="mr-2 h-4 w-4" />Mark as Complete
+                                </Button>
+                            )}
                             <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
                             <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
                             <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>{isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}<Check className="mr-2 h-4 w-4" />{(role === 'Procurement Officer' || role === 'Procurement Assistant') ? 'Acknowledge & Process' : 'Approve'}</Button>
@@ -1243,11 +1279,11 @@ export default function ApprovalsPage() {
     const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { toast } = useToast();
     const firestore = useFirestore();
     const { roles, loading: rolesLoading } = useRoles();
 
     const [viewMode, setViewMode] = useState<'list' | 'tile'>('list');
+    const [monthFilter, setMonthFilter] = useState<string>('All Months');
 
     const requestsQuery = useMemo(() => {
         if (!firestore || !role || !profile) return null;
@@ -1255,7 +1291,7 @@ export default function ApprovalsPage() {
         const baseQuery = collection(firestore, 'procurementRequests');
     
         if (role === 'Administrator') {
-            return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
+            return query(baseQuery, where('status', 'not-in', ['Draft', 'Archived']));
         }
         if (role === 'Executive') {
             const statuses = ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed'];
@@ -1270,14 +1306,14 @@ export default function ApprovalsPage() {
         }
         if (role === 'Manager') {
             if (!userDepartmentId) return null;
-            return query(baseQuery, where('departmentId', '==', userDepartmentId));
+            return query(baseQuery, where('departmentId', '==', userDepartmentId), where('status', 'not-in', ['Draft', 'Archived']));
         }
         if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
             return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
         }
         if (role === 'Requester') {
             if (!userDepartmentId) return null;
-            return query(baseQuery, where('departmentId', '==', userDepartmentId));
+            return query(baseQuery, where('departmentId', '==', userDepartmentId), where('status', 'not-in', ['Draft', 'Archived']));
         }
     
         return null;
@@ -1301,19 +1337,38 @@ export default function ApprovalsPage() {
     const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
 
     const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+    
+    const availableMonths = useMemo(() => {
+        if (!approvals) return [];
+        const months = new Set(approvals.map(req => req.period));
+        return ['All Months', ...Array.from(months).sort((a, b) => new Date(b).getTime() - new Date(a).getTime())];
+    }, [approvals]);
+
+    useEffect(() => {
+        const currentMonth = format(new Date(), 'MMMM yyyy');
+        if (availableMonths.includes(currentMonth)) {
+            setMonthFilter(currentMonth);
+        } else if (availableMonths.length > 1) {
+            setMonthFilter('All Months');
+        }
+    }, [availableMonths]);
+
+    const filteredRequests = useMemo(() => {
+        if (!approvals) return [];
+        let requests = approvals;
+        const statusFilter = searchParams.get('status');
+        if (statusFilter) {
+            requests = requests.filter(req => req.status === decodeURIComponent(statusFilter));
+        }
+        if (monthFilter && monthFilter !== 'All Months') {
+            requests = requests.filter(req => req.period === monthFilter);
+        }
+        return requests;
+    }, [approvals, searchParams, monthFilter]);
 
     const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
     
     const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || groupsLoading;
-
-    const filteredRequests = useMemo(() => {
-        if (!approvals) return [];
-        const statusFilter = searchParams.get('status');
-        if (statusFilter) {
-            return approvals.filter(req => req.status === decodeURIComponent(statusFilter));
-        }
-        return approvals;
-    }, [approvals, searchParams]);
 
     useEffect(() => {
         const reqId = searchParams.get('id');
@@ -1330,6 +1385,7 @@ export default function ApprovalsPage() {
     }, [filteredRequests, selectedRequestId]);
     
     const approvalSummary = useMemo(() => {
+        if (!filteredRequests) return { pendingCount: 0, totalValue: 0, byDept: [] };
         const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved' || req.status === 'Queries Raised');
         const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
         const byDept = pending.reduce((acc, req) => {
@@ -1382,21 +1438,36 @@ export default function ApprovalsPage() {
     
   return (
     <>
-        <div className="flex justify-end items-center gap-2 mb-4">
-            <span className="text-sm text-muted-foreground">View:</span>
-            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('list')} className="gap-2">
-                <List className="h-4 w-4"/> List
-            </Button>
-            <Button variant={viewMode === 'tile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('tile')} className="gap-2">
-                <LayoutGrid className="h-4 w-4"/> Tile
-            </Button>
+        <div className="flex justify-between items-center mb-4 gap-4">
+            <div className="flex items-center gap-2">
+                <Label htmlFor="month-filter">Filter by Month:</Label>
+                <Select value={monthFilter} onValueChange={setMonthFilter}>
+                    <SelectTrigger id="month-filter" className="w-[180px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {availableMonths.map(month => (
+                            <SelectItem key={month} value={month}>{month}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
+            <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">View:</span>
+                <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('list')} className="gap-2">
+                    <List className="h-4 w-4"/> List
+                </Button>
+                <Button variant={viewMode === 'tile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('tile')} className="gap-2">
+                    <LayoutGrid className="h-4 w-4"/> Tile
+                </Button>
+            </div>
         </div>
 
         {viewMode === 'list' ? (
             <div className="grid lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-1 space-y-4">
                     <Card>
-                        <CardHeader className="pb-2"><CardTitle>Approvals Overview</CardTitle><CardDescription>Summary of requests awaiting your action.</CardDescription></CardHeader>
+                        <CardHeader className="pb-2"><CardTitle>Approvals Overview</CardTitle><CardDescription>Summary of requests for the selected period.</CardDescription></CardHeader>
                         <CardContent><div className="space-y-4"><div className="flex justify-between items-center"><span className="text-muted-foreground">Pending Requests</span><span className="font-bold text-lg">{approvalSummary.pendingCount}</span></div><div className="flex justify-between items-center"><span className="text-muted-foreground">Total Value</span><span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span></div><div className="space-y-2 pt-2"><h4 className="text-sm font-medium">By Department</h4>{approvalSummary.byDept.length > 0 ? (<div className="space-y-1 text-sm text-muted-foreground">{approvalSummary.byDept.map(([dept, data]) => (<div key={dept} className="flex justify-between"><span>{dept}</span><span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span></div>))}</div>) : (<p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>)}</div></div></CardContent>
                     </Card>
                     <div className="space-y-4">
@@ -1481,4 +1552,5 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
 
