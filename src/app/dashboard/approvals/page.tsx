@@ -4,7 +4,7 @@
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import React, { useEffect, useState, useMemo, Fragment } from "react";
-import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download } from "lucide-react";
+import { Loader, X, Check, MessageSquare, Paperclip, Send, Circle, AlertTriangle, ChevronRight, Download, List, LayoutGrid } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { type PdfSettings } from "../settings/pdf-design/page";
+import type { User } from "firebase/auth";
 
 type Company = {
     id: string;
@@ -115,244 +116,6 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
-    const operationalItems = request.items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
-    const capitalItems = request.items.filter(item => item.expenseType === 'Capital');
-
-    if (format === 'pdf') {
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-        
-        const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
-        const company = companies?.find(c => c.id === request.companyId);
-        
-        const doc = new jsPDF();
-        
-        // --- Asynchronously load logo ---
-        let logoImage: HTMLImageElement | null = null;
-        if (company?.logoUrl) {
-            try {
-                logoImage = await new Promise((resolve) => {
-                    const img = new Image();
-                    img.crossOrigin = "Anonymous"; // Important for CORS
-                    img.onload = () => resolve(img);
-                    img.onerror = (err) => {
-                        console.error("PDF Logo Load Error:", err);
-                        resolve(null); // Resolve with null on error
-                    };
-                    img.src = company.logoUrl;
-                });
-            } catch (error) {
-                console.error("Error creating image promise for PDF:", error);
-                logoImage = null; // Ensure generation continues
-            }
-        }
-        
-        // --- Build Header ---
-        let tableStartY = 30; // Default start Y for tables if no logo
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(12);
-        doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(16);
-        
-        if (logoImage) {
-            try {
-                const imgWidth = 30;
-                const imgHeight = (logoImage.height * imgWidth) / logoImage.width;
-                const imgY = 15;
-                doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
-                doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
-            } catch (e) {
-                console.error("Failed to add logo to PDF, falling back to text only.", e);
-                doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-            }
-        } else {
-            doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-        }
-
-        // --- End Header ---
-
-        const detailsData: (string|number)[][] = [
-            ["Request ID", request.id],
-            ["Company", request.companyName || 'N/A'],
-            ["Department", request.department],
-            ["Period", request.period],
-            ["Submitted By", request.submittedBy || 'N/A'],
-            ["Total", formatCurrency(request.total)],
-            ["Status", request.status],
-        ];
-
-        autoTable(doc, {
-            startY: tableStartY,
-            head: [['Request Details', '']],
-            body: detailsData,
-            theme: 'striped',
-            headStyles: { fillColor: primaryColor },
-        });
-
-        if (operationalItems.length > 0) {
-            const opItemsData = operationalItems.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Operational Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: opItemsData,
-                headStyles: { fillColor: primaryColor },
-            });
-        }
-        
-        if (capitalItems.length > 0) {
-            const capItemsData = capitalItems.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Capital Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: capItemsData,
-                headStyles: { fillColor: primaryColor },
-            });
-        }
-        
-        const opSummaryTableData = summaryData.operationalSummary.lines.map(line => [
-            line.category,
-            formatCurrency(line.procurementTotal),
-            formatCurrency(line.forecastTotal),
-            formatCurrency(line.variance),
-        ]);
-        if(opSummaryTableData.length > 0) {
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Operational Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: opSummaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.operationalSummary.totals.procurement),
-                    formatCurrency(summaryData.operationalSummary.totals.forecast),
-                    formatCurrency(summaryData.operationalSummary.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: primaryColor },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-        }
-        
-        const capSummaryTableData = summaryData.capitalSummary.lines.map(line => [
-            line.category,
-            formatCurrency(line.procurementTotal),
-            formatCurrency(line.forecastTotal),
-            formatCurrency(line.variance),
-        ]);
-         if(capSummaryTableData.length > 0) {
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Capital Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: capSummaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.capitalSummary.totals.procurement),
-                    formatCurrency(summaryData.capitalSummary.totals.forecast),
-                    formatCurrency(summaryData.capitalSummary.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: primaryColor },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-        }
-        
-        const timelineData = request.timeline.map(step => [
-            step.stage,
-            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
-            step.status,
-            step.date || 'N/A',
-        ]);
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [['Stage', 'Actor', 'Status', 'Date']],
-            body: timelineData,
-            headStyles: { fillColor: primaryColor },
-            columnStyles: {
-                0: { cellWidth: 40 },
-                1: { cellWidth: 'auto' },
-                2: { cellWidth: 25 },
-                3: { cellWidth: 25 }
-            }
-        });
-
-        if (auditLogs && auditLogs.length > 0) {
-            const emailLog = auditLogs
-                .filter(log => log.action === 'notification.sent')
-                .map(log => ({
-                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
-                    details: log.details,
-                }));
-        
-            if (emailLog.length > 0) {
-                autoTable(doc, {
-                    startY: (doc as any).lastAutoTable.finalY + 10,
-                    head: [['Notification Email History']],
-                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
-                    theme: 'striped',
-                    headStyles: { fillColor: primaryColor },
-                    styles: { fontSize: 8 },
-                });
-            }
-        }
-
-        doc.save(`Procurement-Request-${request.id}.pdf`);
-        return;
-    }
-
-    // XLSX logic
-    const wb = XLSX.utils.book_new();
-
-    const detailsDataForSheet = [
-        { Key: "Request ID", Value: request.id },
-        { Key: "Company", Value: request.companyName || 'N/A' },
-        { Key: "Department", Value: request.department },
-        { Key: "Period", Value: request.period },
-        { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
-        { Key: "Total", Value: formatCurrency(request.total) },
-        { Key: "Status", Value: request.status },
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true }), "Request Details");
-
-    const opItemsData = operationalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
-    const capItemsData = capitalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opItemsData), "Operational Items");
-    if (capItemsData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capItemsData), "Capital Items");
-
-    const opSummaryDataForSheet = summaryData.operationalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
-    opSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.operationalSummary.totals.procurement, 'Forecast Total': summaryData.operationalSummary.totals.forecast, 'Variance': summaryData.operationalSummary.totals.variance });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opSummaryDataForSheet), "Operational Summary");
-
-    const capSummaryDataForSheet = summaryData.capitalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
-    if (capSummaryDataForSheet.length > 0) {
-        capSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.capitalSummary.totals.procurement, 'Forecast Total': summaryData.capitalSummary.totals.forecast, 'Variance': summaryData.capitalSummary.totals.variance });
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capSummaryDataForSheet), "Capital Summary");
-    }
-
-    const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
-
-    XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
-};
-
-
 const getStatusBadge = (status: string) => {
     switch (status) {
         case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
@@ -381,89 +144,42 @@ const getFulfillmentStatusBadge = (status: string) => {
     }
 };
 
-export default function ApprovalsPage() {
-    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const { toast } = useToast();
+const RequestDetailsView = ({
+    request, user, profile, role, allUsers, departments, approvalGroups, companies, appMetadata
+}: {
+    request: ApprovalRequest,
+    user: User,
+    profile: UserProfile | null,
+    role: UserRole,
+    allUsers: UserProfile[],
+    departments: Department[],
+    approvalGroups: ApprovalGroup[],
+    companies: Company[] | null,
+    appMetadata: AppMetadata | null
+}) => {
     const firestore = useFirestore();
-    const { roles, loading: rolesLoading } = useRoles();
+    const { toast } = useToast();
 
-    const requestsQuery = useMemo(() => {
-        if (!firestore || !role || !profile) return null;
-    
-        const baseQuery = collection(firestore, 'procurementRequests');
-    
-        if (role === 'Administrator') {
-            return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
-        }
-        if (role === 'Executive') {
-            const statuses = ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed'];
-            if (reportingDepartments && reportingDepartments.length > 0) {
-                return query(
-                    baseQuery,
-                    where('status', 'in', statuses),
-                    where('departmentId', 'in', reportingDepartments)
-                );
-            }
-            // If no specific departments, they can see all in these statuses
-            return query(baseQuery, where('status', 'in', statuses));
-        }
-        if (role === 'Manager') {
-            if (!userDepartmentId) return null; // Manager must have a department
-            return query(baseQuery, where('departmentId', '==', userDepartmentId));
-        }
-        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
-            return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
-        }
-        if (role === 'Requester') {
-            if (!userDepartmentId) return null; // Requester must have a department
-            return query(baseQuery, where('departmentId', '==', userDepartmentId));
-        }
-    
-        return null; // No requests for other roles on this page
-    }, [firestore, role, userDepartmentId, profile, reportingDepartments]);
-
-    const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
-    
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
-    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
-
-    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
-    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
-
-    const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
-    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
-    
-    const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
-    const { data: companies } = useCollection<Company>(companiesQuery);
-
-    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
-    const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
-
-    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
     const [newComment, setNewComment] = useState("");
     const [isQueryDialogOpen, setIsQueryDialogOpen] = useState(false);
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [isSubmittingAction, setIsSubmittingAction] = useState(false);
     const [openCategory, setOpenCategory] = useState<string | null>(null);
     const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
-
-    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
     
     const budgetsQuery = useMemo(() => {
-        if (!firestore || !activeRequest?.departmentId) return null;
-        return query(collection(firestore, 'budgets'), where('departmentId', '==', activeRequest.departmentId));
-    }, [firestore, activeRequest]);
+        if (!firestore || !request?.departmentId) return null;
+        return query(collection(firestore, 'budgets'), where('departmentId', '==', request.departmentId));
+    }, [firestore, request]);
     const { data: budgetItems, loading: budgetsLoading } = useCollection<BudgetItem>(budgetsQuery);
     
     const auditLogsQuery = useMemo(() => {
-        if (!firestore || !activeRequest?.id) return null;
+        if (!firestore || !request?.id) return null;
         return query(
             collection(firestore, 'auditLogs'), 
-            where('entity.id', '==', activeRequest.id)
+            where('entity.id', '==', request.id)
         );
-    }, [firestore, activeRequest]);
+    }, [firestore, request]);
     const { data: unsortedAuditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
     const auditLogs = useMemo(() => {
         if (!unsortedAuditLogs) return null;
@@ -471,61 +187,28 @@ export default function ApprovalsPage() {
     }, [unsortedAuditLogs]);
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(
-        activeRequest?.items || [],
-        activeRequest?.departmentId || '',
-        activeRequest?.period || '',
+        request?.items || [],
+        request?.departmentId || '',
+        request?.period || '',
         budgetItems,
         departments
     );
 
-    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || groupsLoading || (!!activeRequest && budgetsLoading) || (!!activeRequest && auditLogsLoading);
-
-    const filteredRequests = useMemo(() => {
-        if (!approvals) return [];
-        const statusFilter = searchParams.get('status');
-        if (statusFilter) {
-            return approvals.filter(req => req.status === decodeURIComponent(statusFilter));
-        }
-        return approvals;
-    }, [approvals, searchParams]);
-
-    useEffect(() => {
-        const reqId = searchParams.get('id');
-        if (reqId) {
-            setSelectedRequestId(reqId);
-        }
-    }, [searchParams]);
-
-    useEffect(() => {
-        if (!selectedRequestId && filteredRequests.length > 0) {
-            const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
-            setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
-        }
-    }, [filteredRequests, selectedRequestId]);
-
-    
-    const showFulfillmentTab = useMemo(() => {
-        if (!activeRequest) return false;
-        return ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
-    }, [activeRequest]);
-
     const canApproveResult = useMemo(() => {
-        if (!activeRequest || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return { can: false, asDelegate: false, delegator: null };
+        if (!request || !role || !user || !allUsers || !departments || !approvalGroups || !profile) return { can: false, asDelegate: false, delegator: null };
     
-        const { departmentId, timeline, submittedById } = activeRequest;
+        const { departmentId, timeline, submittedById } = request;
     
         const pendingTimelineStage = timeline.find(t => t.status === 'pending');
         if (!pendingTimelineStage) {
-            const canAcknowledge = activeRequest.status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant' || role === 'Administrator');
+            const canAcknowledge = request.status === 'Approved' && (role === 'Procurement Officer' || role === 'Procurement Assistant' || role === 'Administrator');
             return { can: canAcknowledge, asDelegate: false, delegator: null };
         }
 
-        // Admins can always approve, regardless of other rules
         if (role === 'Administrator') {
             return { can: true, asDelegate: false, delegator: null };
         }
         
-        // New Rule: Prevent self-approval by the submitting user.
         if (submittedById === user.uid) {
             return { can: false, asDelegate: false, delegator: null };
         }
@@ -553,12 +236,12 @@ export default function ApprovalsPage() {
         }
     
         for (const approver of potentialApprovers) {
-            if (approver.id === user.uid) { // Direct approver
+            if (approver.id === user.uid) { 
                 if (approver.role === 'Executive' && !canExecutiveApproveDept(approver)) continue;
                 return { can: true, asDelegate: false, delegator: null };
             }
     
-            if (approver.delegatedToId === user.uid) { // User is a delegate for this approver
+            if (approver.delegatedToId === user.uid) { 
                 if (approver.role === 'Executive' && !canExecutiveApproveDept(approver)) continue;
                 return { can: true, asDelegate: true, delegator: approver };
             }
@@ -566,17 +249,16 @@ export default function ApprovalsPage() {
     
         return { can: false, asDelegate: false, delegator: null };
     
-    }, [activeRequest, role, user, profile, allUsers, departments, approvalGroups]);
+    }, [request, role, user, profile, allUsers, departments, approvalGroups]);
     
     const canApprove = canApproveResult.can;
 
 
     const canRejectOrQuery = useMemo(() => {
-        if (!activeRequest || !role || !user || !allUsers) return false;
-        const { status } = activeRequest;
+        if (!request || !role || !user || !allUsers) return false;
+        const { status } = request;
         
         if (role === 'Administrator') {
-            // Admins can reject/query as long as it's not fully completed or archived.
             return !['Completed', 'Archived', 'In Fulfillment'].includes(status);
         }
         if (role === 'Manager') {
@@ -586,41 +268,8 @@ export default function ApprovalsPage() {
             if (role === 'Executive') return true;
         }
         
-        // Requesters and Procurement Officers cannot reject or raise queries through these buttons.
         return false;
-    }, [activeRequest, role, user, allUsers]);
-
-
-    const approvalSummary = useMemo(() => {
-        const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved' || req.status === 'Queries Raised');
-        const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
-        const byDept = pending.reduce((acc, req) => {
-            if (!acc[req.department]) {
-                acc[req.department] = { count: 0, total: 0 };
-            }
-            acc[req.department].count++;
-            acc[req.department].total += req.total;
-            return acc;
-        }, {} as Record<string, { count: number, total: number }>);
-        
-        return {
-            pendingCount: pending.length,
-            totalValue,
-            byDept: Object.entries(byDept).sort((a, b) => b[1].total - a[1].total),
-        }
-    }, [filteredRequests]);
-
-    const requestsByDept = useMemo(() => {
-        return filteredRequests.reduce((acc, req) => {
-            if (!acc[req.department]) {
-                acc[req.department] = [];
-            }
-            acc[req.department].push(req);
-            return acc;
-        }, {} as Record<string, ApprovalRequest[]>);
-    }, [filteredRequests]);
-
-    const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
+    }, [request, role, user, allUsers]);
 
     const budgetProgress = useMemo(() => {
         if (!operationalSummary || !capitalSummary) return 0;
@@ -629,34 +278,251 @@ export default function ApprovalsPage() {
         if (forecast <= 0) return procurement > 0 ? 100 : 0;
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [operationalSummary, capitalSummary]);
-
-
-    useEffect(() => {
-      if (loading) return;
-      if (!user) {
-        router.push('/dashboard');
-        return;
-      }
-      const userPerms = roles.find(r => r.name === role)?.permissions || [];
-      if (role !== 'Administrator' && !userPerms.includes('approvals:view')) {
-          router.push('/dashboard');
-      }
-    }, [user, role, roles, loading, router]);
     
-    if (loading || !user || !role) {
-        return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
+    const showFulfillmentTab = useMemo(() => {
+        if (!request) return false;
+        return ['Approved', 'In Fulfillment', 'Completed'].includes(request.status);
+    }, [request]);
+
+    const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
+        const operationalItems = request.items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
+        const capitalItems = request.items.filter(item => item.expenseType === 'Capital');
     
+        if (format === 'pdf') {
+            const { default: jsPDF } = await import('jspdf');
+            const { default: autoTable } = await import('jspdf-autotable');
+            
+            const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
+            const company = companies?.find(c => c.id === request.companyId);
+            
+            const doc = new jsPDF();
+            
+            let logoImage: HTMLImageElement | null = null;
+            if (company?.logoUrl) {
+                try {
+                    logoImage = await new Promise((resolve) => {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous"; 
+                        img.onload = () => resolve(img);
+                        img.onerror = (err) => {
+                            console.error("PDF Logo Load Error:", err);
+                            resolve(null); 
+                        };
+                        img.src = company.logoUrl;
+                    });
+                } catch (error) {
+                    console.error("Error creating image promise for PDF:", error);
+                    logoImage = null; 
+                }
+            }
+            
+            let tableStartY = 30; 
+            
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(12);
+            doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
+            
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            
+            if (logoImage) {
+                try {
+                    const imgWidth = 30;
+                    const imgHeight = (logoImage.height * imgWidth) / logoImage.width;
+                    const imgY = 15;
+                    doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
+                    doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
+                    tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); 
+                } catch (e) {
+                    console.error("Failed to add logo to PDF, falling back to text only.", e);
+                    doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
+                }
+            } else {
+                doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
+            }
+    
+            const detailsData: (string|number)[][] = [
+                ["Request ID", request.id],
+                ["Company", request.companyName || 'N/A'],
+                ["Department", request.department],
+                ["Period", request.period],
+                ["Submitted By", request.submittedBy || 'N/A'],
+                ["Total", formatCurrency(request.total)],
+                ["Status", request.status],
+            ];
+    
+            autoTable(doc, {
+                startY: tableStartY,
+                head: [['Request Details', '']],
+                body: detailsData,
+                theme: 'striped',
+                headStyles: { fillColor: primaryColor },
+            });
+    
+            if (operationalItems.length > 0) {
+                const opItemsData = operationalItems.map(item => [
+                    item.type,
+                    item.description,
+                    item.category,
+                    item.qty,
+                    formatCurrency(item.unitPrice),
+                    formatCurrency(item.qty * item.unitPrice),
+                ]);
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Operational Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                    body: opItemsData,
+                    headStyles: { fillColor: primaryColor },
+                });
+            }
+            
+            if (capitalItems.length > 0) {
+                const capItemsData = capitalItems.map(item => [
+                    item.type,
+                    item.description,
+                    item.category,
+                    item.qty,
+                    formatCurrency(item.unitPrice),
+                    formatCurrency(item.qty * item.unitPrice),
+                ]);
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Capital Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
+                    body: capItemsData,
+                    headStyles: { fillColor: primaryColor },
+                });
+            }
+            
+            const opSummaryTableData = summaryData.operationalSummary.lines.map(line => [
+                line.category,
+                formatCurrency(line.procurementTotal),
+                formatCurrency(line.forecastTotal),
+                formatCurrency(line.variance),
+            ]);
+            if(opSummaryTableData.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Operational Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                    body: opSummaryTableData,
+                    foot: [[
+                        'Total',
+                        formatCurrency(summaryData.operationalSummary.totals.procurement),
+                        formatCurrency(summaryData.operationalSummary.totals.forecast),
+                        formatCurrency(summaryData.operationalSummary.totals.variance)
+                    ]],
+                    theme: 'grid',
+                    headStyles: { fillColor: primaryColor },
+                    footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+                });
+            }
+            
+            const capSummaryTableData = summaryData.capitalSummary.lines.map(line => [
+                line.category,
+                formatCurrency(line.procurementTotal),
+                formatCurrency(line.forecastTotal),
+                formatCurrency(line.variance),
+            ]);
+             if(capSummaryTableData.length > 0) {
+                autoTable(doc, {
+                    startY: (doc as any).lastAutoTable.finalY + 10,
+                    head: [['Capital Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
+                    body: capSummaryTableData,
+                    foot: [[
+                        'Total',
+                        formatCurrency(summaryData.capitalSummary.totals.procurement),
+                        formatCurrency(summaryData.capitalSummary.totals.forecast),
+                        formatCurrency(summaryData.capitalSummary.totals.variance)
+                    ]],
+                    theme: 'grid',
+                    headStyles: { fillColor: primaryColor },
+                    footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
+                });
+            }
+            
+            const timelineData = request.timeline.map(step => [
+                step.stage,
+                step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
+                step.status,
+                step.date || 'N/A',
+            ]);
+            autoTable(doc, {
+                startY: (doc as any).lastAutoTable.finalY + 10,
+                head: [['Stage', 'Actor', 'Status', 'Date']],
+                body: timelineData,
+                headStyles: { fillColor: primaryColor },
+                columnStyles: {
+                    0: { cellWidth: 40 },
+                    1: { cellWidth: 'auto' },
+                    2: { cellWidth: 25 },
+                    3: { cellWidth: 25 }
+                }
+            });
+    
+            if (auditLogs && auditLogs.length > 0) {
+                const emailLog = auditLogs
+                    .filter(log => log.action === 'notification.sent')
+                    .map(log => ({
+                        timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
+                        details: log.details,
+                    }));
+            
+                if (emailLog.length > 0) {
+                    autoTable(doc, {
+                        startY: (doc as any).lastAutoTable.finalY + 10,
+                        head: [['Notification Email History']],
+                        body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
+                        theme: 'striped',
+                        headStyles: { fillColor: primaryColor },
+                        styles: { fontSize: 8 },
+                    });
+                }
+            }
+    
+            doc.save(`Procurement-Request-${request.id}.pdf`);
+            return;
+        }
+    
+        // XLSX logic
+        const wb = XLSX.utils.book_new();
+    
+        const detailsDataForSheet = [
+            { Key: "Request ID", Value: request.id },
+            { Key: "Company", Value: request.companyName || 'N/A' },
+            { Key: "Department", Value: request.department },
+            { Key: "Period", Value: request.period },
+            { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
+            { Key: "Total", Value: formatCurrency(request.total) },
+            { Key: "Status", Value: request.status },
+        ];
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true }), "Request Details");
+    
+        const opItemsData = operationalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
+        const capItemsData = capitalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opItemsData), "Operational Items");
+        if (capItemsData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capItemsData), "Capital Items");
+    
+        const opSummaryDataForSheet = summaryData.operationalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
+        opSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.operationalSummary.totals.procurement, 'Forecast Total': summaryData.operationalSummary.totals.forecast, 'Variance': summaryData.operationalSummary.totals.variance });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opSummaryDataForSheet), "Operational Summary");
+    
+        const capSummaryDataForSheet = summaryData.capitalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
+        if (capSummaryDataForSheet.length > 0) {
+            capSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.capitalSummary.totals.procurement, 'Forecast Total': summaryData.capitalSummary.totals.forecast, 'Variance': summaryData.capitalSummary.totals.variance });
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capSummaryDataForSheet), "Capital Summary");
+        }
+    
+        const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
+    
+        XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
+    };
+
     const handleApprove = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore || !allUsers || !profile) return;
+        if (!request || !user || !firestore || !allUsers || !profile) return;
     
         setIsSubmittingAction(true);
-        let newStatus: ApprovalRequest['status'] = activeRequest.status;
-        let newTimeline = [...activeRequest.timeline];
+        let newStatus: ApprovalRequest['status'] = request.status;
+        let newTimeline = [...request.timeline];
         let toastMessage: {title: string, description: string} | null = null;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
@@ -686,26 +552,26 @@ export default function ApprovalsPage() {
         };
     
         if (role === 'Administrator') {
-            if (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+            if (request.status === 'Pending Manager Approval' || request.status === 'Queries Raised') {
                 newStatus = 'Pending Executive';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Forwarded for executive approval.`};
                 newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
-            } else if (activeRequest.status === 'Pending Executive') {
+            } else if (request.status === 'Pending Executive') {
                 newStatus = 'Approved';
                 toastMessage = { title: "Request Stage Advanced", description: `Admin approved. Sent for processing.` };
                 newTimeline = newTimeline.map(timelineUpdater('Executive Approval', 'Procurement Processing'));
-            } else if (activeRequest.status === 'Approved') {
+            } else if (request.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
                 newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
             }
-        } else if (role === 'Manager' && canApprove && (activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised')) {
+        } else if (role === 'Manager' && canApprove && (request.status === 'Pending Manager Approval' || request.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
-            toastMessage = { title: "Request Approved", description: `Request ${activeRequest.id} has been forwarded for executive approval.` };
+            toastMessage = { title: "Request Approved", description: `Request ${request.id} has been forwarded for executive approval.` };
             newTimeline = newTimeline.map(timelineUpdater('Manager Review', 'Executive Approval'));
-        } else if (role === 'Executive' && canApprove && (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Queries Raised')) {
+        } else if (role === 'Executive' && canApprove && (request.status === 'Pending Executive' || request.status === 'Queries Raised')) {
             newStatus = 'Approved';
-            toastMessage = { title: "Request Approved", description: `Request ${activeRequest.id} has been approved and sent for processing.` };
+            toastMessage = { title: "Request Approved", description: `Request ${request.id} has been approved and sent for processing.` };
             
             const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
             const procProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
@@ -716,9 +582,9 @@ export default function ApprovalsPage() {
             if (procProcessingIndex > -1) {
                 newTimeline[procProcessingIndex] = { ...newTimeline[procProcessingIndex], status: 'pending' };
             }
-        } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && activeRequest.status === 'Approved') {
+        } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && request.status === 'Approved') {
             newStatus = 'In Fulfillment';
-            toastMessage = { title: "Request Acknowledged", description: `Request ${activeRequest.id} is now in fulfillment.` };
+            toastMessage = { title: "Request Acknowledged", description: `Request ${request.id} is now in fulfillment.` };
             newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
         }
     
@@ -727,7 +593,7 @@ export default function ApprovalsPage() {
             return;
         }
     
-        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const requestRef = doc(firestore, 'procurementRequests', request.id);
         const updateData: any = { 
             status: newStatus, 
             timeline: newTimeline,
@@ -743,25 +609,24 @@ export default function ApprovalsPage() {
     
             if (newStatus === 'Approved') {
                 const reportDataForGeneration: ApprovalRequest = {
-                    ...activeRequest,
+                    ...request,
                     ...updateData,
                 };
                 generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
             }
     
-            const auditDetails = `Approved request ${activeRequest.id}, new status "${newStatus}"`;
+            const auditDetails = `Approved request ${request.id}, new status "${newStatus}"`;
     
             const auditLogData = {
                 userId: user.uid,
                 userName: actorName,
                 action,
                 details: auditDetails,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
+                entity: { type: 'procurementRequest', id: request.id },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
     
-            // Special Notification for PO Acknowledgment to Procurement Assistant
             if ((role === 'Procurement Officer' || role === 'Administrator') && newStatus === 'In Fulfillment') {
                 const assistantsQuery = query(collection(firestore, 'users'), where('role', '==', 'Procurement Assistant'));
                 const assistantsSnapshot = await getDocs(assistantsQuery);
@@ -770,7 +635,7 @@ export default function ApprovalsPage() {
                 if (assistantEmails.length > 0) {
                     const link = `${window.location.origin}/dashboard/fulfillment`;
                     const emailHtml = requestActionRequiredTemplate(
-                        { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                        { id: request.id, department: request.department, total: request.total, submittedBy: request.submittedBy },
                         "Fulfillment Started",
                         link
                     );
@@ -781,7 +646,7 @@ export default function ApprovalsPage() {
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 to: assistantEmails.join(','),
-                                subject: `Request Now In Fulfillment: ${activeRequest.id}`,
+                                subject: `Request Now In Fulfillment: ${request.id}`,
                                 html: emailHtml,
                             })
                         });
@@ -794,7 +659,7 @@ export default function ApprovalsPage() {
                             userName: 'System',
                             action: 'notification.sent',
                             details: `Fulfillment notification sent to Procurement Assistants: ${assistantEmails.join(', ')}`,
-                            entity: { type: 'procurementRequest', id: selectedRequestId },
+                            entity: { type: 'procurementRequest', id: request.id },
                             timestamp: serverTimestamp()
                         });
                     } catch (emailError) {
@@ -810,8 +675,8 @@ export default function ApprovalsPage() {
                 }
             }
             
-            if (departments && activeRequest.departmentId) {
-                const department = departments.find(d => d.id === activeRequest.departmentId);
+            if (departments && request.departmentId) {
+                const department = departments.find(d => d.id === request.departmentId);
                 const nextStage = newTimeline.find(step => step.status === 'pending');
                 
                 if (department && department.workflow && nextStage) {
@@ -854,9 +719,9 @@ export default function ApprovalsPage() {
                         const uniqueRecipients = [...new Set(finalRecipients)];
                 
                         if (uniqueRecipients.length > 0) {
-                            const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
+                            const link = `${window.location.origin}/dashboard/approvals?id=${request.id}`;
                             const emailHtml = requestActionRequiredTemplate(
-                                { id: activeRequest.id, department: activeRequest.department, total: activeRequest.total, submittedBy: activeRequest.submittedBy },
+                                { id: request.id, department: request.department, total: request.total, submittedBy: request.submittedBy },
                                 nextStage.stage,
                                 link
                             );
@@ -867,7 +732,7 @@ export default function ApprovalsPage() {
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
                                         to: uniqueRecipients.join(','),
-                                        subject: `Procurement Request Action Required: ${activeRequest.id}`,
+                                        subject: `Procurement Request Action Required: ${request.id}`,
                                         html: emailHtml,
                                     })
                                 });
@@ -880,7 +745,7 @@ export default function ApprovalsPage() {
                                     userName: 'System',
                                     action: 'notification.sent',
                                     details: `Notification sent for stage '${nextStage.stage}' to: ${uniqueRecipients.join(', ')}`,
-                                    entity: { type: 'procurementRequest', id: selectedRequestId },
+                                    entity: { type: 'procurementRequest', id: request.id },
                                     timestamp: serverTimestamp()
                                 });
                             } catch (emailError) {
@@ -923,7 +788,7 @@ export default function ApprovalsPage() {
     };
 
     const handleConfirmReject = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
+        if (!request || !user || !firestore || !profile) return;
         
         if (!newComment.trim()) {
             toast({
@@ -940,7 +805,7 @@ export default function ApprovalsPage() {
         
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
 
-        let newTimeline = [...activeRequest.timeline];
+        let newTimeline = [...request.timeline];
         const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
         if (currentStepIndex !== -1) {
             newTimeline[currentStepIndex] = {
@@ -962,7 +827,7 @@ export default function ApprovalsPage() {
             }),
         };
 
-        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const requestRef = doc(firestore, 'procurementRequests', request.id);
         const updateData = { 
             status: newStatus, 
             timeline: newTimeline,
@@ -974,31 +839,30 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast({
                 title: "Request Rejected",
-                description: `Request ${activeRequest.id} has been rejected.`,
+                description: `Request ${request.id} has been rejected.`,
             });
             
             const auditLogData = {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Rejected request ${activeRequest.id}`,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
+                details: `Rejected request ${request.id}`,
+                entity: { type: 'procurementRequest', id: request.id },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
 
-            // Notify submitter
-            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocRef = doc(firestore, 'users', request.submittedById);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
                 const submitterProfile = userDocSnap.data();
                 if (submitterProfile.email) {
-                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
-                    const emailHtml = requestRejectedTemplate(activeRequest, commentData, link);
+                    const link = `${window.location.origin}/dashboard/approvals?id=${request.id}`;
+                    const emailHtml = requestRejectedTemplate(request, commentData, link);
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${activeRequest.id}`, html: emailHtml })
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${request.id}`, html: emailHtml })
                     });
                 }
             }
@@ -1025,7 +889,7 @@ export default function ApprovalsPage() {
     };
     
     const handleRaiseQuery = async () => {
-        if (!activeRequest || !selectedRequestId || !user || !firestore || !profile) return;
+        if (!request || !user || !firestore || !profile) return;
 
         if (!newComment.trim()) {
             toast({
@@ -1051,7 +915,7 @@ export default function ApprovalsPage() {
             }),
         };
 
-        const requestRef = doc(firestore, 'procurementRequests', selectedRequestId);
+        const requestRef = doc(firestore, 'procurementRequests', request.id);
         const updateData = { 
             status: newStatus,
             comments: arrayUnion(commentData)
@@ -1062,31 +926,30 @@ export default function ApprovalsPage() {
             await updateDoc(requestRef, updateData);
             toast({
                 title: "Query Raised",
-                description: `A query has been raised on request ${activeRequest.id}`,
+                description: `A query has been raised on request ${request.id}`,
             });
             
             const auditLogData = {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Raised query on request ${activeRequest.id}`,
-                entity: { type: 'procurementRequest', id: selectedRequestId },
+                details: `Raised query on request ${request.id}`,
+                entity: { type: 'procurementRequest', id: request.id },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
             
-            // Notify submitter
-            const userDocRef = doc(firestore, 'users', activeRequest.submittedById);
+            const userDocRef = doc(firestore, 'users', request.submittedById);
             const userDocSnap = await getDoc(userDocRef);
             if (userDocSnap.exists()) {
                 const submitterProfile = userDocSnap.data();
                 if (submitterProfile.email) {
-                    const link = `${window.location.origin}/dashboard/approvals?id=${selectedRequestId}`;
-                    const emailHtml = queryRaisedTemplate(activeRequest, commentData, link);
+                    const link = `${window.location.origin}/dashboard/approvals?id=${request.id}`;
+                    const emailHtml = queryRaisedTemplate(request, commentData, link);
                     await fetch('/api/send-email', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${activeRequest.id}`, html: emailHtml })
+                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${request.id}`, html: emailHtml })
                     });
                 }
             }
@@ -1112,9 +975,8 @@ export default function ApprovalsPage() {
         }
     };
 
-
     const handleAddComment = async () => {
-        if (!activeRequest || !user || !newComment.trim() || !firestore || !profile) return;
+        if (!request || !user || !newComment.trim() || !firestore || !profile) return;
 
         setIsSubmittingAction(true);
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
@@ -1128,7 +990,7 @@ export default function ApprovalsPage() {
             }),
         };
         const updateData = { comments: arrayUnion(commentData) };
-        const requestRef = doc(firestore, "procurementRequests", activeRequest.id);
+        const requestRef = doc(firestore, "procurementRequests", request.id);
         const action = 'request.comment';
 
         try {
@@ -1140,8 +1002,8 @@ export default function ApprovalsPage() {
                 userId: user.uid,
                 userName: actorString,
                 action,
-                details: `Added comment to request ${activeRequest.id}`,
-                entity: { type: 'procurementRequest', id: activeRequest.id },
+                details: `Added comment to request ${request.id}`,
+                entity: { type: 'procurementRequest', id: request.id },
                 timestamp: serverTimestamp()
             };
             await addDoc(collection(firestore, 'auditLogs'), auditLogData);
@@ -1164,516 +1026,459 @@ export default function ApprovalsPage() {
         }
     };
 
-    const showFooterActions = activeRequest && (activeRequest.status.startsWith('Pending') || activeRequest.status === 'Approved' || activeRequest.status === 'Queries Raised');
-    const showExportAction = activeRequest && ['Approved', 'In Fulfillment', 'Completed'].includes(activeRequest.status);
+    const showFooterActions = request && (request.status.startsWith('Pending') || request.status === 'Approved' || request.status === 'Queries Raised');
+    const showExportAction = request && ['Approved', 'In Fulfillment', 'Completed'].includes(request.status);
+
+    if (budgetsLoading || auditLogsLoading) {
+        return <div className="flex justify-center items-center p-8"><Loader className="h-6 w-6 animate-spin" /></div>
+    }
+
+    return (
+        <>
+            <Card>
+                <Tabs defaultValue="items">
+                    <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-5" : "grid-cols-4")}>
+                        <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
+                        <TabsTrigger value="items">Line Items ({request.items.length})</TabsTrigger>
+                        <TabsTrigger value="summary">Budget Summary</TabsTrigger>
+                        {showFulfillmentTab && <TabsTrigger value="fulfillment">Fulfillment Details</TabsTrigger>}
+                        <TabsTrigger value="communication">Communication Log</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="workflow" className="pt-6 px-6">
+                        <div className="w-full overflow-x-auto pb-4">
+                            <ul className="flex items-center">
+                                {request.timeline.map((step, index) => (
+                                    <li key={step.stage} className="flex items-center">
+                                        <Card className={cn(
+                                            'w-48 shrink-0',
+                                            {
+                                                'border-primary/50 bg-primary/5': step.status === 'completed',
+                                                'border-destructive/50 bg-destructive/5': step.status === 'rejected',
+                                                'border-orange-500/50 bg-orange-500/5': step.status === 'pending',
+                                            }
+                                        )}>
+                                            <CardHeader className="p-3 flex flex-row items-center justify-between space-y-0 pb-2">
+                                                <CardTitle className="text-sm font-semibold">{step.stage}</CardTitle>
+                                                {step.status === 'completed' && <Check className="h-4 w-4 text-primary" />}
+                                                {step.status === 'rejected' && <X className="h-4 w-4 text-destructive" />}
+                                                {step.status === 'pending' && <Loader className="h-4 w-4 animate-spin text-orange-500" />}
+                                                {step.status === 'waiting' && <Circle className="h-4 w-4 text-muted-foreground" />}
+                                            </CardHeader>
+                                            <CardContent className="p-3 pt-0">
+                                                <div className="text-xs text-muted-foreground">
+                                                    <p><span className="font-semibold">Actor:</span> {step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor}</p>
+                                                    <p><span className="font-semibold">Status:</span> {step.status}</p>
+                                                    <p><span className="font-semibold">Date:</span> {step.date || '...'}</p>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+
+                                        {index < request.timeline.length - 1 && (
+                                                <div aria-hidden="true" className="w-16 shrink-0 text-muted-foreground px-2">
+                                                <svg width="100%" height="24" viewBox="0 0 64 24" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
+                                                    <path d="M0 12H54" stroke="currentColor" strokeWidth="2"/>
+                                                    <path d="M46 7L54 12L46 17" stroke="currentColor" strokeWidth="2"/>
+                                                </svg>
+                                            </div>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="items" className="pt-4 px-6">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Request Items</h3>
+                            <p className="text-sm text-muted-foreground mb-4">
+                                Below are the individual items included in this procurement request.
+                            </p>
+                            <div className="overflow-auto rounded-lg border">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow className="bg-muted hover:bg-muted">
+                                            <TableHead>Description</TableHead>
+                                            <TableHead>Category</TableHead>
+                                            <TableHead className="text-center">Qty</TableHead>
+                                            <TableHead className="text-right">Unit Price</TableHead>
+                                            <TableHead className="text-right">Total</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {request.items.map((item) => (
+                                            <TableRow key={item.id}>
+                                                <TableCell className="font-medium">{item.description}</TableCell>
+                                                <TableCell>{item.category}</TableCell>
+                                                <TableCell className="text-center">{item.qty}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
+                                                <TableCell className="text-right font-mono">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="summary" className="pt-4 px-6">
+                        <div className="space-y-8">
+                            <div className="space-y-4">
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <h3 className="font-semibold text-lg">Budget vs. Actuals: {request.period}</h3>
+                                            <p className="text-sm text-muted-foreground">Live comparison of this request against the forecast.</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement + capitalSummary.totals.procurement)}</p>
+                                            <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(operationalSummary.totals.forecast + capitalSummary.totals.forecast)}</p>
+                                        </div>
+                                    </div>
+                                    <Progress value={budgetProgress} className="mt-4" />
+                                </div>
+                                <div className="overflow-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader><TableRow className="bg-muted hover:bg-muted"><TableHead className="font-bold">Operational Summary</TableHead><TableHead className="text-right font-bold">Request Total</TableHead><TableHead className="text-right font-bold">Forecast Total</TableHead><TableHead className="text-right font-bold">Variance</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
+                                                <Fragment key={item.category}>
+                                                    <TableRow className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")} onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}>
+                                                        <TableCell className="font-medium flex items-center gap-2"><ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />{item.category}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>{item.isOverBudget && <AlertTriangle className="h-4 w-4" />}{formatCurrency(item.variance)}</TableCell>
+                                                    </TableRow>
+                                                    {openCategory === item.category && (<TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Type</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>)}
+                                                </Fragment>
+                                            )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
+                                        </TableBody>
+                                        <TableFooter><TableRow className="bg-muted hover:bg-muted font-bold"><TableCell>Operational Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                    </Table>
+                                </div>
+                                <div className="overflow-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader><TableRow className="bg-muted hover:bg-muted"><TableHead className="font-bold">Capital Summary</TableHead><TableHead className="text-right font-bold">Request Total</TableHead><TableHead className="text-right font-bold">Forecast Total</TableHead><TableHead className="text-right font-bold">Variance</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
+                                                <Fragment key={item.category}>
+                                                    <TableRow className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")} onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)}>
+                                                        <TableCell className="font-medium flex items-center gap-2"><ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />{item.category}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>{item.isOverBudget && <AlertTriangle className="h-4 w-4" />}{formatCurrency(item.variance)}</TableCell>
+                                                    </TableRow>
+                                                    {openCapitalCategory === item.category && (<TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead>Type</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>)}
+                                                </Fragment>
+                                            )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
+                                        </TableBody>
+                                        <TableFooter><TableRow className="bg-muted hover:bg-muted font-bold"><TableCell>Capital Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
+                                    </Table>
+                                </div>
+                            </div>
+                        </div>
+                    </TabsContent>
+                    {showFulfillmentTab && (
+                        <TabsContent value="fulfillment" className="pt-4 px-6">
+                            <div>
+                                <h3 className="text-lg font-semibold mb-2">Fulfillment Status</h3>
+                                <p className="text-sm text-muted-foreground mb-4">
+                                    Track the fulfillment progress for each item in this request.
+                                </p>
+                                <div className="overflow-auto rounded-lg border">
+                                    <Table>
+                                        <TableHeader><TableRow className="bg-muted hover:bg-muted"><TableHead>Item</TableHead><TableHead className="text-center">Total Qty</TableHead><TableHead className="text-center">Rcvd Qty</TableHead><TableHead className="text-center">Outstanding</TableHead><TableHead>Lead Time (days)</TableHead><TableHead>Status</TableHead><TableHead>Comments</TableHead></TableRow></TableHeader>
+                                        <TableBody>
+                                            {request.items.map((item) => (
+                                                <TableRow key={item.id}>
+                                                    <TableCell className="font-medium">{item.description}</TableCell>
+                                                    <TableCell className="text-center">{item.qty}</TableCell>
+                                                    <TableCell className="text-center">{item.receivedQty || 0}</TableCell>
+                                                    <TableCell className="text-center font-bold">{(item.qty - (item.receivedQty || 0))}</TableCell>
+                                                    <TableCell>{item.estimatedLeadTimeDays || 'N/A'}</TableCell>
+                                                    <TableCell>{getFulfillmentStatusBadge(item.fulfillmentStatus)}</TableCell>
+                                                    <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{(item.fulfillmentComments || []).join('; ')}</TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                            </div>
+                        </TabsContent>
+                    )}
+                    <TabsContent value="communication" className="pt-6 px-6">
+                        <div className="space-y-6">
+                            <div className="space-y-4">
+                                {request.comments?.map((comment, i) => (
+                                    <div key={i} className="flex items-start gap-3"><Avatar><AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback></Avatar><div className="flex-1 p-3 rounded-lg bg-muted"><div className="flex justify-between items-center"><p className="font-semibold">{comment.actor}</p><p className="text-xs text-muted-foreground">{comment.timestamp}</p></div><p className="text-sm mt-1">{comment.text}</p></div></div>
+                                ))}
+                                {(!request.comments || request.comments?.length === 0) && (<p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>)}
+                            </div>
+                            <div className="relative">
+                                <Textarea placeholder="Respond to queries or add a comment..." className="pr-24" value={newComment} onChange={(e) => setNewComment(e.target.value)}/><div className="absolute top-2 right-2 flex items-center gap-1"><Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button><Button size="icon" onClick={handleAddComment} disabled={isSubmittingAction}><Send className="h-4 w-4"/></Button></div>
+                            </div>
+                        </div>
+                    </TabsContent>
+                </Tabs>
+                {(showFooterActions || showExportAction) && (
+                    <CardFooter className="flex justify-end gap-2 border-t pt-6">
+                        {showExportAction && (
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild><Button variant="outline" className="mr-auto"><Download className="mr-2 h-4 w-4"/>Export Report</Button></DropdownMenuTrigger>
+                                <DropdownMenuContent><DropdownMenuItem onClick={() => generateApprovalReport(request, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata)}>Export as Excel (.xlsx)</DropdownMenuItem><DropdownMenuItem onClick={() => generateApprovalReport(request, { operationalSummary, capitalSummary }, 'pdf', auditLogs, companies, appMetadata)}>Export as PDF (.pdf)</DropdownMenuItem></DropdownMenuContent>
+                            </DropdownMenu>
+                        )}
+                        {showFooterActions && (<>
+                            <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
+                            <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
+                            <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>{isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}<Check className="mr-2 h-4 w-4" />{(role === 'Procurement Officer' || role === 'Procurement Assistant') ? 'Acknowledge & Process' : 'Approve'}</Button>
+                        </>)}
+                    </CardFooter>
+                )}
+            </Card>
+            <Dialog open={isQueryDialogOpen} onOpenChange={setIsQueryDialogOpen}><DialogContent><DialogHeader><DialogTitle>Raise a Query</DialogTitle><DialogDescription>Your query will be added to the communication log and the request status will be updated to 'Queries Raised'.</DialogDescription></DialogHeader><div className="py-4"><Textarea placeholder="Enter your query here. Be specific about what information is needed." value={newComment} onChange={(e) => setNewComment(e.target.value)} rows={5}/></div><DialogFooter><Button variant="outline" onClick={() => { setIsQueryDialogOpen(false); setNewComment(''); }}>Cancel</Button><Button onClick={handleRaiseQuery} disabled={isSubmittingAction}>{isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}Submit Query</Button></DialogFooter></DialogContent></Dialog>
+            <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}><DialogContent><DialogHeader><DialogTitle>Reject Request</DialogTitle><DialogDescription>Please provide a reason for rejecting this request. This will be added to the communication log.</DialogDescription></DialogHeader><div className="py-4"><Textarea placeholder="Enter rejection reason here..." value={newComment} onChange={(e) => setNewComment(e.target.value)} rows={5}/></div><DialogFooter><Button variant="outline" onClick={() => { setIsRejectDialogOpen(false); setNewComment(''); }}>Cancel</Button><Button variant="destructive" onClick={handleConfirmReject} disabled={isSubmittingAction}>{isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}Confirm Rejection</Button></DialogFooter></DialogContent></Dialog>
+        </>
+    )
+}
+
+export default function ApprovalsPage() {
+    const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const { toast } = useToast();
+    const firestore = useFirestore();
+    const { roles, loading: rolesLoading } = useRoles();
+
+    const [viewMode, setViewMode] = useState<'list' | 'tile'>('list');
+
+    const requestsQuery = useMemo(() => {
+        if (!firestore || !role || !profile) return null;
+    
+        const baseQuery = collection(firestore, 'procurementRequests');
+    
+        if (role === 'Administrator') {
+            return query(baseQuery, where('status', 'not-in', ['Completed', 'Archived']));
+        }
+        if (role === 'Executive') {
+            const statuses = ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed'];
+            if (reportingDepartments && reportingDepartments.length > 0) {
+                return query(
+                    baseQuery,
+                    where('status', 'in', statuses),
+                    where('departmentId', 'in', reportingDepartments)
+                );
+            }
+            return query(baseQuery, where('status', 'in', statuses));
+        }
+        if (role === 'Manager') {
+            if (!userDepartmentId) return null;
+            return query(baseQuery, where('departmentId', '==', userDepartmentId));
+        }
+        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
+            return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
+        }
+        if (role === 'Requester') {
+            if (!userDepartmentId) return null;
+            return query(baseQuery, where('departmentId', '==', userDepartmentId));
+        }
+    
+        return null;
+    }, [firestore, role, userDepartmentId, profile, reportingDepartments]);
+
+    const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    
+    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
+
+    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+
+    const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
+    const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
+    
+    const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
+    const { data: companies } = useCollection<Company>(companiesQuery);
+
+    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
+
+    const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+
+    const activeRequest = useMemo(() => approvals?.find((req) => req.id === selectedRequestId), [selectedRequestId, approvals]);
+    
+    const loading = userLoading || approvalsLoading || rolesLoading || deptsLoading || usersLoading || groupsLoading;
+
+    const filteredRequests = useMemo(() => {
+        if (!approvals) return [];
+        const statusFilter = searchParams.get('status');
+        if (statusFilter) {
+            return approvals.filter(req => req.status === decodeURIComponent(statusFilter));
+        }
+        return approvals;
+    }, [approvals, searchParams]);
+
+    useEffect(() => {
+        const reqId = searchParams.get('id');
+        if (reqId) {
+            setSelectedRequestId(reqId);
+        }
+    }, [searchParams]);
+
+    useEffect(() => {
+        if (!selectedRequestId && filteredRequests.length > 0) {
+            const firstPending = filteredRequests.find(a => a.status.startsWith('Pending') || a.status === 'Approved');
+            setSelectedRequestId(firstPending?.id || filteredRequests[0]?.id || null);
+        }
+    }, [filteredRequests, selectedRequestId]);
+    
+    const approvalSummary = useMemo(() => {
+        const pending = filteredRequests.filter(req => req.status.startsWith('Pending') || req.status === 'Approved' || req.status === 'Queries Raised');
+        const totalValue = pending.reduce((sum, req) => sum + req.total, 0);
+        const byDept = pending.reduce((acc, req) => {
+            if (!acc[req.department]) {
+                acc[req.department] = { count: 0, total: 0 };
+            }
+            acc[req.department].count++;
+            acc[req.department].total += req.total;
+            return acc;
+        }, {} as Record<string, { count: number, total: number }>);
+        
+        return {
+            pendingCount: pending.length,
+            totalValue,
+            byDept: Object.entries(byDept).sort((a, b) => b[1].total - a[1].total),
+        }
+    }, [filteredRequests]);
+
+    const requestsByDept = useMemo(() => {
+        return filteredRequests.reduce((acc, req) => {
+            if (!acc[req.department]) {
+                acc[req.department] = [];
+            }
+            acc[req.department].push(req);
+            return acc;
+        }, {} as Record<string, ApprovalRequest[]>);
+    }, [filteredRequests]);
+
+    const departmentOrder = useMemo(() => Object.keys(requestsByDept), [requestsByDept]);
+
+    useEffect(() => {
+      if (loading) return;
+      if (!user) {
+        router.push('/dashboard');
+        return;
+      }
+      const userPerms = roles.find(r => r.name === role)?.permissions || [];
+      if (role !== 'Administrator' && !userPerms.includes('approvals:view')) {
+          router.push('/dashboard');
+      }
+    }, [user, role, roles, loading, router]);
+    
+    if (loading || !user || !role || !profile || !allUsers || !departments || !approvalGroups) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+                <Loader className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
     
   return (
     <>
-        <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 space-y-4">
-                <Card>
-                    <CardHeader className="pb-2">
-                        <CardTitle>Approvals Overview</CardTitle>
-                        <CardDescription>Summary of requests awaiting your action.</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Pending Requests</span>
-                                <span className="font-bold text-lg">{approvalSummary.pendingCount}</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                                <span className="text-muted-foreground">Total Value</span>
-                                <span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span>
-                            </div>
-                            <div className="space-y-2 pt-2">
-                                <h4 className="text-sm font-medium">By Department</h4>
-                                {approvalSummary.byDept.length > 0 ? (
-                                    <div className="space-y-1 text-sm text-muted-foreground">
-                                        {approvalSummary.byDept.map(([dept, data]) => (
-                                            <div key={dept} className="flex justify-between">
-                                                <span>{dept}</span>
-                                                <span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>
-                                )}
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+        <div className="flex justify-end items-center gap-2 mb-4">
+            <span className="text-sm text-muted-foreground">View:</span>
+            <Button variant={viewMode === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('list')} className="gap-2">
+                <List className="h-4 w-4"/> List
+            </Button>
+            <Button variant={viewMode === 'tile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setViewMode('tile')} className="gap-2">
+                <LayoutGrid className="h-4 w-4"/> Tile
+            </Button>
+        </div>
 
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">All Requests</h3>
-                    <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
-                        {departmentOrder.map(dept => (
-                            <AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50">
-                                <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+        {viewMode === 'list' ? (
+            <div className="grid lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-1 space-y-4">
+                    <Card>
+                        <CardHeader className="pb-2"><CardTitle>Approvals Overview</CardTitle><CardDescription>Summary of requests awaiting your action.</CardDescription></CardHeader>
+                        <CardContent><div className="space-y-4"><div className="flex justify-between items-center"><span className="text-muted-foreground">Pending Requests</span><span className="font-bold text-lg">{approvalSummary.pendingCount}</span></div><div className="flex justify-between items-center"><span className="text-muted-foreground">Total Value</span><span className="font-bold text-lg">{formatCurrency(approvalSummary.totalValue)}</span></div><div className="space-y-2 pt-2"><h4 className="text-sm font-medium">By Department</h4>{approvalSummary.byDept.length > 0 ? (<div className="space-y-1 text-sm text-muted-foreground">{approvalSummary.byDept.map(([dept, data]) => (<div key={dept} className="flex justify-between"><span>{dept}</span><span className="font-mono text-foreground font-semibold">{data.count} ({formatCurrency(data.total)})</span></div>))}</div>) : (<p className="text-sm text-muted-foreground text-center py-2">No pending requests.</p>)}</div></div></CardContent>
+                    </Card>
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold">All Requests</h3>
+                        <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
+                            {departmentOrder.map(dept => (<AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50"><AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted"><div className="flex justify-between items-center w-full"><span className="font-semibold">{dept}</span><Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge></div></AccordionTrigger><AccordionContent className="p-2 pt-0"><div className="space-y-2">{requestsByDept[dept].map(req => (<Card key={req.id} className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')} onClick={() => setSelectedRequestId(req.id)}><CardContent className="p-3"><div className="flex justify-between items-start"><p className="font-semibold truncate">{req.id}</p>{getStatusBadge(req.status)}</div><div className="flex justify-between items-end mt-2"><div><p className="text-xs text-muted-foreground">{req.period}</p><p className="text-lg font-bold">{formatCurrency(req.total)}</p></div><p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p></div></CardContent></Card>))}</div></AccordionContent></AccordionItem>))}
+                        </Accordion>
+                    </div>
+                </div>
+                <div className="lg:col-span-2 space-y-4">
+                    {activeRequest ? (
+                         <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
+                            <AccordionItem value="item-1" className="border-0">
+                                <Card>
+                                    <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
+                                        <div className="flex-1">
+                                            <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id}</h3>
+                                            <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
+                                        </div>
+                                    </AccordionTrigger>
+                                    <AccordionContent>
+                                        <RequestDetailsView request={activeRequest} user={user} profile={profile} role={role} allUsers={allUsers} departments={departments} approvalGroups={approvalGroups} companies={companies} appMetadata={appMetadata} />
+                                    </AccordionContent>
+                                </Card>
+                            </AccordionItem>
+                        </Accordion>
+                    ) : (
+                        <Card><CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">{loading ? <Loader className="h-8 w-8 animate-spin" /> : <p className="text-muted-foreground">Select a request to view its details.</p>}</CardContent></Card>
+                    )}
+                </div>
+            </div>
+        ) : (
+             <div className="w-full space-y-4">
+                <Accordion type="multiple" className="w-full space-y-4">
+                    {departmentOrder.map(deptName => {
+                        const requestsForDept = requestsByDept[deptName];
+                        const deptTotalValue = requestsForDept.reduce((sum, req) => sum + req.total, 0);
+
+                        return (
+                            <AccordionItem value={deptName} key={deptName} className="border-0 rounded-lg bg-card shadow-sm">
+                                <AccordionTrigger className="p-4 hover:no-underline">
                                     <div className="flex justify-between items-center w-full">
-                                        <span className="font-semibold">{dept}</span>
-                                        <Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge>
+                                        <div className="text-left">
+                                            <h3 className="text-lg font-semibold">{deptName}</h3>
+                                            <p className="text-sm text-muted-foreground">{requestsForDept.length} pending request(s)</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xl font-bold">{formatCurrency(deptTotalValue)}</p>
+                                            <p className="text-sm text-muted-foreground">Total Value</p>
+                                        </div>
                                     </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="p-2 pt-0">
-                                    <div className="space-y-2">
-                                        {requestsByDept[dept].map(req => (
-                                            <Card 
-                                                key={req.id} 
-                                                className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')}
-                                                onClick={() => setSelectedRequestId(req.id)}
-                                            >
-                                                <CardContent className="p-3">
-                                                    <div className="flex justify-between items-start">
-                                                        <p className="font-semibold truncate">{req.id}</p>
-                                                        {getStatusBadge(req.status)}
-                                                    </div>
-                                                    <div className="flex justify-between items-end mt-2">
+                                <AccordionContent className="px-4 pb-4 border-t">
+                                    <Accordion type="single" collapsible className="w-full space-y-2 mt-4">
+                                        {requestsForDept.map(req => (
+                                            <AccordionItem value={req.id} key={req.id} className="border-0 rounded-lg bg-muted/50">
+                                                <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
+                                                     <div className="flex justify-between items-start w-full">
                                                         <div>
-                                                            <p className="text-xs text-muted-foreground">{req.period}</p>
+                                                            <p className="font-semibold truncate">{req.id}</p>
+                                                            <p className="text-xs text-muted-foreground text-left">By: {req.submittedBy || 'N/A'} • {req.period}</p>
+                                                        </div>
+                                                        <div className="text-right">
+                                                            {getStatusBadge(req.status)}
                                                             <p className="text-lg font-bold">{formatCurrency(req.total)}</p>
                                                         </div>
-                                                        <p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p>
                                                     </div>
-                                                </CardContent>
-                                            </Card>
+                                                </AccordionTrigger>
+                                                <AccordionContent className="p-2 pt-0">
+                                                    <RequestDetailsView request={req} user={user} profile={profile} role={role} allUsers={allUsers} departments={departments} approvalGroups={approvalGroups} companies={companies} appMetadata={appMetadata} />
+                                                </AccordionContent>
+                                            </AccordionItem>
                                         ))}
-                                    </div>
+                                    </Accordion>
                                 </AccordionContent>
                             </AccordionItem>
-                        ))}
-                    </Accordion>
-                </div>
+                        )
+                    })}
+                </Accordion>
             </div>
-            <div className="lg:col-span-2 space-y-4">
-                {activeRequest ? (
-                    <Accordion type="single" collapsible className="w-full" defaultValue="item-1">
-                        <AccordionItem value="item-1" className="border-0">
-                            <Card>
-                                <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
-                                    <div className="flex-1">
-                                        <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id}</h3>
-                                        <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent>
-                                    <CardContent className="pt-0">
-                                    <Tabs defaultValue="items">
-                                            <TabsList className={cn("grid w-full", showFulfillmentTab ? "grid-cols-5" : "grid-cols-4")}>
-                                                <TabsTrigger value="workflow">Approval Workflow</TabsTrigger>
-                                                <TabsTrigger value="items">Line Items ({activeRequest.items.length})</TabsTrigger>
-                                                <TabsTrigger value="summary">Budget Summary</TabsTrigger>
-                                                {showFulfillmentTab && <TabsTrigger value="fulfillment">Fulfillment Details</TabsTrigger>}
-                                                <TabsTrigger value="communication">Communication Log</TabsTrigger>
-                                            </TabsList>
-                                            <TabsContent value="workflow" className="pt-6">
-                                                <div className="w-full overflow-x-auto pb-4">
-                                                    <ul className="flex items-center">
-                                                        {activeRequest.timeline.map((step, index) => (
-                                                            <li key={step.stage} className="flex items-center">
-                                                                <Card className={cn(
-                                                                    'w-48 shrink-0',
-                                                                    {
-                                                                        'border-primary/50 bg-primary/5': step.status === 'completed',
-                                                                        'border-destructive/50 bg-destructive/5': step.status === 'rejected',
-                                                                        'border-orange-500/50 bg-orange-500/5': step.status === 'pending',
-                                                                    }
-                                                                )}>
-                                                                    <CardHeader className="p-3 flex flex-row items-center justify-between space-y-0 pb-2">
-                                                                        <CardTitle className="text-sm font-semibold">{step.stage}</CardTitle>
-                                                                        {step.status === 'completed' && <Check className="h-4 w-4 text-primary" />}
-                                                                        {step.status === 'rejected' && <X className="h-4 w-4 text-destructive" />}
-                                                                        {step.status === 'pending' && <Loader className="h-4 w-4 animate-spin text-orange-500" />}
-                                                                        {step.status === 'waiting' && <Circle className="h-4 w-4 text-muted-foreground" />}
-                                                                    </CardHeader>
-                                                                    <CardContent className="p-3 pt-0">
-                                                                        <div className="text-xs text-muted-foreground">
-                                                                            <p><span className="font-semibold">Actor:</span> {step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor}</p>
-                                                                            <p><span className="font-semibold">Status:</span> {step.status}</p>
-                                                                            <p><span className="font-semibold">Date:</span> {step.date || '...'}</p>
-                                                                        </div>
-                                                                    </CardContent>
-                                                                </Card>
-
-                                                                {index < activeRequest.timeline.length - 1 && (
-                                                                     <div aria-hidden="true" className="w-16 shrink-0 text-muted-foreground px-2">
-                                                                        <svg width="100%" height="24" viewBox="0 0 64 24" fill="none" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="none">
-                                                                            <path d="M0 12H54" stroke="currentColor" strokeWidth="2"/>
-                                                                            <path d="M46 7L54 12L46 17" stroke="currentColor" strokeWidth="2"/>
-                                                                        </svg>
-                                                                    </div>
-                                                                )}
-                                                            </li>
-                                                        ))}
-                                                    </ul>
-                                                </div>
-                                            </TabsContent>
-                                            <TabsContent value="items" className="pt-4">
-                                                <div>
-                                                    <h3 className="text-lg font-semibold mb-2">Request Items</h3>
-                                                    <p className="text-sm text-muted-foreground mb-4">
-                                                        Below are the individual items included in this procurement request.
-                                                    </p>
-                                                    <div className="overflow-auto rounded-lg border">
-                                                        <Table>
-                                                            <TableHeader>
-                                                                <TableRow className="bg-muted hover:bg-muted">
-                                                                    <TableHead>Description</TableHead>
-                                                                    <TableHead>Category</TableHead>
-                                                                    <TableHead className="text-center">Qty</TableHead>
-                                                                    <TableHead className="text-right">Unit Price</TableHead>
-                                                                    <TableHead className="text-right">Total</TableHead>
-                                                                </TableRow>
-                                                            </TableHeader>
-                                                            <TableBody>
-                                                                {activeRequest.items.map((item) => (
-                                                                    <TableRow key={item.id}>
-                                                                        <TableCell className="font-medium">{item.description}</TableCell>
-                                                                        <TableCell>{item.category}</TableCell>
-                                                                        <TableCell className="text-center">{item.qty}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.unitPrice)}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(item.qty * item.unitPrice)}</TableCell>
-                                                                    </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    </div>
-                                                </div>
-                                            </TabsContent>
-                                            <TabsContent value="summary" className="pt-4">
-                                                <div className="space-y-8">
-                                                    <div className="space-y-4">
-                                                        <div className="p-4 border rounded-lg bg-muted/50">
-                                                            <div className="flex justify-between items-center">
-                                                                <div>
-                                                                    <h3 className="font-semibold text-lg">Budget vs. Actuals: {activeRequest.period}</h3>
-                                                                    <p className="text-sm text-muted-foreground">Live comparison of this request against the forecast.</p>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement + capitalSummary.totals.procurement)}</p>
-                                                                    <p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(operationalSummary.totals.forecast + capitalSummary.totals.forecast)}</p>
-                                                                </div>
-                                                            </div>
-                                                            <Progress value={budgetProgress} className="mt-4" />
-                                                        </div>
-
-                                                        {/* Operational Summary */}
-                                                        <div className="overflow-auto rounded-lg border">
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow className="bg-muted hover:bg-muted">
-                                                                        <TableHead className="font-bold">Operational Summary</TableHead>
-                                                                        <TableHead className="text-right font-bold">Request Total</TableHead>
-                                                                        <TableHead className="text-right font-bold">Forecast Total</TableHead>
-                                                                        <TableHead className="text-right font-bold">Variance</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                    {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
-                                                                        <Fragment key={item.category}>
-                                                                            <TableRow 
-                                                                                className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
-                                                                                onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
-                                                                            >
-                                                                                <TableCell className="font-medium flex items-center gap-2">
-                                                                                    <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
-                                                                                    {item.category}
-                                                                                </TableCell>
-                                                                                <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                                                <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                                                <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                                    {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                                    {formatCurrency(item.variance)}
-                                                                                </TableCell>
-                                                                            </TableRow>
-                                                                            {openCategory === item.category && (
-                                                                                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                                    <TableCell colSpan={4} className="p-2">
-                                                                                        <div className="p-2 bg-background rounded-md border">
-                                                                                             <Table>
-                                                                                                <TableHeader>
-                                                                                                    <TableRow>
-                                                                                                        <TableHead>Item</TableHead>
-                                                                                                        <TableHead>Type</TableHead>
-                                                                                                        <TableHead className="text-center">Qty</TableHead>
-                                                                                                        <TableHead className="text-right">Unit Price</TableHead>
-                                                                                                        <TableHead className="text-right">Total</TableHead>
-                                                                                                    </TableRow>
-                                                                                                </TableHeader>
-                                                                                                <TableBody>
-                                                                                                    {item.items.map((subItem) => (
-                                                                                                        <TableRow key={subItem.id}>
-                                                                                                            <TableCell>{subItem.description}</TableCell>
-                                                                                                            <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                                                        </TableRow>
-                                                                                                    ))}
-                                                                                                </TableBody>
-                                                                                            </Table>
-                                                                                        </div>
-                                                                                    </TableCell>
-                                                                                </TableRow>
-                                                                            )}
-                                                                        </Fragment>
-                                                                    )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
-                                                                </TableBody>
-                                                                <TableFooter>
-                                                                    <TableRow className="bg-muted hover:bg-muted font-bold">
-                                                                        <TableCell>Operational Subtotal</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell>
-                                                                    </TableRow>
-                                                                </TableFooter>
-                                                            </Table>
-                                                        </div>
-
-                                                        {/* Capital Summary */}
-                                                        <div className="overflow-auto rounded-lg border">
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow className="bg-muted hover:bg-muted">
-                                                                        <TableHead className="font-bold">Capital Summary</TableHead>
-                                                                        <TableHead className="text-right font-bold">Request Total</TableHead>
-                                                                        <TableHead className="text-right font-bold">Forecast Total</TableHead>
-                                                                        <TableHead className="text-right font-bold">Variance</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                    {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
-                                                                        <Fragment key={item.category}>
-                                                                            <TableRow 
-                                                                                className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
-                                                                                onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)}
-                                                                            >
-                                                                                <TableCell className="font-medium flex items-center gap-2">
-                                                                                    <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />
-                                                                                    {item.category}
-                                                                                </TableCell>
-                                                                                <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                                                <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                                                <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                                    {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                                    {formatCurrency(item.variance)}
-                                                                                </TableCell>
-                                                                            </TableRow>
-                                                                            {openCapitalCategory === item.category && (
-                                                                                <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                                    <TableCell colSpan={4} className="p-2">
-                                                                                         <div className="p-2 bg-background rounded-md border">
-                                                                                             <Table>
-                                                                                                <TableHeader>
-                                                                                                    <TableRow>
-                                                                                                        <TableHead>Item</TableHead>
-                                                                                                        <TableHead>Type</TableHead>
-                                                                                                        <TableHead className="text-center">Qty</TableHead>
-                                                                                                        <TableHead className="text-right">Unit Price</TableHead>
-                                                                                                        <TableHead className="text-right">Total</TableHead>
-                                                                                                    </TableRow>
-                                                                                                </TableHeader>
-                                                                                                <TableBody>
-                                                                                                    {item.items.map((subItem) => (
-                                                                                                        <TableRow key={subItem.id}>
-                                                                                                            <TableCell>{subItem.description}</TableCell>
-                                                                                                            <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                                                            <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                                                        </TableRow>
-                                                                                                    ))}
-                                                                                                </TableBody>
-                                                                                            </Table>
-                                                                                        </div>
-                                                                                    </TableCell>
-                                                                                </TableRow>
-                                                                            )}
-                                                                        </Fragment>
-                                                                    )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
-                                                                </TableBody>
-                                                                <TableFooter>
-                                                                    <TableRow className="bg-muted hover:bg-muted font-bold">
-                                                                        <TableCell>Capital Subtotal</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell>
-                                                                    </TableRow>
-                                                                </TableFooter>
-                                                            </Table>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </TabsContent>
-                                            {showFulfillmentTab && (
-                                                <TabsContent value="fulfillment" className="pt-4">
-                                                    <div>
-                                                        <h3 className="text-lg font-semibold mb-2">Fulfillment Status</h3>
-                                                        <p className="text-sm text-muted-foreground mb-4">
-                                                            Track the fulfillment progress for each item in this request.
-                                                        </p>
-                                                        <div className="overflow-auto rounded-lg border">
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow className="bg-muted hover:bg-muted">
-                                                                        <TableHead>Item</TableHead>
-                                                                        <TableHead className="text-center">Total Qty</TableHead>
-                                                                        <TableHead className="text-center">Rcvd Qty</TableHead>
-                                                                        <TableHead className="text-center">Outstanding</TableHead>
-                                                                        <TableHead>Lead Time (days)</TableHead>
-                                                                        <TableHead>Status</TableHead>
-                                                                        <TableHead>Comments</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                    {activeRequest.items.map((item) => (
-                                                                        <TableRow key={item.id}>
-                                                                            <TableCell className="font-medium">{item.description}</TableCell>
-                                                                            <TableCell className="text-center">{item.qty}</TableCell>
-                                                                            <TableCell className="text-center">{item.receivedQty || 0}</TableCell>
-                                                                            <TableCell className="text-center font-bold">{(item.qty - (item.receivedQty || 0))}</TableCell>
-                                                                            <TableCell>{item.estimatedLeadTimeDays || 'N/A'}</TableCell>
-                                                                            <TableCell>{getFulfillmentStatusBadge(item.fulfillmentStatus)}</TableCell>
-                                                                            <TableCell className="text-xs text-muted-foreground max-w-xs truncate">{(item.fulfillmentComments || []).join('; ')}</TableCell>
-                                                                        </TableRow>
-                                                                    ))}
-                                                                </TableBody>
-                                                            </Table>
-                                                        </div>
-                                                    </div>
-                                                </TabsContent>
-                                            )}
-                                            <TabsContent value="communication" className="pt-6">
-                                                <div className="space-y-6">
-                                                    <div className="space-y-4">
-                                                        {activeRequest.comments?.map((comment, i) => (
-                                                            <div key={i} className="flex items-start gap-3">
-                                                                <Avatar>
-                                                                    <AvatarFallback>{comment.actor.charAt(0)}</AvatarFallback>
-                                                                </Avatar>
-                                                                <div className="flex-1 p-3 rounded-lg bg-muted">
-                                                                    <div className="flex justify-between items-center">
-                                                                        <p className="font-semibold">{comment.actor}</p>
-                                                                        <p className="text-xs text-muted-foreground">{comment.timestamp}</p>
-                                                                    </div>
-                                                                    <p className="text-sm mt-1">{comment.text}</p>
-                                                                </div>
-                                                            </div>
-                                                        ))}
-                                                        {(!activeRequest.comments || activeRequest.comments?.length === 0) && (
-                                                            <p className="text-sm text-center text-muted-foreground py-4">No comments on this request yet.</p>
-                                                        )}
-                                                    </div>
-                                                    <div className="relative">
-                                                        <Textarea placeholder="Respond to queries or add a comment..." className="pr-24" value={newComment} onChange={(e) => setNewComment(e.target.value)}/>
-                                                        <div className="absolute top-2 right-2 flex items-center gap-1">
-                                                            <Button variant="ghost" size="icon"><Paperclip className="h-4 w-4"/></Button>
-                                                            <Button size="icon" onClick={handleAddComment} disabled={isSubmittingAction}><Send className="h-4 w-4"/></Button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </TabsContent>
-                                    </Tabs>
-                                    </CardContent>
-                                    {(showFooterActions || showExportAction) && (
-                                        <CardFooter className="flex justify-end gap-2 border-t pt-6">
-                                            {showExportAction && (
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button variant="outline" className="mr-auto">
-                                                            <Download className="mr-2 h-4 w-4"/>
-                                                            Export Report
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata)}>
-                                                            Export as Excel (.xlsx)
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => generateApprovalReport(activeRequest, { operationalSummary, capitalSummary }, 'pdf', auditLogs, companies, appMetadata)}>
-                                                            Export as PDF (.pdf)
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            )}
-                                            {showFooterActions && (
-                                                <>
-                                                    <Button variant="outline" onClick={() => setIsQueryDialogOpen(true)} disabled={isSubmittingAction || !canRejectOrQuery}><MessageSquare className="mr-2 h-4 w-4" />Raise Query</Button>
-                                                    <Button variant="destructive" onClick={handleReject} disabled={isSubmittingAction || !canRejectOrQuery}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                                    <Button onClick={handleApprove} disabled={isSubmittingAction || !canApprove}>
-                                                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
-                                                        <Check className="mr-2 h-4 w-4" />
-                                                        {(role === 'Procurement Officer' || role === 'Procurement Assistant') ? 'Acknowledge & Process' : 'Approve'}
-                                                    </Button>
-                                                </>
-                                            )}
-                                        </CardFooter>
-                                    )}
-                                </AccordionContent>
-                            </Card>
-                        </AccordionItem>
-                    </Accordion>
-                ) : (
-                    <Card>
-                        <CardContent className="p-12 flex justify-center items-center h-full min-h-[300px]">
-                            {loading ? <Loader className="h-8 w-8 animate-spin" /> : <p className="text-muted-foreground">Select a request to view its details.</p>}
-                        </CardContent>
-                    </Card>
-                )}
-            </div>
-        </div>
-        
-        <Dialog open={isQueryDialogOpen} onOpenChange={setIsQueryDialogOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Raise a Query</DialogTitle>
-                    <DialogDescription>
-                        Your query will be added to the communication log and the request status will be updated to 'Queries Raised'.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                    <Textarea 
-                        placeholder="Enter your query here. Be specific about what information is needed." 
-                        value={newComment} 
-                        onChange={(e) => setNewComment(e.target.value)}
-                        rows={5}
-                    />
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => { setIsQueryDialogOpen(false); setNewComment(''); }}>Cancel</Button>
-                    <Button onClick={handleRaiseQuery} disabled={isSubmittingAction}>
-                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
-                        Submit Query
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
-
-        <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Reject Request</DialogTitle>
-                    <DialogDescription>
-                        Please provide a reason for rejecting this request. This will be added to the communication log.
-                    </DialogDescription>
-                </DialogHeader>
-                <div className="py-4">
-                    <Textarea 
-                        placeholder="Enter rejection reason here..." 
-                        value={newComment} 
-                        onChange={(e) => setNewComment(e.target.value)}
-                        rows={5}
-                    />
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => { setIsRejectDialogOpen(false); setNewComment(''); }}>Cancel</Button>
-                    <Button variant="destructive" onClick={handleConfirmReject} disabled={isSubmittingAction}>
-                        {isSubmittingAction && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
-                        Confirm Rejection
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        )}
     </>
   );
 }
+
