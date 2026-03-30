@@ -62,7 +62,7 @@ export const requestActionRequiredTemplate = (request: RequestDetails, nextStage
                         
                         <h3>Request Details:</h3>
                         <ul>
-                            <li><strong>Request ID:</strong> ${request.id.substring(0,8)}...</li>
+                            <li><strong>Request ID:</strong> ${request.id}</li>
                             <li><strong>Submitted By:</strong> ${request.submittedBy}</li>
                             <li><strong>Total Value:</strong> ${totalFormatted}</li>
                         </ul>
@@ -112,7 +112,7 @@ export const queryRaisedTemplate = (request: RequestDetails, comment: { actor: s
 
                         <h3>Request Details:</h3>
                         <ul>
-                            <li><strong>Request ID:</strong> ${request.id.substring(0,8)}...</li>
+                            <li><strong>Request ID:</strong> ${request.id}</li>
                             <li><strong>Total Value:</strong> ${totalFormatted}</li>
                         </ul>
 
@@ -159,7 +159,7 @@ export const requestRejectedTemplate = (request: RequestDetails, comment: { acto
 
                         <h3>Request Details:</h3>
                         <ul>
-                            <li><strong>Request ID:</strong> ${request.id.substring(0,8)}...</li>
+                            <li><strong>Request ID:</strong> ${request.id}</li>
                             <li><strong>Total Value:</strong> ${totalFormatted}</li>
                         </ul>
 
@@ -239,7 +239,7 @@ export const reminderTemplate = (request: RequestDetails, stageName: string, lin
                         
                         <h3>Request Details:</h3>
                         <ul>
-                            <li><strong>Request ID:</strong> ${request.id.substring(0,8)}...</li>
+                            <li><strong>Request ID:</strong> ${request.id}</li>
                             <li><strong>Submitted By:</strong> ${request.submittedBy}</li>
                             <li><strong>Total Value:</strong> ${totalFormatted}</li>
                         </ul>
