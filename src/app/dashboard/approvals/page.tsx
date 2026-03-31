@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -541,8 +542,8 @@ const RequestDetailsView = ({
                         date: currentDate, 
                         actor: actorName,
                         actorId: actorId,
-                        delegatedById: asDelegate ? delegator?.id : undefined,
-                        delegatedByName: asDelegate ? delegator?.displayName : undefined,
+                        delegatedById: asDelegate ? delegator?.id : null,
+                        delegatedByName: asDelegate ? delegator?.displayName : null,
                     };
                 }
                 if (step.stage === nextStageName) {
@@ -578,7 +579,15 @@ const RequestDetailsView = ({
             const procProcessingIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
     
             if (execApprovalIndex > -1) {
-                newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName, actorId, delegatedById: asDelegate ? delegator?.id : undefined, delegatedByName: asDelegate ? delegator?.displayName : undefined };
+                newTimeline[execApprovalIndex] = { 
+                    ...newTimeline[execApprovalIndex], 
+                    status: 'completed', 
+                    date: currentDate, 
+                    actor: actorName, 
+                    actorId, 
+                    delegatedById: asDelegate ? delegator?.id : null, 
+                    delegatedByName: asDelegate ? delegator?.displayName : null 
+                };
             }
             if (procProcessingIndex > -1) {
                 newTimeline[procProcessingIndex] = { ...newTimeline[procProcessingIndex], status: 'pending' };
@@ -1552,5 +1561,6 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
 
 
