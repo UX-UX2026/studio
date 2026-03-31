@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import {
@@ -97,6 +98,24 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           if (allItemsCompleted && requestData.status !== 'Completed') {
               updatePayload.status = 'Completed';
               updatePayload.updatedAt = serverTimestamp();
+
+              const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+              const actorName = `${profile?.displayName || user?.email || 'User'} (System)`;
+              
+              const newTimeline = requestData.timeline.map(step => {
+                  if (step.stage === 'In Fulfillment' || step.stage === 'Completed') {
+                      return {
+                          ...step,
+                          status: 'completed' as const,
+                          date: currentDate,
+                          actor: actorName,
+                      };
+                  }
+                  return step;
+              });
+      
+              updatePayload.timeline = newTimeline;
+
               toast({ title: "Request Completed", description: `Request ${itemToUpdate.procurementRequestId} automatically marked as complete.` });
           }
           

@@ -72,6 +72,8 @@ const initialWorkflow: WorkflowStage[] = [
     { id: 'stage-1', name: 'Manager Review', role: 'Manager', permissions: ['review', 'comment', 'approve'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
     { id: 'stage-2', name: 'Executive Approval', role: 'Executive', permissions: ['review', 'comment', 'approve', 'lock'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
     { id: 'stage-3', name: 'Procurement Processing', role: 'Procurement Officer', permissions: ['process', 'monitor', 'comment'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
+    { id: 'stage-4', name: 'In Fulfillment', role: 'Procurement Officer', permissions: ['monitor'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
+    { id: 'stage-5', name: 'Completed', role: 'System', permissions: [], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
 ];
 
 export default function WorkflowPage() {

@@ -595,7 +595,7 @@ const RequestDetailsView = ({
         } else if ((role === 'Procurement Officer' || role === 'Procurement Assistant') && request.status === 'Approved') {
             newStatus = 'In Fulfillment';
             toastMessage = { title: "Request Acknowledged", description: `Request ${request.id} is now in fulfillment.` };
-            newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
+            newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment'));
         }
     
         if (!toastMessage) {
@@ -607,7 +607,7 @@ const RequestDetailsView = ({
         const updateData: any = { 
             status: newStatus, 
             timeline: newTimeline,
-            delegatorIdForApproval: asDelegate ? delegator?.id : null,
+            delegatorIdForApproval: asDelegate ? (delegator?.id || null) : null,
         };
         const action = 'request.approve';
     
@@ -1041,7 +1041,35 @@ const RequestDetailsView = ({
         
         setIsSubmittingAction(true);
         const requestRef = doc(firestore, 'procurementRequests', request.id);
-        const updateData = { status: 'Completed' as const, updatedAt: serverTimestamp() };
+
+        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        const actorName = `${profile?.displayName || user.email} (${role})`;
+
+        const newTimeline = request.timeline.map(step => {
+            if (step.stage === 'In Fulfillment' || step.stage === 'Completed') {
+                return {
+                    ...step,
+                    status: 'completed' as const,
+                    date: currentDate,
+                    actor: actorName,
+                };
+            }
+            if (step.status !== 'completed' && step.status !== 'rejected') {
+                return {
+                    ...step,
+                    status: 'completed' as const,
+                    date: step.date || currentDate,
+                    actor: step.actor || actorName,
+                }
+            }
+            return step;
+        });
+
+        const updateData = { 
+            status: 'Completed' as const, 
+            updatedAt: serverTimestamp(),
+            timeline: newTimeline
+        };
         const action = 'request.manual_complete';
 
         try {
@@ -1050,7 +1078,7 @@ const RequestDetailsView = ({
             
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: `${profile?.displayName || user.email} (${role})`,
+                userName: actorName,
                 action,
                 details: `Manually marked request as complete.`,
                 entity: { type: 'procurementRequest', id: request.id },
@@ -1561,6 +1589,7 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
 
 
 

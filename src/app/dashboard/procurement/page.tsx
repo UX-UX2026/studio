@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -774,7 +775,7 @@ export default function ProcurementQuickSubmitPage() {
         
         const departmentWorkflow = department?.workflow;
         
-        const actorString = `${profile?.displayName || user.email} (${role || 'N/A'})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
 
         let timeline;
@@ -790,6 +791,8 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Manager Review", actor: "Manager", date: null, status: 'waiting' as const },
                 { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
                 { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
+                { stage: "In Fulfillment", actor: "Procurement", date: null, status: 'waiting' as const },
+                { stage: "Completed", actor: "System", date: null, status: 'waiting' as const },
             ];
 
         // Always set the first stage as completed
