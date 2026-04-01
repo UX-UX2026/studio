@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -25,6 +24,19 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
+const getStatusBadge = (status: string) => {
+    switch (status) {
+        case 'Pending Manager Approval': return <Badge variant="outline" className="text-blue-500 border-blue-500">Pending Manager</Badge>;
+        case 'Pending Executive': return <Badge variant="outline" className="text-orange-500 border-orange-500">Pending Executive</Badge>;
+        case 'Approved': return <Badge variant="outline" className="text-purple-500 border-purple-500">Approved</Badge>;
+        case 'In Fulfillment': return <Badge variant="outline" className="text-indigo-500 border-indigo-500">In Fulfillment</Badge>;
+        case 'Completed': return <Badge variant="outline" className="text-green-500 border-green-500">Completed</Badge>;
+        case 'Queries Raised': return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+        case 'Rejected': return <Badge variant="destructive">{status}</Badge>;
+        default: return <Badge variant="secondary">{status}</Badge>
+    }
+}
+
 export default function ProcurementHistoryPage() {
     const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
@@ -38,7 +50,8 @@ export default function ProcurementHistoryPage() {
         
         let q = query(
             collection(firestore, 'procurementRequests'), 
-            where('status', 'in', ['Completed', 'Archived']),
+            where('status', 'not-in', ['Draft']),
+            orderBy('status'),
             orderBy('updatedAt', 'desc')
         );
 
@@ -102,9 +115,9 @@ export default function ProcurementHistoryPage() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="flex items-center gap-2"><History />Procurement History</CardTitle>
+                <CardTitle className="flex items-center gap-2"><History />All Submissions</CardTitle>
                 <CardDescription>
-                    Review completed and archived procurement requests.
+                    Review all open and closed procurement requests.
                 </CardDescription>
             </CardHeader>
             <CardContent>
@@ -152,7 +165,7 @@ export default function ProcurementHistoryPage() {
                                     <TableCell>{req.department}</TableCell>
                                     <TableCell>{req.period}</TableCell>
                                     <TableCell>
-                                        <Badge variant={req.status === 'Completed' ? 'default' : 'secondary'}>{req.status}</Badge>
+                                        {getStatusBadge(req.status)}
                                     </TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
                                     <TableCell className="text-right">
@@ -164,7 +177,7 @@ export default function ProcurementHistoryPage() {
                             )) : (
                                 <TableRow>
                                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                        No historical records found for the selected filters.
+                                        No records found for the selected filters.
                                     </TableCell>
                                 </TableRow>
                             )}
