@@ -4,12 +4,12 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Eraser, AlertTriangle, Download, HardDriveDownload } from "lucide-react";
+import { Loader, Eraser, AlertTriangle, Download, HardDriveDownload, BrainCircuit } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore } from "@/firebase";
-import { collection, writeBatch, getDocs, query, serverTimestamp, addDoc } from "firebase/firestore";
+import { collection, writeBatch, getDocs, query, serverTimestamp, addDoc, doc, where, setDoc } from "firebase/firestore";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,6 +23,7 @@ import {
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { testUsers, testProcurementRequests } from "@/lib/test-data";
 
 
 export default function DataManagementPage() {
@@ -33,7 +34,9 @@ export default function DataManagementPage() {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
+    const [isSeeding, setIsSeeding] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const [isSeedDialogOpen, setIsSeedDialogOpen] = useState(false);
     const [isDeleteConfirmed, setIsDeleteConfirmed] = useState(false);
 
     useEffect(() => {
@@ -167,6 +170,63 @@ export default function DataManagementPage() {
             setIsDialogOpen(false);
         }
     };
+
+    const handleSeedTestData = async () => {
+        if (!firestore || !user) return;
+        setIsSeeding(true);
+        const action = 'system.seed_test_data';
+        try {
+            const batch = writeBatch(firestore);
+            const usersRef = collection(firestore, 'users');
+            const requestsRef = collection(firestore, 'procurementRequests');
+
+            for (const testUser of testUsers) {
+                const userQuery = query(usersRef, where('email', '==', testUser.email));
+                const existingUser = await getDocs(userQuery);
+                if (existingUser.empty) {
+                    const userDocRef = doc(usersRef, testUser.id);
+                    batch.set(userDocRef, testUser);
+                } else {
+                    console.log(`User ${testUser.email} already exists. Skipping.`);
+                }
+            }
+            
+            testProcurementRequests.forEach(req => {
+                const reqDocRef = doc(requestsRef);
+                batch.set(reqDocRef, { ...req, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+            });
+
+            await batch.commit();
+            toast({ title: "Simulation Data Loaded", description: "Test users and requests have been added to the database." });
+            
+             await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Seeded database with ${testUsers.length} users and ${testProcurementRequests.length} requests.`,
+                entity: { type: 'system', id: 'seed_data' },
+                timestamp: serverTimestamp()
+            });
+
+        } catch (error: any) {
+             console.error("Seed Data Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Seeding Failed',
+                description: error.message || 'Could not seed the database.',
+            });
+            await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        } finally {
+            setIsSeeding(false);
+            setIsSeedDialogOpen(false);
+        }
+    }
     
     return (
         <div className="space-y-6">
@@ -188,6 +248,27 @@ export default function DataManagementPage() {
                             <Download className="mr-2 h-4 w-4"/>
                         )}
                         Export All Submissions (JSON)
+                    </Button>
+                </CardContent>
+            </Card>
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                        <BrainCircuit className="h-6 w-6 text-primary" />
+                        System Simulation
+                    </CardTitle>
+                    <CardDescription>
+                        Seed the database with a variety of test users and procurement submissions to simulate different scenarios and test system functionality.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        This will add multiple users and requests to the database. It will not overwrite existing data with the same email.
+                    </p>
+                    <Button onClick={() => setIsSeedDialogOpen(true)} disabled={isSeeding}>
+                        {isSeeding ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        Load Simulation Data
                     </Button>
                 </CardContent>
             </Card>
@@ -249,6 +330,21 @@ export default function DataManagementPage() {
                         <AlertDialogAction onClick={handleDeleteAllSubmissions} disabled={!isDeleteConfirmed} className="bg-destructive hover:bg-destructive/90">
                             Yes, delete everything
                         </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={isSeedDialogOpen} onOpenChange={setIsSeedDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Load Simulation Data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will add test users and procurement requests to your database. Are you sure you want to continue?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleSeedTestData}>Load Data</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
