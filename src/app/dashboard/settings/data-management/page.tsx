@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useMemo } from "react";
-import { Loader, Eraser, AlertTriangle, Download, HardDriveDownload, BrainCircuit } from "lucide-react";
+import { Loader, Eraser, AlertTriangle, Download, HardDriveDownload, BrainCircuit, Trash2 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -35,8 +35,12 @@ export default function DataManagementPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isExporting, setIsExporting] = useState(false);
     const [isSeeding, setIsSeeding] = useState(false);
+    const [isClearing, setIsClearing] = useState(false);
+    
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [isSeedDialogOpen, setIsSeedDialogOpen] = useState(false);
+    const [isClearSimDialogOpen, setIsClearSimDialogOpen] = useState(false);
+
     const [isDeleteConfirmed, setIsDeleteConfirmed] = useState(false);
 
     useEffect(() => {
@@ -227,6 +231,59 @@ export default function DataManagementPage() {
             setIsSeedDialogOpen(false);
         }
     }
+
+    const handleClearTestData = async () => {
+        if (!firestore || !user) return;
+        setIsClearing(true);
+        const action = 'system.clear_test_data';
+    
+        try {
+            const batch = writeBatch(firestore);
+            
+            const usersQuery = query(collection(firestore, 'users'), where('isTestData', '==', true));
+            const usersSnapshot = await getDocs(usersQuery);
+            usersSnapshot.forEach(doc => batch.delete(doc.ref));
+    
+            const requestsQuery = query(collection(firestore, 'procurementRequests'), where('isTestData', '==', true));
+            const requestsSnapshot = await getDocs(requestsQuery);
+            requestsSnapshot.forEach(doc => batch.delete(doc.ref));
+    
+            await batch.commit();
+    
+            const totalDeleted = usersSnapshot.size + requestsSnapshot.size;
+            toast({
+                title: "Simulation Data Cleared",
+                description: `Successfully deleted ${totalDeleted} test documents.`,
+            });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                details: `Permanently deleted ${usersSnapshot.size} test users and ${requestsSnapshot.size} test requests.`,
+                entity: { type: 'system', id: 'test_data' },
+                timestamp: serverTimestamp()
+            });
+    
+        } catch (error: any) {
+             console.error("Clear Test Data Error:", error);
+            toast({
+                variant: 'destructive',
+                title: 'Operation Failed',
+                description: error.message || 'Could not delete simulation data.',
+            });
+            await logErrorToFirestore(firestore, {
+                userId: user.uid,
+                userName: user.displayName,
+                action,
+                errorMessage: error.message,
+                errorStack: error.stack,
+            });
+        } finally {
+            setIsClearing(false);
+            setIsClearSimDialogOpen(false);
+        }
+    };
     
     return (
         <div className="space-y-6">
@@ -267,7 +324,7 @@ export default function DataManagementPage() {
                         This will add multiple users and requests to the database. It will not overwrite existing data with the same email.
                     </p>
                     <Button onClick={() => setIsSeedDialogOpen(true)} disabled={isSeeding}>
-                        {isSeeding ? <Loader className="mr-2 h-4 w-4 animate-spin" /> : null}
+                        {isSeeding && <Loader className="mr-2 h-4 w-4 animate-spin" />}
                         Load Simulation Data
                     </Button>
                 </CardContent>
@@ -283,7 +340,27 @@ export default function DataManagementPage() {
                         Perform system-wide data operations. These actions are permanent and cannot be undone.
                     </CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
+                     <Card className="border-destructive bg-destructive/5">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-3 text-destructive">
+                                <AlertTriangle />
+                                Clear Simulation Data
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-destructive/80">
+                                This action will permanently delete all users and submissions that were created by the "Load Simulation Data" tool. Your manually created data will not be affected.
+                            </p>
+                        </CardContent>
+                        <CardFooter>
+                            <Button variant="destructive" onClick={() => setIsClearSimDialogOpen(true)} disabled={isClearing}>
+                                {isClearing && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Clear Simulation Data
+                            </Button>
+                        </CardFooter>
+                    </Card>
                     <Card className="border-destructive bg-destructive/5">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-3 text-destructive">
@@ -345,6 +422,24 @@ export default function DataManagementPage() {
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction onClick={handleSeedTestData}>Load Data</AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+            
+            <AlertDialog open={isClearSimDialogOpen} onOpenChange={setIsClearSimDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Clear all simulation data?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                           This action will delete all sample users and requests that were added by the simulation tool. Your own manually-created data will not be affected. This cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearTestData} disabled={isClearing} className="bg-destructive hover:bg-destructive/90">
+                            {isClearing && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
+                            Yes, clear simulation data
+                        </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>

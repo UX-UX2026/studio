@@ -1,7 +1,7 @@
 import type { ApprovalRequest } from './approvals-mock-data';
 import { type UserProfile } from '@/context/authentication-provider';
 
-export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
+export const testUsers: (Omit<UserProfile, 'id'> & { id: string; isTestData?: boolean })[] = [
     {
         id: 'user-alice-manager',
         displayName: 'Alice Manager',
@@ -10,7 +10,8 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         department: 'Marketing',
         departmentId: 'dept-mktg',
         status: 'Active',
-        photoURL: `https://i.pravatar.cc/150?u=alice.manager@example.com`
+        photoURL: `https://i.pravatar.cc/150?u=alice.manager@example.com`,
+        isTestData: true,
     },
     {
         id: 'user-bob-requester',
@@ -20,7 +21,8 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         department: 'Marketing',
         departmentId: 'dept-mktg',
         status: 'Active',
-        photoURL: `https://i.pravatar.cc/150?u=bob.requester@example.com`
+        photoURL: `https://i.pravatar.cc/150?u=bob.requester@example.com`,
+        isTestData: true,
     },
     {
         id: 'user-charlie-executive',
@@ -32,6 +34,7 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         status: 'Active',
         photoURL: `https://i.pravatar.cc/150?u=charlie.executive@example.com`,
         reportingDepartments: ['dept-mktg', 'dept-sales'],
+        isTestData: true,
     },
     {
         id: 'user-diana-procurement',
@@ -41,7 +44,8 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         department: 'Finance',
         departmentId: 'dept-fin',
         status: 'Active',
-        photoURL: `https://i.pravatar.cc/150?u=diana.procurement@example.com`
+        photoURL: `https://i.pravatar.cc/150?u=diana.procurement@example.com`,
+        isTestData: true,
     },
     {
         id: 'user-eve-requester',
@@ -51,7 +55,8 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         department: 'Sales',
         departmentId: 'dept-sales',
         status: 'Active',
-        photoURL: `https://i.pravatar.cc/150?u=eve.requester@example.com`
+        photoURL: `https://i.pravatar.cc/150?u=eve.requester@example.com`,
+        isTestData: true,
     },
     {
         id: 'user-frank-manager',
@@ -61,11 +66,12 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string })[] = [
         department: 'Sales',
         departmentId: 'dept-sales',
         status: 'Active',
-        photoURL: `https://i.pravatar.cc/150?u=frank.manager@example.com`
+        photoURL: `https://i.pravatar.cc/150?u=frank.manager@example.com`,
+        isTestData: true,
     }
 ];
 
-export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' | 'updatedAt'>[] = [
+export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' | 'updatedAt'> & { isTestData?: boolean })[] = [
     // 1. Simple request from Requester, pending Manager approval
     {
         department: 'Marketing',
@@ -84,6 +90,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 101, type: 'One-Off', expenseType: 'Operational', description: 'Social Media Campaign Boost', category: 'Marketing', brand: 'Meta', qty: 1, unitPrice: 1500, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 2. Manager submission, bypassing manager approval
     {
@@ -103,6 +110,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 201, type: 'One-Off', expenseType: 'Capital', description: 'New Video Camera for Content Team', category: 'Hardware Purchase', brand: 'Sony', qty: 1, unitPrice: 45000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 3. Request with queries
     {
@@ -123,6 +131,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 301, type: 'One-Off', expenseType: 'Operational', description: 'Tickets for Sales Conference', category: 'Staff Travel - SA', brand: 'SalesConf Inc.', qty: 2, unitPrice: 4000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 4. Rejected Request
     {
@@ -144,6 +153,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 401, type: 'One-Off', expenseType: 'Capital', description: 'Experimental Analytics Software License', category: 'Software Licenses', brand: 'DataDream', qty: 1, unitPrice: 25000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 5. Approved Request, ready for fulfillment
     {
@@ -164,6 +174,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 501, type: 'One-Off', expenseType: 'Operational', description: 'New Laptops for Sales Team (x3)', category: 'IT Hardware', brand: 'Dell', qty: 3, unitPrice: 4000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 6. In Fulfillment
     {
@@ -185,6 +196,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 601, type: 'One-Off', expenseType: 'Operational', description: 'Branded merchandise for event', category: 'Marketing', brand: 'PromoCorp', qty: 500, unitPrice: 10, fulfillmentStatus: 'Sourcing', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
     // 7. Completed Request
     {
@@ -207,6 +219,7 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 701, type: 'One-Off', expenseType: 'Operational', description: 'Office Printer Ink', category: 'Office Supplies', brand: 'HP', qty: 5, unitPrice: 500, fulfillmentStatus: 'Completed', receivedQty: 5, fulfillmentComments: ['Ordered from Takealot, delivered promptly'] },
         ],
+        isTestData: true,
     },
     // 8. Draft Request
     {
@@ -222,5 +235,6 @@ export const testProcurementRequests: Omit<ApprovalRequest, 'id' | 'createdAt' |
         items: [
             { id: 801, type: 'One-Off', expenseType: 'Operational', description: 'Graphic Design Software Subscription', category: 'Software Licenses', brand: 'Adobe', qty: 1, unitPrice: 980, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
+        isTestData: true,
     },
 ];
