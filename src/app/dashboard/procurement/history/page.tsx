@@ -37,6 +37,12 @@ const getStatusBadge = (status: string) => {
     }
 }
 
+type Department = {
+    id: string;
+    name: string;
+};
+
+
 export default function ProcurementHistoryPage() {
     const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
@@ -50,9 +56,7 @@ export default function ProcurementHistoryPage() {
         
         let q = query(
             collection(firestore, 'procurementRequests'), 
-            where('status', 'not-in', ['Draft']),
-            orderBy('status'),
-            orderBy('updatedAt', 'desc')
+            where('status', 'not-in', ['Draft'])
         );
 
         if (role === 'Manager' || role === 'Requester') {
@@ -68,12 +72,17 @@ export default function ProcurementHistoryPage() {
 
     const { data: requests, loading: requestsLoading } = useCollection<ApprovalRequest>(historyQuery);
 
+    const sortedRequests = useMemo(() => {
+        if (!requests) return [];
+        return [...requests].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+    }, [requests]);
+
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const filteredRequests = useMemo(() => {
-        if (!requests) return [];
-        let filtered = requests;
+        if (!sortedRequests) return [];
+        let filtered = sortedRequests;
         if (departmentFilter !== 'all') {
             filtered = filtered.filter(req => req.departmentId === departmentFilter);
         }
@@ -81,7 +90,7 @@ export default function ProcurementHistoryPage() {
             filtered = filtered.filter(req => req.period === periodFilter);
         }
         return filtered;
-    }, [requests, departmentFilter, periodFilter]);
+    }, [sortedRequests, departmentFilter, periodFilter]);
 
     const availablePeriods = useMemo(() => {
         if (!requests) return [];
