@@ -299,9 +299,7 @@ const RequestDetailsView = ({
             
             const doc = new jsPDF();
             
-            const logoImage: HTMLImageElement | null = null;
-            
-            let tableStartY = 30; 
+            const tableStartY = 30; 
             
             doc.setFont('helvetica', 'normal');
             doc.setFontSize(12);
@@ -310,21 +308,7 @@ const RequestDetailsView = ({
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(16);
             
-            if (logoImage) {
-                try {
-                    const imgWidth = 30;
-                    const imgHeight = (logoImage.height * imgWidth) / logoImage.width;
-                    const imgY = 15;
-                    doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
-                    doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                    tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); 
-                } catch (e) {
-                    console.error("Failed to add logo to PDF, falling back to text only.", e);
-                    doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-                }
-            } else {
-                doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-            }
+            doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
     
             const detailsData: (string|number)[][] = [
                 ["Request ID", request.id],
@@ -1578,5 +1562,3 @@ export default function ApprovalsPage() {
     </>
   );
 }
-
-

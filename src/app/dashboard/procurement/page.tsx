@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -40,7 +39,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
 import * as XLSX from 'xlsx';
 import { PlaceHolderImages } from '@/lib/placeholder-images';
-import { type PdfSettings } from "../settings/pdf-design/page";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -83,7 +81,7 @@ type AppMetadata = {
     id: string;
     adminIsSetUp?: boolean;
     limitToOneSubmissionPerPeriod?: boolean;
-    pdfSettings?: PdfSettings;
+    pdfSettings?: { primaryColor?: string; };
 }
 
 type BudgetItem = {
@@ -1274,8 +1272,8 @@ export default function ProcurementQuickSubmitPage() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
-                    <Tabs defaultValue="submission" className="w-full">
+                <Tabs defaultValue="submission" className="w-full">
+                    <CardContent>
                         <div className="flex justify-end">
                             <TabsList className="grid grid-cols-2">
                                 <TabsTrigger value="submission">Submission Items</TabsTrigger>
@@ -1580,7 +1578,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
