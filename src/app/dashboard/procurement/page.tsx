@@ -649,7 +649,7 @@ export default function ProcurementQuickSubmitPage() {
             // This is a brand new submission for the period.
             setEditingRequestId(null);
             setSelectedCompanyId('');
-            setIsEmergency(false);
+            
             // Start with all active recurring items from the master list.
             const initialItems = recurringItems
                 ?.filter(item => item.active)
@@ -751,7 +751,7 @@ export default function ProcurementQuickSubmitPage() {
             !['Draft', 'Completed', 'Rejected', 'Queries Raised', 'Archived'].includes(req.status)
         );
 
-        if (appMetadata?.limitToOneSubmissionPerPeriod && role !== 'Administrator' && activePipelineRequest) {
+        if (appMetadata?.limitToOneSubmissionPerPeriod && role !== 'Administrator' && activePipelineRequest && !isEmergency) {
             toast({
                 variant: "destructive",
                 title: "Active Submission Exists",
@@ -1643,7 +1643,21 @@ export default function ProcurementQuickSubmitPage() {
                             </div>
                         ) : (
                              <div className="flex items-center space-x-2">
-                                <Switch id="emergency-switch" checked={isEmergency} onCheckedChange={setIsEmergency} />
+                                <Switch
+                                    id="emergency-switch"
+                                    checked={isEmergency}
+                                    onCheckedChange={(checked) => {
+                                        setIsEmergency(checked);
+                                        if (checked) {
+                                            setEditingRequestId(null);
+                                            setDraftItems([]);
+                                            toast({
+                                                title: "Emergency Request Mode",
+                                                description: "You are now creating a new, separate emergency request. Any items from a standard draft have been cleared.",
+                                            });
+                                        }
+                                    }}
+                                />
                                 <Label htmlFor="emergency-switch" className="text-red-600 font-semibold">Emergency Request</Label>
                             </div>
                         )}
@@ -1803,5 +1817,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-    
