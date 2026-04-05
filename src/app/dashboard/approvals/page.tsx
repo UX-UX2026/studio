@@ -1510,7 +1510,7 @@ export default function ApprovalsPage() {
                     <div className="space-y-4">
                         <h3 className="text-lg font-semibold">All Requests</h3>
                         <Accordion type="multiple" className="w-full space-y-2" defaultValue={departmentOrder}>
-                            {departmentOrder.map(dept => (<AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50"><AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted"><div className="flex justify-between items-center w-full"><span className="font-semibold">{dept}</span><Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge></div></AccordionTrigger><AccordionContent className="p-2 pt-0"><div className="space-y-2">{requestsByDept[dept].map(req => (<Card key={req.id} className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')} onClick={() => setSelectedRequestId(req.id)}><CardContent className="p-3"><div className="flex justify-between items-start"><p className="font-semibold truncate">{req.id}</p>{getStatusBadge(req.status)}</div><div className="flex justify-between items-end mt-2"><div><p className="text-xs text-muted-foreground">{req.period}</p><p className="text-lg font-bold">{formatCurrency(req.total)}</p></div><p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p></div></CardContent></Card>))}</div></AccordionContent></AccordionItem>))}
+                            {departmentOrder.map(dept => (<AccordionItem value={dept} key={dept} className="border-0 rounded-lg bg-muted/50"><AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted"><div className="flex justify-between items-center w-full"><span className="font-semibold">{dept}</span><Badge variant="secondary" className="mr-4">{requestsByDept[dept].length}</Badge></div></AccordionTrigger><AccordionContent className="p-2 pt-0"><div className="space-y-2">{requestsByDept[dept].map(req => (<Card key={req.id} className={cn("cursor-pointer transition-colors bg-background", selectedRequestId === req.id ? 'bg-primary/10 border-primary/50' : 'hover:bg-muted/50')} onClick={() => setSelectedRequestId(req.id)}><CardContent className="p-3"><div className="flex justify-between items-start"><p className="font-semibold truncate flex items-center gap-2">{req.isEmergency && <AlertTriangle className="h-4 w-4 text-destructive" />}{req.id}</p>{getStatusBadge(req.status)}</div><div className="flex justify-between items-end mt-2"><div><p className="text-xs text-muted-foreground">{req.period}</p><p className="text-lg font-bold">{formatCurrency(req.total)}</p></div><p className="text-xs text-muted-foreground">By: {req.submittedBy || 'N/A'}</p></div></CardContent></Card>))}</div></AccordionContent></AccordionItem>))}
                         </Accordion>
                     </div>
                 </div>
@@ -1521,7 +1521,10 @@ export default function ApprovalsPage() {
                                 <Card>
                                     <AccordionTrigger className="w-full text-left p-6 hover:no-underline rounded-lg data-[state=open]:rounded-b-none">
                                         <div className="flex-1">
-                                            <h3 className="text-2xl font-semibold leading-none tracking-tight">Request: {activeRequest.id}</h3>
+                                            <h3 className="text-2xl font-semibold leading-none tracking-tight flex items-center gap-2">
+                                                {activeRequest.isEmergency && <AlertTriangle className="h-5 w-5 text-destructive" />}
+                                                Request: {activeRequest.id}
+                                            </h3>
                                             <p className="text-sm text-muted-foreground mt-1.5">{activeRequest.companyName ? `${activeRequest.companyName} • ` : ''}{activeRequest.period} &bull; {activeRequest.department} &bull; Submitted by {activeRequest.submittedBy || 'N/A'}</p>
                                         </div>
                                     </AccordionTrigger>
@@ -1564,7 +1567,10 @@ export default function ApprovalsPage() {
                                                 <AccordionTrigger className="px-3 py-2 hover:no-underline rounded-lg data-[state=open]:bg-muted">
                                                      <div className="flex justify-between items-start w-full">
                                                         <div>
-                                                            <p className="font-semibold truncate">{req.id}</p>
+                                                            <p className="font-semibold truncate flex items-center gap-2">
+                                                                {req.isEmergency && <AlertTriangle className="h-4 w-4 text-destructive" />}
+                                                                {req.id}
+                                                            </p>
                                                             <p className="text-xs text-muted-foreground text-left">By: {req.submittedBy || 'N/A'} • {req.period}</p>
                                                         </div>
                                                         <div className="text-right">
@@ -1593,3 +1599,6 @@ export default function ApprovalsPage() {
 
 
 
+
+
+    

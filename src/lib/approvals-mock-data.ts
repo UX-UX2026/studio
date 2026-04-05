@@ -23,6 +23,7 @@ export type ApprovalRequest = {
     period: string;
     total: number;
     status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment' | 'Archived';
+    isEmergency?: boolean;
     submittedBy: string;
     submittedById: string;
     companyId?: string;
@@ -41,5 +42,7 @@ export type ApprovalRequest = {
     createdAt?: { seconds: number, nanoseconds: number };
     updatedAt?: { seconds: number, nanoseconds: number };
 };
+
+    
 
     

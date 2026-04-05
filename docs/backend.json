@@ -45,6 +45,10 @@
           ],
           "description": "The current status of the approval workflow."
         },
+        "isEmergency": {
+            "type": "boolean",
+            "description": "Indicates if the request is an emergency and should be fast-tracked, potentially bypassing some approval stages."
+        },
         "submittedBy": {
           "type": "string",
           "description": "The name of the user who submitted the request."

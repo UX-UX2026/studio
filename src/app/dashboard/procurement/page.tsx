@@ -5,7 +5,7 @@
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell, X } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, ChevronRight, Bell, X, Switch } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
@@ -414,6 +414,8 @@ export default function ProcurementQuickSubmitPage() {
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [archiveReason, setArchiveReason] = useState('');
 
+    const [isEmergency, setIsEmergency] = useState(false);
+
 
     // Data fetching
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
@@ -633,6 +635,7 @@ export default function ProcurementQuickSubmitPage() {
             const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
             setSelectedCompanyId(existingRequest.companyId || '');
+            setIsEmergency(existingRequest.isEmergency || false);
 
             // ...and also add any NEW recurring items from the master list that are not already present.
             const savedItemDescriptions = new Set(savedItems.map(i => i.description));
@@ -646,6 +649,7 @@ export default function ProcurementQuickSubmitPage() {
             // This is a brand new submission for the period.
             setEditingRequestId(null);
             setSelectedCompanyId('');
+            setIsEmergency(false);
             // Start with all active recurring items from the master list.
             const initialItems = recurringItems
                 ?.filter(item => item.active)
@@ -767,19 +771,13 @@ export default function ProcurementQuickSubmitPage() {
         }
 
         const isSubmitterTheDeptManager = user.uid === department.managerId;
-        const shouldSkipManagerApproval = role === 'Administrator' || isSubmitterTheDeptManager;
-        
-        const newStatus = isDraft ? 'Draft' : shouldSkipManagerApproval ? 'Pending Executive' : 'Pending Manager Approval';
-        
-        const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
-        
-        const departmentWorkflow = department?.workflow;
-        
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
+        let newStatus: ApprovalRequest['status'];
+        const departmentWorkflow = department?.workflow;
 
-        let timeline;
-        const baseTimeline = departmentWorkflow && departmentWorkflow.length > 0
+        let timeline = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({
                 stage: stage.name,
                 actor: String(stage.role) || 'System',
@@ -795,42 +793,49 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Completed", actor: "System", date: null, status: 'waiting' as const },
             ];
 
-        // Always set the first stage as completed
-        if (baseTimeline.length > 0) {
-            baseTimeline[0] = { ...baseTimeline[0], actor: actorString, date: currentDate, status: 'completed' };
+        if (timeline.length > 0) {
+            timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' };
         }
 
         if (isDraft) {
-            // For drafts, all subsequent stages are 'waiting'
-            timeline = baseTimeline;
+            newStatus = 'Draft';
         } else {
-            // For submissions
-            if (shouldSkipManagerApproval) {
-                // Manager or Admin submits, so skip manager review
-                const managerReviewIndex = baseTimeline.findIndex(s => s.stage === 'Manager Review');
-                if (managerReviewIndex > -1) {
-                    baseTimeline[managerReviewIndex] = { ...baseTimeline[managerReviewIndex], status: 'completed', actor: actorString, date: currentDate };
-                }
-                
-                const executiveApprovalIndex = baseTimeline.findIndex(s => s.stage === 'Executive Approval');
-                if (executiveApprovalIndex > -1) {
-                    baseTimeline[executiveApprovalIndex].status = 'pending';
-                } else if (managerReviewIndex > -1 && managerReviewIndex + 1 < baseTimeline.length) {
-                    // If no explicit Exec approval, go to next stage after manager
-                    baseTimeline[managerReviewIndex + 1].status = 'pending';
-                }
-
-            } else {
-                // Requester submits, goes to manager review
-                const managerReviewIndex = baseTimeline.findIndex(s => s.stage === 'Manager Review');
-                if (managerReviewIndex > -1) {
-                    baseTimeline[managerReviewIndex].status = 'pending';
-                } else if (baseTimeline.length > 1) { // If no manager review, go to second stage
-                    baseTimeline[1].status = 'pending';
+            // Default flow
+            newStatus = (role === 'Administrator' || isSubmitterTheDeptManager) 
+                ? 'Pending Executive' 
+                : 'Pending Manager Approval';
+    
+            // Emergency flow overrides
+            if (isEmergency) {
+                if (role === 'Administrator' || isSubmitterTheDeptManager) {
+                    newStatus = 'Approved';
+                } else {
+                    newStatus = 'Pending Executive';
                 }
             }
-            timeline = baseTimeline;
+            
+            // Set timeline based on final status
+            if (newStatus === 'Pending Manager Approval') {
+                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) timeline[managerReviewIndex].status = 'pending';
+            } else if (newStatus === 'Pending Executive') {
+                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) timeline[managerReviewIndex] = { ...timeline[managerReviewIndex], status: 'completed', actor: 'System (Skipped)', date: currentDate };
+                
+                const execIndex = timeline.findIndex(s => s.stage === 'Executive Approval');
+                if (execIndex > -1) timeline[execIndex].status = 'pending';
+            } else if (newStatus === 'Approved') {
+                const procIndex = timeline.findIndex(s => s.stage === 'Procurement Processing');
+                for (let i = 0; i < procIndex; i++) {
+                    if (timeline[i].status !== 'completed') {
+                        timeline[i] = { ...timeline[i], status: 'completed', actor: 'System (Emergency)', date: currentDate };
+                    }
+                }
+                if (procIndex > -1) timeline[procIndex].status = 'pending';
+            }
         }
+
+        const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
 
         const baseRequestData = {
             department: departmentName,
@@ -840,6 +845,7 @@ export default function ProcurementQuickSubmitPage() {
             period: selectedPeriod,
             total: submissionTotal,
             status: newStatus,
+            isEmergency: isEmergency,
             submittedBy: actorString,
             submittedById: user.uid,
             timeline: timeline,
@@ -865,7 +871,7 @@ export default function ProcurementQuickSubmitPage() {
             }
 
             if (!editingRequestId && docId) {
-                setEditingRequestId(docId); // Start tracking the new draft's ID
+                setEditingRequestId(docId);
             }
             setSaveStatus('saved');
             toast({ 
@@ -1627,16 +1633,21 @@ export default function ProcurementQuickSubmitPage() {
                     </CardContent>
                 </Tabs>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
-                    {isLocked ? (
-                        <div className="flex items-center gap-3 text-yellow-800">
-                             <Globe className="h-5 w-5"/>
-                            <div className="text-sm font-medium">
-                                <p>{isLockedByWorkflow ? "This submission is locked as it is already in the approval pipeline." : "Select an open period to begin."}</p>
+                    <div className="flex-1">
+                        {isLocked ? (
+                            <div className="flex items-center gap-3 text-yellow-800">
+                                <Globe className="h-5 w-5"/>
+                                <div className="text-sm font-medium">
+                                    <p>{isLockedByWorkflow ? "This submission is locked as it is already in the approval pipeline." : "Select an open period to begin."}</p>
+                                </div>
                             </div>
-                        </div>
-                    ) : (
-                        <span className='text-sm text-muted-foreground'>Ready to proceed?</span>
-                    )}
+                        ) : (
+                             <div className="flex items-center space-x-2">
+                                <Switch id="emergency-switch" checked={isEmergency} onCheckedChange={setIsEmergency} />
+                                <Label htmlFor="emergency-switch" className="text-red-600 font-semibold">Emergency Request</Label>
+                            </div>
+                        )}
+                    </div>
                     <div className="flex gap-3">
                         {canApproveOrReject ? (
                             <>
@@ -1792,3 +1803,5 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+
+    
