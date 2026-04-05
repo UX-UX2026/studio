@@ -159,23 +159,22 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
             try {
                 logoImage = await new Promise((resolve) => {
                     const img = new Image();
-                    img.crossOrigin = "Anonymous"; // Important for CORS
                     img.onload = () => resolve(img);
                     img.onerror = (err) => {
                         console.error("PDF Logo Load Error:", err);
-                        resolve(null); // Resolve with null on error
+                        resolve(null); 
                     };
                     img.src = company.logoUrl;
                 });
             } catch (error) {
                 console.error("Error creating image promise for PDF:", error);
-                logoImage = null; // Ensure generation continues
+                logoImage = null; 
             }
         }
         
         const doc = new jsPDF();
         
-        let tableStartY = 30; // Default start Y for tables if no logo
+        let tableStartY = 30; 
         
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(12);
@@ -191,7 +190,7 @@ const generateApprovalReport = async (request: ApprovalRequest, summaryData: Ret
                 const imgY = 15;
                 doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); // Adjust table start based on logo height
+                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); 
             } catch (e) {
                 console.error("Failed to add logo to PDF, falling back to text only.", e);
                 doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
@@ -1420,8 +1419,8 @@ export default function ProcurementQuickSubmitPage() {
                                         setPreviousSubmissionToLoad(val);
                                         setIsLoadConfirmDialogOpen(true);
                                     } else {
+                                        handleLoadPrevious(); 
                                         setPreviousSubmissionToLoad(val);
-                                        handleLoadPrevious(); // Call directly if no items to overwrite
                                     }
                                 }}
                                 value={previousSubmissionToLoad || ""}
@@ -1432,7 +1431,7 @@ export default function ProcurementQuickSubmitPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {previousSubmissions && previousSubmissions.length > 0 ? previousSubmissions.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>{s.period} - {s.id} ({s.items.length} items)</SelectItem>
+                                        <SelectItem key={s.id} value={s.id}>{`${s.period} - ${s.id} (${s.items.length} items)`}</SelectItem>
                                     )) : <div className="p-4 text-sm text-muted-foreground">No previous submissions found.</div>}
                                 </SelectContent>
                             </Select>
@@ -1867,7 +1866,6 @@ export default function ProcurementQuickSubmitPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
         </div>
     );
 }

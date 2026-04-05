@@ -304,7 +304,6 @@ const RequestDetailsView = ({
                 try {
                     logoImage = await new Promise((resolve) => {
                         const img = new Image();
-                        img.crossOrigin = "Anonymous"; 
                         img.onload = () => resolve(img);
                         img.onerror = (err) => {
                             console.error("PDF Logo Load Error:", err);
@@ -1596,9 +1595,3 @@ export default function ApprovalsPage() {
   );
 }
 
-
-
-
-
-
-    
