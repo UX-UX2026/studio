@@ -143,238 +143,6 @@ type AuditEvent = {
     };
 };
 
-const generateApprovalReport = async (request: ApprovalRequest, summaryData: ReturnType<typeof useBudgetSummary>, format: 'xlsx' | 'pdf', auditLogs?: AuditEvent[] | null, companies?: Company[] | null, appMetadata?: AppMetadata | null) => {
-    const operationalItems = request.items.filter(item => item.expenseType === 'Operational' || !item.expenseType);
-    const capitalItems = request.items.filter(item => item.expenseType === 'Capital');
-
-    if (format === 'pdf') {
-        const { default: jsPDF } = await import('jspdf');
-        const { default: autoTable } = await import('jspdf-autotable');
-        
-        const primaryColor = appMetadata?.pdfSettings?.primaryColor || '#c97353';
-        const company = companies?.find(c => c.id === request.companyId);
-        
-        let logoImage: HTMLImageElement | null = null;
-        if (company?.logoUrl) {
-            try {
-                logoImage = await new Promise((resolve) => {
-                    const img = new Image();
-                    img.onload = () => resolve(img);
-                    img.onerror = (err) => {
-                        console.error("PDF Logo Load Error:", err);
-                        resolve(null); 
-                    };
-                    img.src = company.logoUrl;
-                });
-            } catch (error) {
-                console.error("Error creating image promise for PDF:", error);
-                logoImage = null; 
-            }
-        }
-        
-        const doc = new jsPDF();
-        
-        let tableStartY = 30; 
-        
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(12);
-        doc.text(`ID: ${request.id}`, doc.internal.pageSize.getWidth() - 14, 22, { align: 'right' });
-        
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(16);
-        
-        if (logoImage) {
-            try {
-                const imgWidth = 30;
-                const imgHeight = (logoImage.height * imgWidth) / logoImage.width;
-                const imgY = 15;
-                doc.addImage(logoImage, 14, imgY, imgWidth, imgHeight);
-                doc.text(company?.name || request.companyName || 'Procurement Request', 14 + imgWidth + 5, 22);
-                tableStartY = Math.max(tableStartY, imgY + imgHeight + 8); 
-            } catch (e) {
-                console.error("Failed to add logo to PDF, falling back to text only.", e);
-                doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-            }
-        } else {
-            doc.text(company?.name || request.companyName || 'Procurement Request', 14, 22);
-        }
-
-        const detailsData: (string|number)[][] = [
-            ["Request ID", request.id],
-            ["Company", request.companyName || 'N/A'],
-            ["Department", request.department],
-            ["Period", request.period],
-            ["Submitted By", request.submittedBy || 'N/A'],
-            ["Total", formatCurrency(request.total)],
-            ["Status", request.status],
-        ];
-
-        autoTable(doc, {
-            startY: tableStartY,
-            head: [['Request Details', '']],
-            body: detailsData,
-            theme: 'striped',
-            headStyles: { fillColor: primaryColor },
-        });
-
-        if (operationalItems.length > 0) {
-            const opItemsData = operationalItems.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Operational Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: opItemsData,
-                headStyles: { fillColor: primaryColor },
-            });
-        }
-        
-        if (capitalItems.length > 0) {
-            const capItemsData = capitalItems.map(item => [
-                item.type,
-                item.description,
-                item.category,
-                item.qty,
-                formatCurrency(item.unitPrice),
-                formatCurrency(item.qty * item.unitPrice),
-            ]);
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Capital Items', 'Description', 'Category', 'Qty', 'Unit Price', 'Total']],
-                body: capItemsData,
-                headStyles: { fillColor: primaryColor },
-            });
-        }
-        
-        const opSummaryTableData = summaryData.operationalSummary.lines.map(line => [
-            line.category,
-            formatCurrency(line.procurementTotal),
-            formatCurrency(line.forecastTotal),
-            formatCurrency(line.variance),
-        ]);
-        if(opSummaryTableData.length > 0) {
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Operational Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: opSummaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.operationalSummary.totals.procurement),
-                    formatCurrency(summaryData.operationalSummary.totals.forecast),
-                    formatCurrency(summaryData.operationalSummary.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: primaryColor },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-        }
-        
-        const capSummaryTableData = summaryData.capitalSummary.lines.map(line => [
-            line.category,
-            formatCurrency(line.procurementTotal),
-            formatCurrency(line.forecastTotal),
-            formatCurrency(line.variance),
-        ]);
-         if(capSummaryTableData.length > 0) {
-            autoTable(doc, {
-                startY: (doc as any).lastAutoTable.finalY + 10,
-                head: [['Capital Budget Summary', 'Request Total', 'Forecast Total', 'Variance']],
-                body: capSummaryTableData,
-                foot: [[
-                    'Total',
-                    formatCurrency(summaryData.capitalSummary.totals.procurement),
-                    formatCurrency(summaryData.capitalSummary.totals.forecast),
-                    formatCurrency(summaryData.capitalSummary.totals.variance)
-                ]],
-                theme: 'grid',
-                headStyles: { fillColor: primaryColor },
-                footStyles: { fillColor: [230, 230, 230], textColor: 0, fontStyle: 'bold' }
-            });
-        }
-        
-        const timelineData = request.timeline.map(step => [
-            step.stage,
-            step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor,
-            step.status,
-            step.date || 'N/A',
-        ]);
-        autoTable(doc, {
-            startY: (doc as any).lastAutoTable.finalY + 10,
-            head: [['Stage', 'Actor', 'Status', 'Date']],
-            body: timelineData,
-            headStyles: { fillColor: primaryColor },
-            columnStyles: {
-                0: { cellWidth: 40 },
-                1: { cellWidth: 'auto' },
-                2: { cellWidth: 25 },
-                3: { cellWidth: 25 }
-            }
-        });
-
-        if (auditLogs && auditLogs.length > 0) {
-            const emailLog = auditLogs
-                .filter(log => log.action === 'notification.sent')
-                .map(log => ({
-                    timestamp: log.timestamp ? new Date(log.timestamp.seconds * 1000).toLocaleString('en-GB') : 'N/A',
-                    details: log.details,
-                }));
-        
-            if (emailLog.length > 0) {
-                autoTable(doc, {
-                    startY: (doc as any).lastAutoTable.finalY + 10,
-                    head: [['Notification Email History']],
-                    body: emailLog.map(log => [`${log.timestamp}\n${log.details}`]),
-                    theme: 'striped',
-                    headStyles: { fillColor: primaryColor },
-                    styles: { fontSize: 8 },
-                });
-            }
-        }
-
-        doc.save(`Procurement-Request-${request.id}.pdf`);
-        return;
-    }
-
-    // XLSX logic
-    const wb = XLSX.utils.book_new();
-
-    const detailsDataForSheet = [
-        { Key: "Request ID", Value: request.id },
-        { Key: "Company", Value: request.companyName || 'N/A' },
-        { Key: "Department", Value: request.department },
-        { Key: "Period", Value: request.period },
-        { Key: "Submitted By", Value: request.submittedBy || 'N/A' },
-        { Key: "Total", Value: formatCurrency(request.total) },
-        { Key: "Status", Value: request.status },
-    ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(detailsDataForSheet, { skipHeader: true }), "Request Details");
-
-    const opItemsData = operationalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
-    const capItemsData = capitalItems.map(item => ({ 'Type': item.type, 'Description': item.description, 'Category': item.category, 'Brand': item.brand, 'Quantity': item.qty, 'Unit Price': item.unitPrice, 'Total': item.qty * item.unitPrice }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opItemsData), "Operational Items");
-    if (capItemsData.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capItemsData), "Capital Items");
-
-    const opSummaryDataForSheet = summaryData.operationalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
-    opSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.operationalSummary.totals.procurement, 'Forecast Total': summaryData.operationalSummary.totals.forecast, 'Variance': summaryData.operationalSummary.totals.variance });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(opSummaryDataForSheet), "Operational Summary");
-
-    const capSummaryDataForSheet = summaryData.capitalSummary.lines.map(line => ({ 'Category': line.category, 'Request Total': line.procurementTotal, 'Forecast Total': line.forecastTotal, 'Variance': line.variance, }));
-    if (capSummaryDataForSheet.length > 0) {
-        capSummaryDataForSheet.push({ 'Category': 'GRAND TOTAL', 'Request Total': summaryData.capitalSummary.totals.procurement, 'Forecast Total': summaryData.capitalSummary.totals.forecast, 'Variance': summaryData.capitalSummary.totals.variance });
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(capSummaryDataForSheet), "Capital Summary");
-    }
-
-    const timelineData = request.timeline.map(step => ({ 'Stage': step.stage, 'Actor': step.delegatedByName ? `${step.actor} (for ${step.delegatedByName})` : step.actor, 'Status': step.status, 'Date': step.date || 'N/A', }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(timelineData), "Approval History");
-
-    XLSX.writeFile(wb, `Procurement-Request-${request.id}.xlsx`);
-};
-
 export default function ProcurementQuickSubmitPage() {
     const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
@@ -958,14 +726,6 @@ export default function ProcurementQuickSubmitPage() {
             await updateDoc(requestRef, updateData);
             toast(finalToastMessage);
 
-            if (newStatus === 'Approved') {
-                const reportDataForGeneration: ApprovalRequest = {
-                    ...activeRequest,
-                    ...updateData,
-                };
-                generateApprovalReport(reportDataForGeneration, { operationalSummary, capitalSummary }, 'xlsx', auditLogs, companies, appMetadata);
-            }
-
             const auditDetails = `Approved request ${activeRequest.id}, new status "${newStatus}"`;
 
             await addDoc(collection(firestore, 'auditLogs'), {
@@ -1506,19 +1266,23 @@ export default function ProcurementQuickSubmitPage() {
             </Card>
 
             <Card>
-                <Tabs defaultValue="submission" className="w-full">
-                    <CardHeader className="flex flex-row items-start justify-between">
-                         <div>
+                <CardHeader>
+                    <div className="flex flex-row items-start justify-between">
+                        <div>
                             <CardTitle>Period Submission {activeRequest && `(Submitted by ${activeRequest.submittedBy})`}</CardTitle>
                             <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
-                         </div>
-                         <TabsList className="grid grid-cols-2">
-                            <TabsTrigger value="submission">Submission Items</TabsTrigger>
-                            <TabsTrigger value="summary">Budget Summary</TabsTrigger>
-                        </TabsList>
-                    </CardHeader>
-                    <CardContent>
-                        <TabsContent value="submission">
+                        </div>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <Tabs defaultValue="submission" className="w-full">
+                        <div className="flex justify-end">
+                            <TabsList className="grid grid-cols-2">
+                                <TabsTrigger value="submission">Submission Items</TabsTrigger>
+                                <TabsTrigger value="summary">Budget Summary</TabsTrigger>
+                            </TabsList>
+                        </div>
+                        <TabsContent value="submission" className="pt-6">
                             <SubmissionClient 
                                 user={user}
                                 profile={profile}
@@ -1533,7 +1297,7 @@ export default function ProcurementQuickSubmitPage() {
                                 budgetItems={budgetItems}
                             />
                         </TabsContent>
-                        <TabsContent value="summary">
+                        <TabsContent value="summary" className="pt-6">
                             <div className="space-y-8">
                                 <div className="space-y-4">
                                     <div className="p-4 border rounded-lg bg-muted/50">
@@ -1683,8 +1447,8 @@ export default function ProcurementQuickSubmitPage() {
                                 </div>
                             </div>
                         </TabsContent>
-                    </CardContent>
-                </Tabs>
+                    </Tabs>
+                </CardContent>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
                     <div className="flex-1">
                         {isLocked ? (

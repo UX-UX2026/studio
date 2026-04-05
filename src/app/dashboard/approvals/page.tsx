@@ -299,23 +299,7 @@ const RequestDetailsView = ({
             
             const doc = new jsPDF();
             
-            let logoImage: HTMLImageElement | null = null;
-            if (company?.logoUrl) {
-                try {
-                    logoImage = await new Promise((resolve) => {
-                        const img = new Image();
-                        img.onload = () => resolve(img);
-                        img.onerror = (err) => {
-                            console.error("PDF Logo Load Error:", err);
-                            resolve(null); 
-                        };
-                        img.src = company.logoUrl;
-                    });
-                } catch (error) {
-                    console.error("Error creating image promise for PDF:", error);
-                    logoImage = null; 
-                }
-            }
+            const logoImage: HTMLImageElement | null = null;
             
             let tableStartY = 30; 
             
@@ -541,8 +525,8 @@ const RequestDetailsView = ({
                         date: currentDate, 
                         actor: actorName,
                         actorId: actorId,
-                        delegatedById: asDelegate ? delegator?.id : null,
-                        delegatedByName: asDelegate ? delegator?.displayName : null,
+                        delegatedById: asDelegate ? delegator?.id : undefined,
+                        delegatedByName: asDelegate ? delegator?.displayName : undefined,
                     };
                 }
                 if (step.stage === nextStageName) {
@@ -564,7 +548,7 @@ const RequestDetailsView = ({
             } else if (request.status === 'Approved') {
                 newStatus = 'In Fulfillment';
                 toastMessage = { title: "Request Acknowledged", description: `Admin action. Request is now in fulfillment.`};
-                newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment' as any));
+                newTimeline = newTimeline.map(timelineUpdater('Procurement Processing', 'In Fulfillment'));
             }
         } else if (role === 'Manager' && canApprove && (request.status === 'Pending Manager Approval' || request.status === 'Queries Raised')) {
             newStatus = 'Pending Executive';
@@ -584,8 +568,8 @@ const RequestDetailsView = ({
                     date: currentDate, 
                     actor: actorName, 
                     actorId, 
-                    delegatedById: asDelegate ? delegator?.id : null, 
-                    delegatedByName: asDelegate ? delegator?.displayName : null 
+                    delegatedById: asDelegate ? delegator?.id : undefined, 
+                    delegatedByName: asDelegate ? delegator?.displayName : undefined 
                 };
             }
             if (procProcessingIndex > -1) {
@@ -1594,4 +1578,5 @@ export default function ApprovalsPage() {
     </>
   );
 }
+
 

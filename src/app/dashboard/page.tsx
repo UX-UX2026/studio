@@ -507,7 +507,7 @@ export default function DashboardPage() {
                 try {
                     logoImage = await new Promise((resolve) => {
                         const img = new Image();
-                        img.crossOrigin = "Anonymous";
+                        img.crossOrigin = "anonymous";
                         img.onload = () => resolve(img);
                         img.onerror = (err) => {
                             console.error("PDF Logo Load Error:", err);
