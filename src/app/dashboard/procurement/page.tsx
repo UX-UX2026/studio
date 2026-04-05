@@ -1576,7 +1576,34 @@ export default function ProcurementQuickSubmitPage() {
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCategory === item.category && (
-                                                             <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"></TableCell></TableRow>
+                                                             <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                <TableCell colSpan={4} className="p-2">
+                                                                    <div className="p-2 bg-background rounded-md border">
+                                                                        <Table>
+                                                                            <TableHeader>
+                                                                                <TableRow>
+                                                                                    <TableHead>Item</TableHead>
+                                                                                    <TableHead>Type</TableHead>
+                                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {item.items.map((subItem) => (
+                                                                                    <TableRow key={subItem.id}>
+                                                                                        <TableCell>{subItem.description}</TableCell>
+                                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                    </TableRow>
+                                                                                ))}
+                                                                            </TableBody>
+                                                                        </Table>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
                                                         )}
                                                     </Fragment>
                                                 )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
@@ -1619,7 +1646,34 @@ export default function ProcurementQuickSubmitPage() {
                                                             </TableCell>
                                                         </TableRow>
                                                         {openCapitalCategory === item.category && (
-                                                            <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"></TableCell></TableRow>
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                                                <TableCell colSpan={4} className="p-2">
+                                                                    <div className="p-2 bg-background rounded-md border">
+                                                                        <Table>
+                                                                            <TableHeader>
+                                                                                <TableRow>
+                                                                                    <TableHead>Item</TableHead>
+                                                                                    <TableHead>Type</TableHead>
+                                                                                    <TableHead className="text-center">Qty</TableHead>
+                                                                                    <TableHead className="text-right">Unit Price</TableHead>
+                                                                                    <TableHead className="text-right">Total</TableHead>
+                                                                                </TableRow>
+                                                                            </TableHeader>
+                                                                            <TableBody>
+                                                                                {item.items.map((subItem) => (
+                                                                                    <TableRow key={subItem.id}>
+                                                                                        <TableCell>{subItem.description}</TableCell>
+                                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                    </TableRow>
+                                                                                ))}
+                                                                            </TableBody>
+                                                                        </Table>
+                                                                    </div>
+                                                                </TableCell>
+                                                            </TableRow>
                                                         )}
                                                     </Fragment>
                                                 )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
@@ -1763,7 +1817,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
