@@ -1,9 +1,10 @@
+
 'use client';
 
 import { useEffect, useCallback, useRef } from 'react';
 
 const useInactivityTimeout = (onTimeout: () => void, timeoutInMinutes: number) => {
-    const timeoutId = useRef<NodeJS.Timeout | null>(null);
+    const timeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const resetTimer = useCallback(() => {
         if (timeoutId.current) {
@@ -47,3 +48,4 @@ const useInactivityTimeout = (onTimeout: () => void, timeoutInMinutes: number) =
 };
 
 export default useInactivityTimeout;
+
