@@ -376,7 +376,7 @@ export default function ProcurementQuickSubmitPage() {
         if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
             if (!selectedPeriod) setDraftItems([]);
             return;
-        };
+        }
 
         const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
 
@@ -1081,13 +1081,13 @@ export default function ProcurementQuickSubmitPage() {
     };
 
     useEffect(() => {
-      const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
+      const allowedRolesList = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
       if (userLoading) return;
       if (!user) {
         router.push('/dashboard');
         return;
       }
-      if (role && !allowedRoles.includes(role)) {
+      if (role && !allowedRolesList.includes(role)) {
         router.push('/dashboard');
       }
     }, [user, role, userLoading, router]);
@@ -1106,7 +1106,7 @@ export default function ProcurementQuickSubmitPage() {
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [capitalSummary]);
 
-    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
+    const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
     if (loading || !user || !role || !allowedRoles.includes(role)) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
@@ -1272,8 +1272,8 @@ export default function ProcurementQuickSubmitPage() {
                         </div>
                     </div>
                 </CardHeader>
-                <Tabs defaultValue="submission" className="w-full">
-                    <CardContent>
+                <CardContent>
+                    <Tabs defaultValue="submission" className="w-full">
                         <div className="flex justify-end">
                             <TabsList className="grid grid-cols-2">
                                 <TabsTrigger value="submission">Submission Items</TabsTrigger>
@@ -1578,7 +1578,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
