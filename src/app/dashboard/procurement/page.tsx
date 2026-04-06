@@ -4,7 +4,7 @@
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight, Collapsible, CollapsibleTrigger, CollapsibleContent } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
@@ -31,7 +31,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { RecurringClient } from "@/components/app/recurring-client";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1312,10 +1311,9 @@ export default function ProcurementQuickSubmitPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.flatMap((item) => {
-                                                    const rows = [
+                                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
+                                                    <Fragment key={item.category}>
                                                         <TableRow
-                                                            key={item.category}
                                                             onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)}
                                                             className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
                                                         >
@@ -1330,11 +1328,8 @@ export default function ProcurementQuickSubmitPage() {
                                                                 {formatCurrency(item.variance)}
                                                             </TableCell>
                                                         </TableRow>
-                                                    ];
-
-                                                    if (openCategory === item.category) {
-                                                        rows.push(
-                                                            <TableRow key={`${item.category}-details`} className="bg-muted/50 hover:bg-muted/50">
+                                                        {openCategory === item.category && (
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
                                                                 <TableCell colSpan={4} className="p-2">
                                                                     <div className="p-2 bg-background rounded-md border">
                                                                         <Table>
@@ -1362,10 +1357,9 @@ export default function ProcurementQuickSubmitPage() {
                                                                     </div>
                                                                 </TableCell>
                                                             </TableRow>
-                                                        );
-                                                    }
-                                                    return rows;
-                                                }) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
+                                                        )}
+                                                    </Fragment>
+                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
                                             </TableBody>
                                             <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
@@ -1390,10 +1384,9 @@ export default function ProcurementQuickSubmitPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                 {capitalSummary.lines.length > 0 ? capitalSummary.lines.flatMap((item) => {
-                                                    const rows = [
+                                                 {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
+                                                    <Fragment key={item.category}>
                                                         <TableRow
-                                                            key={item.category}
                                                             onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)}
                                                             className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
                                                         >
@@ -1408,11 +1401,8 @@ export default function ProcurementQuickSubmitPage() {
                                                                 {formatCurrency(item.variance)}
                                                             </TableCell>
                                                         </TableRow>
-                                                    ];
-
-                                                    if (openCapitalCategory === item.category) {
-                                                        rows.push(
-                                                            <TableRow key={`${item.category}-details`} className="bg-muted/50 hover:bg-muted/50">
+                                                        {openCapitalCategory === item.category && (
+                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
                                                                 <TableCell colSpan={4} className="p-2">
                                                                     <div className="p-2 bg-background rounded-md border">
                                                                         <Table>
@@ -1440,10 +1430,9 @@ export default function ProcurementQuickSubmitPage() {
                                                                     </div>
                                                                 </TableCell>
                                                             </TableRow>
-                                                        );
-                                                    }
-                                                    return rows;
-                                                }) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
+                                                        )}
+                                                    </Fragment>
+                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
                                             </TableBody>
                                             <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
@@ -1584,7 +1573,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
@@ -1637,4 +1626,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
