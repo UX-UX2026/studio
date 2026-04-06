@@ -37,8 +37,6 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
-import * as XLSX from 'xlsx';
-import { PlaceHolderImages } from '@/lib/placeholder-images';
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -291,12 +289,6 @@ export default function ProcurementQuickSubmitPage() {
         const validStatus = ['Pending Manager Approval', 'Pending Executive', 'Queries Raised'];
         return validStatus.includes(activeRequest.status);
     }, [role, activeRequest]);
-
-    const departmentCategories = useMemo(() => {
-        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
-        const combined = new Set([...categoriesFromBudget, 'Uncategorized']);
-        return Array.from(combined).sort();
-    }, [budgetItems]);
 
     // Handle incoming query params to resume a draft
     useEffect(() => {
@@ -1106,8 +1098,7 @@ export default function ProcurementQuickSubmitPage() {
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [capitalSummary]);
 
-    const allowedRoles = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
-    if (loading || !user || !role || !allowedRoles.includes(role)) {
+    if (loading) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -1262,24 +1253,23 @@ export default function ProcurementQuickSubmitPage() {
                     </CollapsibleContent>
                 </Collapsible>
             </Card>
-
             <Card>
                 <CardHeader>
-                    <div className="flex flex-row items-start justify-between">
+                    <div className="flex justify-between items-start">
                         <div>
                             <CardTitle>Period Submission {activeRequest && `(Submitted by ${activeRequest.submittedBy})`}</CardTitle>
                             <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
                         </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Tabs defaultValue="submission" className="w-full">
-                        <div className="flex justify-end">
+                        <Tabs defaultValue="submission" className="w-auto">
                             <TabsList className="grid grid-cols-2">
                                 <TabsTrigger value="submission">Submission Items</TabsTrigger>
                                 <TabsTrigger value="summary">Budget Summary</TabsTrigger>
                             </TabsList>
-                        </div>
+                        </Tabs>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    <Tabs defaultValue="submission" className="w-full">
                         <TabsContent value="submission" className="pt-6">
                             <SubmissionClient 
                                 user={user}
@@ -1322,52 +1312,50 @@ export default function ProcurementQuickSubmitPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => (
-                                                    <Fragment key={item.category}>
-                                                        <TableRow onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                                            <TableCell className="font-medium flex items-center gap-2">
-                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
-                                                                {item.category}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                {formatCurrency(item.variance)}
+                                                {operationalSummary.lines.length > 0 ? operationalSummary.lines.map((item) => ([
+                                                    <TableRow key={item.category} onClick={() => setOpenCategory(openCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                        <TableCell className="font-medium flex items-center gap-2">
+                                                            <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === item.category && "rotate-90")} />
+                                                            {item.category}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                            {formatCurrency(item.variance)}
+                                                        </TableCell>
+                                                    </TableRow>,
+                                                    openCategory === item.category && (
+                                                         <TableRow key={`${item.category}-details`} className="bg-muted/50 hover:bg-muted/50">
+                                                            <TableCell colSpan={4} className="p-2">
+                                                                <div className="p-2 bg-background rounded-md border">
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow>
+                                                                                <TableHead>Item</TableHead>
+                                                                                <TableHead>Type</TableHead>
+                                                                                <TableHead className="text-center">Qty</TableHead>
+                                                                                <TableHead className="text-right">Unit Price</TableHead>
+                                                                                <TableHead className="text-right">Total</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {item.items.map((subItem) => (
+                                                                                <TableRow key={subItem.id}>
+                                                                                    <TableCell>{subItem.description}</TableCell>
+                                                                                    <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                    <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
-                                                        {openCategory === item.category && (
-                                                             <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                <TableCell colSpan={4} className="p-2">
-                                                                    <div className="p-2 bg-background rounded-md border">
-                                                                        <Table>
-                                                                            <TableHeader>
-                                                                                <TableRow>
-                                                                                    <TableHead>Item</TableHead>
-                                                                                    <TableHead>Type</TableHead>
-                                                                                    <TableHead className="text-center">Qty</TableHead>
-                                                                                    <TableHead className="text-right">Unit Price</TableHead>
-                                                                                    <TableHead className="text-right">Total</TableHead>
-                                                                                </TableRow>
-                                                                            </TableHeader>
-                                                                            <TableBody>
-                                                                                {item.items.map((subItem) => (
-                                                                                    <TableRow key={subItem.id}>
-                                                                                        <TableCell>{subItem.description}</TableCell>
-                                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                                    </TableRow>
-                                                                                ))}
-                                                                            </TableBody>
-                                                                        </Table>
-                                                                    </div>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </Fragment>
-                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
+                                                    )
+                                                ])) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational budget data.</TableCell></TableRow>}
                                             </TableBody>
                                             <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(operationalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
@@ -1392,52 +1380,50 @@ export default function ProcurementQuickSubmitPage() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => (
-                                                     <Fragment key={item.category}>
-                                                        <TableRow onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
-                                                            <TableCell className="font-medium flex items-center gap-2">
-                                                                <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />
-                                                                {item.category}
-                                                            </TableCell>
-                                                            <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
-                                                            <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
-                                                            <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
-                                                                {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
-                                                                {formatCurrency(item.variance)}
+                                                {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((item) => ([
+                                                     <TableRow key={item.category} onClick={() => setOpenCapitalCategory(openCapitalCategory === item.category ? null : item.category)} className={cn("cursor-pointer", item.isOverBudget && "bg-red-50 dark:bg-red-900/20")}>
+                                                        <TableCell className="font-medium flex items-center gap-2">
+                                                            <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === item.category && "rotate-90")} />
+                                                            {item.category}
+                                                        </TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.procurementTotal)}</TableCell>
+                                                        <TableCell className="text-right font-mono">{formatCurrency(item.forecastTotal)}</TableCell>
+                                                        <TableCell className={cn("text-right font-mono font-semibold", item.isOverBudget && "text-red-500 flex items-center justify-end gap-2")}>
+                                                            {item.isOverBudget && <AlertTriangle className="h-4 w-4" />}
+                                                            {formatCurrency(item.variance)}
+                                                        </TableCell>
+                                                    </TableRow>,
+                                                    openCapitalCategory === item.category && (
+                                                        <TableRow key={`${item.category}-details`} className="bg-muted/50 hover:bg-muted/50">
+                                                            <TableCell colSpan={4} className="p-2">
+                                                                <div className="p-2 bg-background rounded-md border">
+                                                                    <Table>
+                                                                        <TableHeader>
+                                                                            <TableRow>
+                                                                                <TableHead>Item</TableHead>
+                                                                                <TableHead>Type</TableHead>
+                                                                                <TableHead className="text-center">Qty</TableHead>
+                                                                                <TableHead className="text-right">Unit Price</TableHead>
+                                                                                <TableHead className="text-right">Total</TableHead>
+                                                                            </TableRow>
+                                                                        </TableHeader>
+                                                                        <TableBody>
+                                                                            {item.items.map((subItem) => (
+                                                                                <TableRow key={subItem.id}>
+                                                                                    <TableCell>{subItem.description}</TableCell>
+                                                                                    <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
+                                                                                    <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                    <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                </TableRow>
+                                                                            ))}
+                                                                        </TableBody>
+                                                                    </Table>
+                                                                </div>
                                                             </TableCell>
                                                         </TableRow>
-                                                        {openCapitalCategory === item.category && (
-                                                            <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                                                <TableCell colSpan={4} className="p-2">
-                                                                    <div className="p-2 bg-background rounded-md border">
-                                                                        <Table>
-                                                                            <TableHeader>
-                                                                                <TableRow>
-                                                                                    <TableHead>Item</TableHead>
-                                                                                    <TableHead>Type</TableHead>
-                                                                                    <TableHead className="text-center">Qty</TableHead>
-                                                                                    <TableHead className="text-right">Unit Price</TableHead>
-                                                                                    <TableHead className="text-right">Total</TableHead>
-                                                                                </TableRow>
-                                                                            </TableHeader>
-                                                                            <TableBody>
-                                                                                {item.items.map((subItem) => (
-                                                                                    <TableRow key={subItem.id}>
-                                                                                        <TableCell>{subItem.description}</TableCell>
-                                                                                        <TableCell><Badge variant={subItem.type === 'Recurring' ? 'secondary' : 'outline'}>{subItem.type}</Badge></TableCell>
-                                                                                        <TableCell className="text-center">{subItem.qty}</TableCell>
-                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice)}</TableCell>
-                                                                                        <TableCell className="text-right font-mono">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
-                                                                                    </TableRow>
-                                                                                ))}
-                                                                            </TableBody>
-                                                                        </Table>
-                                                                    </div>
-                                                                </TableCell>
-                                                            </TableRow>
-                                                        )}
-                                                    </Fragment>
-                                                )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
+                                                    )
+                                                ])) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital items in this submission.</TableCell></TableRow>}
                                             </TableBody>
                                             <TableFooter><TableRow><TableCell>Subtotal</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.procurement)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.forecast)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(capitalSummary.totals.variance)}</TableCell></TableRow></TableFooter>
                                         </Table>
