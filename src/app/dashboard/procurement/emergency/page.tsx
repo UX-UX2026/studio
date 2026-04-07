@@ -203,6 +203,18 @@ export default function EmergencyProcurementPage() {
     const isLocked = !selectedPeriod;
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
+    const operationalBudgetProgress = useMemo(() => {
+        const { procurement, forecast } = operationalSummary.totals;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
+    }, [operationalSummary]);
+
+    const capitalBudgetProgress = useMemo(() => {
+        const { procurement, forecast } = capitalSummary.totals;
+        if (forecast <= 0) return procurement > 0 ? 100 : 0;
+        return Math.min(Math.round((procurement / forecast) * 100), 100);
+    }, [capitalSummary]);
+
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !profile || !departmentName || !selectedDepartmentId || !firestore) {
             toast({ variant: "destructive", title: "Cannot save", description: "User or department information is missing." });
@@ -381,14 +393,14 @@ export default function EmergencyProcurementPage() {
                                         <div><h3 className="font-semibold text-lg">Operational Budget Impact: {selectedPeriod}</h3></div>
                                         <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement)}</p><p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(operationalSummary.totals.forecast)}</p></div>
                                     </div>
-                                    <Progress value={useMemo(() => Math.min(Math.round((operationalSummary.totals.procurement / (operationalSummary.totals.forecast || 1)) * 100), 100), [operationalSummary])} className="mt-4" />
+                                    <Progress value={operationalBudgetProgress} className="mt-4" />
                                 </div>
                                 <div className="p-4 border rounded-lg bg-muted/50">
                                     <div className="flex justify-between items-center">
                                         <div><h3 className="font-semibold text-lg">Capital Budget Impact: {selectedPeriod}</h3></div>
                                         <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(capitalSummary.totals.procurement)}</p><p className="text-sm text-muted-foreground">vs forecast of {formatCurrency(capitalSummary.totals.forecast)}</p></div>
                                     </div>
-                                    <Progress value={useMemo(() => Math.min(Math.round((capitalSummary.totals.procurement / (capitalSummary.totals.forecast || 1)) * 100), 100), [capitalSummary])} className="mt-4" />
+                                    <Progress value={capitalBudgetProgress} className="mt-4" />
                                 </div>
                             </div>
                         </TabsContent>
@@ -410,4 +422,3 @@ export default function EmergencyProcurementPage() {
         </div>
     );
 }
-
