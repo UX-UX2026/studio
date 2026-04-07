@@ -307,6 +307,15 @@ export default function DashboardPage() {
         return { totalSpend, pendingManager, pendingExecutive, queriesRaised, approvedCount, fulfillmentCount, openRequests };
     }, [filteredRequests, openStatuses]);
     
+    const emergencyStats = useMemo(() => {
+      const emergencyRequests = (filteredRequests || []).filter(req => req.isEmergency);
+      const count = emergencyRequests.length;
+      const totalAmount = emergencyRequests.reduce((sum, req) => sum + req.total, 0);
+      const averageAmount = count > 0 ? totalAmount / count : 0;
+
+      return { count, totalAmount, averageAmount };
+    }, [filteredRequests]);
+
     const allUserOpenRequests = useMemo(() => allRequestsForUser?.filter(req => openStatuses.includes(req.status)) || [], [allRequestsForUser, openStatuses]);
 
 
@@ -798,29 +807,25 @@ export default function DashboardPage() {
                       </CardContent>
                     </Card>
                     <Card>
-                      <CardHeader>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">
-                          Fulfillment Overview
+                          Emergency Requests ({filterTitle})
                         </CardTitle>
-                        <CardDescription className="text-xs">All active fulfillment tasks.</CardDescription>
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
                       </CardHeader>
                       <CardContent>
-                        {fulfillmentLoading ? (
-                            <div className="flex items-center justify-center h-24">
-                              <Loader className="h-6 w-6 animate-spin" />
-                            </div>
+                        {requestsLoading ? (
+                          <div className="flex items-center justify-center h-24">
+                            <Loader className="h-6 w-6 animate-spin" />
+                          </div>
                         ) : (
                           <>
-                            <div className="text-2xl font-bold">{allFulfillmentItems.filter(i => i.fulfillmentStatus !== 'Completed').length} Open Tasks</div>
+                            <div className="text-2xl font-bold">{emergencyStats.count} Requests</div>
                             <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                                <div>Sourcing</div>
-                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Sourcing || 0}</div>
-                                <div>Quoted</div>
-                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Quoted || 0}</div>
-                                <div>Ordered</div>
-                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Ordered || 0}</div>
-                                <div>Completed</div>
-                                <div className="font-semibold text-right text-foreground">{fulfillmentSummary.Completed || 0}</div>
+                              <div>Total Value</div>
+                              <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.totalAmount)}</div>
+                              <div>Avg. Value</div>
+                              <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.averageAmount)}</div>
                             </div>
                           </>
                         )}
