@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { format, addMonths } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -103,6 +104,7 @@ export default function EmergencyProcurementPage() {
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
     
     const [draftItems, setDraftItems] = useState<Item[]>([]);
+    const [justification, setJustification] = useState<string>('');
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
@@ -192,10 +194,12 @@ export default function EmergencyProcurementPage() {
             setDraftItems(existingRequest.items);
             setEditingRequestId(existingRequest.id);
             setSelectedCompanyId(existingRequest.companyId || '');
+            setJustification(existingRequest.emergencyJustification || '');
         } else {
             setDraftItems([]);
             setEditingRequestId(null);
             setSelectedCompanyId('');
+            setJustification('');
         }
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading]);
 
@@ -290,6 +294,7 @@ export default function EmergencyProcurementPage() {
             total: submissionTotal,
             status: newStatus,
             isEmergency: true,
+            emergencyJustification: justification,
             submittedBy: actorString,
             submittedById: user.uid,
             timeline: timeline,
@@ -366,6 +371,17 @@ export default function EmergencyProcurementPage() {
                                 <SelectContent>{[...Array(12)].map((_, i) => format(addMonths(new Date(), i), "MMMM yyyy")).map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
+                    </div>
+                    <div className="mt-6 grid gap-1.5">
+                        <Label htmlFor="justification">Reason for Emergency</Label>
+                        <Textarea
+                            id="justification"
+                            placeholder="Please provide a detailed reason why this submission is an emergency..."
+                            value={justification}
+                            onChange={(e) => setJustification(e.target.value)}
+                            rows={4}
+                            disabled={isLocked}
+                        />
                     </div>
                 </CardContent>
             </Card>

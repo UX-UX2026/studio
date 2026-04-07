@@ -24,6 +24,7 @@ export type ApprovalRequest = {
     total: number;
     status: "Pending Executive" | "Completed" | "Queries Raised" | "Pending Manager Approval" | "Approved" | 'Rejected' | 'Draft' | 'In Fulfillment' | 'Archived';
     isEmergency?: boolean;
+    emergencyJustification?: string;
     submittedBy: string;
     submittedById: string;
     companyId?: string;
