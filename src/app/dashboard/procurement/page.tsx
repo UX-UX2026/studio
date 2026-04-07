@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
@@ -174,7 +175,6 @@ export default function ProcurementQuickSubmitPage() {
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [archiveReason, setArchiveReason] = useState('');
 
-    const [isEmergency, setIsEmergency] = useState(false);
     const [openCategory, setOpenCategory] = useState<string | null>(null);
     const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
@@ -391,7 +391,6 @@ export default function ProcurementQuickSubmitPage() {
             const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
             setSelectedCompanyId(existingRequest.companyId || '');
-            setIsEmergency(existingRequest.isEmergency || false);
 
             // ...and also add any NEW recurring items from the master list that are not already present.
             const savedItemDescriptions = new Set(savedItems.map(i => i.description));
@@ -507,7 +506,7 @@ export default function ProcurementQuickSubmitPage() {
             !['Draft', 'Completed', 'Rejected', 'Queries Raised', 'Archived'].includes(req.status)
         );
 
-        if (appMetadata?.limitToOneSubmissionPerPeriod && role !== 'Administrator' && activePipelineRequest && !isEmergency) {
+        if (appMetadata?.limitToOneSubmissionPerPeriod && role !== 'Administrator' && activePipelineRequest) {
             toast({
                 variant: "destructive",
                 title: "Active Submission Exists",
@@ -556,20 +555,10 @@ export default function ProcurementQuickSubmitPage() {
         if (isDraft) {
             newStatus = 'Draft';
         } else {
-            // Default flow
             newStatus = (role === 'Administrator' || isSubmitterTheDeptManager) 
                 ? 'Pending Executive' 
                 : 'Pending Manager Approval';
     
-            // Emergency flow overrides
-            if (isEmergency) {
-                if (role === 'Administrator' || isSubmitterTheDeptManager) {
-                    newStatus = 'Approved';
-                } else {
-                    newStatus = 'Pending Executive';
-                }
-            }
-            
             // Set timeline based on final status
             if (newStatus === 'Pending Manager Approval') {
                 const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
@@ -580,14 +569,6 @@ export default function ProcurementQuickSubmitPage() {
                 
                 const execIndex = timeline.findIndex(s => s.stage === 'Executive Approval');
                 if (execIndex > -1) timeline[execIndex].status = 'pending';
-            } else if (newStatus === 'Approved') {
-                const procIndex = timeline.findIndex(s => s.stage === 'Procurement Processing');
-                for (let i = 0; i < procIndex; i++) {
-                    if (timeline[i].status !== 'completed') {
-                        timeline[i] = { ...timeline[i], status: 'completed', actor: 'System (Emergency)', date: currentDate };
-                    }
-                }
-                if (procIndex > -1) timeline[procIndex].status = 'pending';
             }
         }
 
@@ -601,7 +582,7 @@ export default function ProcurementQuickSubmitPage() {
             period: selectedPeriod,
             total: submissionTotal,
             status: newStatus,
-            isEmergency: isEmergency,
+            isEmergency: false,
             submittedBy: actorString,
             submittedById: user.uid,
             timeline: timeline,
@@ -1442,31 +1423,12 @@ export default function ProcurementQuickSubmitPage() {
                 </Tabs>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
                     <div className="flex-1">
-                        {isLocked ? (
+                        {isLocked && (
                             <div className="flex items-center gap-3 text-yellow-800">
                                 <Globe className="h-5 w-5"/>
                                 <div className="text-sm font-medium">
                                     <p>{isLockedByWorkflow ? "This submission is locked as it is already in the approval pipeline." : "Select an open period to begin."}</p>
                                 </div>
-                            </div>
-                        ) : (
-                             <div className="flex items-center space-x-2">
-                                <Switch
-                                    id="emergency-switch"
-                                    checked={isEmergency}
-                                    onCheckedChange={(checked) => {
-                                        setIsEmergency(checked);
-                                        if (checked) {
-                                            setEditingRequestId(null);
-                                            setDraftItems([]);
-                                            toast({
-                                                title: "Emergency Request Mode",
-                                                description: "You are now creating a new, separate emergency request. Any items from a standard draft have been cleared.",
-                                            });
-                                        }
-                                    }}
-                                />
-                                <Label htmlFor="emergency-switch" className="text-red-600 font-semibold">Emergency Request</Label>
                             </div>
                         )}
                     </div>
