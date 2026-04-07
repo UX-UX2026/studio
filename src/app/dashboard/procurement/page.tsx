@@ -1,10 +1,10 @@
-
 'use client';
 
 import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight, Collapsible, CollapsibleTrigger, CollapsibleContent } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
@@ -1253,22 +1253,20 @@ export default function ProcurementQuickSubmitPage() {
                 </Collapsible>
             </Card>
             <Card>
-                <CardHeader>
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <CardTitle>Period Submission {activeRequest && `(Submitted by ${activeRequest.submittedBy})`}</CardTitle>
-                            <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
-                        </div>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                     <Tabs defaultValue="submission" className="w-full">
-                        <div className="flex justify-end">
-                            <TabsList className="mb-4">
+                <Tabs defaultValue="submission" className="w-full">
+                    <CardHeader>
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <CardTitle>Period Submission {activeRequest && `(Submitted by ${activeRequest.submittedBy})`}</CardTitle>
+                                <CardDescription>Manage line items and compare against the budget forecast for this period.</CardDescription>
+                            </div>
+                            <TabsList>
                                 <TabsTrigger value="submission">Submission Items</TabsTrigger>
                                 <TabsTrigger value="summary">Budget Summary</TabsTrigger>
                             </TabsList>
                         </div>
+                    </CardHeader>
+                    <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
                                 user={user}
@@ -1440,8 +1438,8 @@ export default function ProcurementQuickSubmitPage() {
                                 </div>
                             </div>
                         </TabsContent>
-                    </Tabs>
-                </CardContent>
+                    </CardContent>
+                </Tabs>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
                     <div className="flex-1">
                         {isLocked ? (
