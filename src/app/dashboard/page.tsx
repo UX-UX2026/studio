@@ -807,31 +807,33 @@ export default function DashboardPage() {
                         )}
                       </CardContent>
                     </Card>
-                    <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">
-                          Emergency Requests ({filterTitle})
-                        </CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-destructive" />
-                      </CardHeader>
-                      <CardContent>
-                        {requestsLoading ? (
-                          <div className="flex items-center justify-center h-24">
-                            <Loader className="h-6 w-6 animate-spin" />
-                          </div>
-                        ) : (
-                          <>
-                            <div className="text-2xl font-bold">{emergencyStats.count} Requests</div>
-                            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                              <div>Total Value</div>
-                              <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.totalAmount)}</div>
-                              <div>Avg. Value</div>
-                              <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.averageAmount)}</div>
-                            </div>
-                          </>
-                        )}
-                      </CardContent>
-                    </Card>
+                    <Link href="/dashboard/approvals?emergency=true" className="block hover:shadow-lg transition-shadow rounded-lg">
+                        <Card className="h-full">
+                          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">
+                              Emergency Requests ({filterTitle})
+                            </CardTitle>
+                            <AlertTriangle className="h-4 w-4 text-destructive" />
+                          </CardHeader>
+                          <CardContent>
+                            {requestsLoading ? (
+                              <div className="flex items-center justify-center h-24">
+                                <Loader className="h-6 w-6 animate-spin" />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="text-2xl font-bold">{emergencyStats.count} Requests</div>
+                                <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                  <div>Total Value</div>
+                                  <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.totalAmount)}</div>
+                                  <div>Avg. Value</div>
+                                  <div className="font-semibold text-right text-foreground">{formatCurrency(emergencyStats.averageAmount)}</div>
+                                </div>
+                              </>
+                            )}
+                          </CardContent>
+                        </Card>
+                    </Link>
                   </div>
 
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

@@ -1361,8 +1361,12 @@ export default function ApprovalsPage() {
         if (!approvals) return [];
         let requests = approvals;
         const statusFilter = searchParams.get('status');
+        const emergencyFilter = searchParams.get('emergency');
         if (statusFilter) {
             requests = requests.filter(req => req.status === decodeURIComponent(statusFilter));
+        }
+        if (emergencyFilter === 'true') {
+            requests = requests.filter(req => req.isEmergency);
         }
         if (monthFilter && monthFilter !== 'All Months') {
             requests = requests.filter(req => req.period === monthFilter);

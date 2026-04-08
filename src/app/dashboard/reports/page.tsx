@@ -4,7 +4,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
-import { Loader, FilePieChart, BarChart, Clock, Building } from "lucide-react";
+import { Loader, FilePieChart, BarChart, Clock, Building, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -33,6 +33,12 @@ const reports = [
         description: "Compare budgeted amounts against actual spend for each cost center.",
         icon: FilePieChart,
         href: "/dashboard/procurement-summary"
+    },
+    {
+        title: "Emergency Submissions",
+        description: "Review all emergency and unplanned procurement submissions.",
+        icon: AlertTriangle,
+        href: "/dashboard/approvals?emergency=true"
     }
 ];
 
@@ -99,5 +105,3 @@ export default function ReportsPage() {
     </div>
   );
 }
-
-    
