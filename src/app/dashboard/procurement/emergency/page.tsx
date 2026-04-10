@@ -1,7 +1,9 @@
 
+
 'use client';
 
-import { useUser, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
+import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
 import { Loader, AlertTriangle, Globe, Check } from "lucide-react";

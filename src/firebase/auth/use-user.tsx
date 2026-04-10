@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useAuthentication, type UserProfile } from '@/context/authentication-provider';
@@ -8,11 +9,8 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { signOut } from 'firebase/auth';
 
-export type { UserProfile };
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
-
-const EMPTY_ARRAY: string[] = [];
 
 /**
  * This hook is the definitive source for user and profile information.
@@ -148,8 +146,8 @@ export function useUser() {
         role: isSuperAdmin ? 'Administrator' : (profile?.role || null),
         department: profile?.department || null,
         departmentId: profile?.departmentId || null,
-        reportingDepartments: profile?.reportingDepartments || EMPTY_ARRAY,
-        companyIds: profile?.companyIds || EMPTY_ARRAY,
+        reportingDepartments: profile?.reportingDepartments || [],
+        companyIds: profile?.companyIds || [],
         status: profile?.status || null,
         loading: isLoading,
     };
