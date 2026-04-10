@@ -1,4 +1,3 @@
-
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
@@ -51,6 +50,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+let firestoreInstance: Firestore | null = null;
+
+// This function ensures Firestore is initialized only once with persistence.
+const getAppFirestore = (app: FirebaseApp): Firestore => {
+    if (firestoreInstance) {
+        return firestoreInstance;
+    }
+
+    try {
+        // Try to initialize with persistence.
+        firestoreInstance = initializeFirestore(app, {
+            cache: persistentLocalCache({ synchronizeTabs: true })
+        });
+        console.log("Firestore offline persistence with tab synchronization enabled.");
+    } catch (err: any) {
+        // This error can occur on subsequent attempts in strict mode or with HMR.
+        // We can safely get the existing instance.
+        console.warn(`Firestore persistence initialization failed (this is common in development): ${(err as Error).message}. Re-using existing instance.`);
+        firestoreInstance = getFirestore(app);
+    }
+    
+    return firestoreInstance;
+};
+
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -73,19 +96,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         
-        let firestore: Firestore;
-        try {
-            // Initialize with persistent cache and tab synchronization.
-            firestore = initializeFirestore(app, {
-                cache: persistentLocalCache({ synchronizeTabs: true })
-            });
-             console.log("Firestore offline persistence with tab synchronization enabled.");
-        } catch (err: any) {
-            // If persistent cache fails (e.g., multiple tabs, browser limitations),
-            // just get the default instance. This prevents re-initialization errors.
-            console.warn(`Firestore persistence initialization failed: ${(err as Error).message}. Falling back to default Firestore instance.`);
-            firestore = getFirestore(app);
-        }
+        const firestore = getAppFirestore(app);
         
         setFirebaseServices({ app, auth, firestore });
       } catch (err) {
