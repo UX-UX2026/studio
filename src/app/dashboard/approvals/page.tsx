@@ -48,7 +48,6 @@ import * as XLSX from 'xlsx';
 import { PlaceHolderImages } from "@/lib/placeholder-images";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { type PdfSettings } from "../settings/pdf-design/page";
 import type { User } from "firebase/auth";
 import { format } from "date-fns";
 
@@ -56,6 +55,10 @@ type Company = {
     id: string;
     name: string;
     logoUrl?: string;
+};
+
+type PdfSettings = {
+    primaryColor?: string;
 };
 
 type AppMetadata = {
