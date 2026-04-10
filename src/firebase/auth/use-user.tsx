@@ -2,12 +2,13 @@
 
 'use client';
 
-import { useAuthentication, type UserProfile } from '@/context/authentication-provider';
+import { useAuthentication } from '@/context/authentication-provider';
+import type { UserProfile } from '@/context/authentication-provider';
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
-import { signOut } from 'firebase/auth';
+import { signOut, type User } from 'firebase/auth';
 
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
@@ -76,16 +77,14 @@ export function useUser() {
                     toast({ title: "Welcome, Administrator!", description: "Your admin profile has been created." });
                 } else {
                     // If the user is not a super admin and has no pre-existing profile, deny access.
-                    console.warn(`Access denied. No profile found for user: ${user.email}. Signing out.`);
+                    // We show a toast but DON'T sign them out. The UI is blocked by the DashboardLayout guard.
+                    console.warn(`Access denied. No profile found for user: ${user.email}.`);
                     toast({
                         variant: "destructive",
                         title: "Access Denied",
                         description: "Your account has not been setup by an administrator. Please contact support.",
                         duration: 9000,
                     });
-                    if (auth) {
-                        await signOut(auth);
-                    }
                 }
             };
 

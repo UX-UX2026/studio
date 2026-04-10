@@ -22,7 +22,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Lock, Plus, Trash2, Upload, Paperclip, History, Loader } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { type User, type UserRole, type UserProfile } from "@/firebase/auth/use-user";
+import type { User } from 'firebase/auth';
+import type { UserProfile } from '@/context/authentication-provider';
+import { useFirestore, useUser, type UserRole } from "@/firebase";
 import { cn } from "@/lib/utils";
 import { procurementCategories } from "@/lib/procurement-categories";
 import {
@@ -39,7 +41,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useFirestore, useUser } from "@/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Label } from "@/components/ui/label";
