@@ -68,7 +68,7 @@ const allLinks = [
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },
   { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, permission: 'fulfillment:view' },
   { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, permission: 'reports:view' },
-  { href: '/dashboard/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
+  { href: '/dashboard/settings/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
   { href: '/dashboard/settings/users', label: 'User Management', icon: Users, permission: 'settings:users' },
   { href: '/dashboard/help', label: 'Help', icon: LifeBuoy, permission: 'help:view' },
   { 
