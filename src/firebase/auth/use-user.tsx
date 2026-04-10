@@ -1,13 +1,14 @@
 
 'use client';
 
-import { useAuthentication, UserProfile } from '@/context/authentication-provider';
+import { useAuthentication, type UserProfile } from '@/context/authentication-provider';
 import { useDoc } from '@/firebase/firestore/use-doc';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { signOut } from 'firebase/auth';
 
+export type { UserProfile };
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
 
