@@ -389,7 +389,7 @@ export default function UsersPage() {
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button asChild variant="ghost" size="icon">
-                                                <Link href={`/dashboard/users/${u.id}`}>
+                                                <Link href={`/dashboard/settings/users/${u.id}`}>
                                                     <Edit className="h-4 w-4" />
                                                 </Link>
                                             </Button>

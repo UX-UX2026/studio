@@ -68,8 +68,6 @@ const allLinks = [
   { href: '/dashboard/approvals', label: 'Approvals', icon: PenLine, permission: 'approvals:view' },
   { href: '/dashboard/fulfillment', label: 'Fulfillment', icon: ClipboardCheck, permission: 'fulfillment:view' },
   { href: '/dashboard/reports', label: 'Reports', icon: FilePieChart, permission: 'reports:view' },
-  { href: '/dashboard/settings/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
-  { href: '/dashboard/settings/users', label: 'User Management', icon: Users, permission: 'settings:users' },
   { href: '/dashboard/help', label: 'Help', icon: LifeBuoy, permission: 'help:view' },
   { 
     label: 'Settings', 
@@ -77,10 +75,12 @@ const allLinks = [
     permissions: [
         'settings:general', 'settings:workflow', 'settings:departments', 'settings:roles', 
         'settings:budget', 'settings:auditlog', 'settings:errorlog', 'settings:procurement-periods', 
-        'settings:data', 'settings:email', 'settings:integrations', 'settings:users'
+        'settings:data', 'settings:email', 'settings:integrations', 'settings:users', 'vendors:manage'
     ],
     subLinks: [
         { href: '/dashboard/settings', label: 'General', icon: Settings, permission: 'settings:general', iconClass: "text-gray-500" },
+        { href: '/dashboard/settings/users', label: 'User Management', icon: Users, permission: 'settings:users' },
+        { href: '/dashboard/settings/vendors', label: 'Vendors', icon: Building2, permission: 'vendors:manage' },
         { href: '/dashboard/settings/workflow', label: 'Workflow', icon: Workflow, permission: 'settings:workflow', iconClass: "text-blue-500" },
         { href: '/dashboard/settings/departments', label: 'Departments', icon: Building, permission: 'settings:departments', iconClass: "text-orange-500" },
         { href: '/dashboard/settings/roles', label: 'Roles', icon: Shield, permission: 'settings:roles', iconClass: "text-purple-500" },
