@@ -117,26 +117,25 @@ export default function UsersPage() {
         const userToUpdate = users?.find(u => u.id === userId);
         if (!userToUpdate) return;
       
-        let updateData: Partial<UserProfile> = { [field]: value };
+        let updateData: Partial<UserProfile> = {};
         
         if (field === 'departmentId') {
           const selectedDept = departments?.find(d => d.id === value);
-          updateData = {
-            departmentId: value === 'unassigned' ? null : (selectedDept?.id || ''),
-            department: value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned'),
-          };
-        } else if (field === 'companyIds') {
-            updateData = { companyIds: value };
+          updateData.departmentId = value === 'unassigned' ? null : (selectedDept?.id || null);
+          updateData.department = value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned');
         } else if (field === 'delegatedToId') {
           const delegate = users?.find(u => u.id === value);
-          updateData = {
-            delegatedToId: value === 'none' ? null : (delegate?.id || ''),
-            delegatedToName: value === 'none' ? '' : (delegate?.displayName || ''),
-          };
-        } else if (field === 'reportingDepartments') {
-            updateData = { reportingDepartments: value };
+          updateData.delegatedToId = value === 'none' ? null : (delegate?.id || null);
+          updateData.delegatedToName = value === 'none' ? '' : (delegate?.displayName || '');
+        } else {
+          // Generic handler for other fields like 'role', 'status', 'companyIds', 'reportingDepartments'
+          (updateData as any)[field] = value;
         }
       
+        if (Object.keys(updateData).length === 0) {
+            return;
+        }
+
         const userRef = doc(firestore, 'users', userId);
         const action = 'user.quick_edit';
       

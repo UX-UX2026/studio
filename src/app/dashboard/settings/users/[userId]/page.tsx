@@ -87,6 +87,13 @@ export default function UserProfilePage() {
 
     const loading = adminLoading || userProfileLoading || deptsLoading || rolesLoading || allUsersLoading || auditLogsLoading || companiesLoading;
 
+    useEffect(() => {
+        if (adminLoading) return;
+        if (!adminUser || adminRole !== 'Administrator') {
+            router.push('/dashboard');
+        }
+    }, [adminUser, adminRole, adminLoading, router]);
+
     const handleFormChange = (field: keyof MainUserProfile, value: any) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
@@ -168,7 +175,7 @@ export default function UserProfilePage() {
             });
     };
 
-    if (loading) {
+    if (loading || !adminUser || adminRole !== 'Administrator') {
         return (
             <div className="flex h-screen items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
