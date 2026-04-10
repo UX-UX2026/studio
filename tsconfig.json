@@ -37,6 +37,7 @@
   ],
   "exclude": [
     "node_modules",
-    "src/app/(dashboard old)"
+    "src/app/(dashboard old)",
+    "src/ai/dev.ts"
   ]
 }
