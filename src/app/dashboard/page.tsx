@@ -164,7 +164,7 @@ export default function DashboardPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
 
-  const [monthFilter, setMonthFilter] = useState<string>('current_month');
+  const [monthFilter, setMonthFilter] = useState<string>('all_time');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState('overview');
 
