@@ -246,10 +246,10 @@ export default function DashboardPage() {
   }, [user, allDrafts, role, userDepartment]);
 
   const availableMonths = useMemo(() => {
-    if (!allRequestsForUser) return [{label: 'Current Month', value: 'current_month'}, {label: 'All Time', value: 'all_time'}];
+    if (!allRequestsForUser) return [{label: 'All Time', value: 'all_time'}, {label: 'Current Month', value: 'current_month'}];
     const months = new Set(allRequestsForUser.map(req => req.period));
     const sortedMonths = [...Array.from(months)].sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-    return [{label: 'Current Month', value: 'current_month'}, {label: 'All Time', value: 'all_time'}, ...sortedMonths.map(m => ({label: m, value: m}))];
+    return [{label: 'All Time', value: 'all_time'}, {label: 'Current Month', value: 'current_month'}, ...sortedMonths.map(m => ({label: m, value: m}))];
   }, [allRequestsForUser]);
 
   const departmentsForFilter = useMemo(() => {
@@ -320,7 +320,8 @@ export default function DashboardPage() {
     const allUserOpenRequests = useMemo(() => allRequestsForUser || [], [allRequestsForUser]);
 
 
-    const requestsLoading = allRequestsLoading || deptsLoading || budgetsLoading;
+    const mainWidgetsLoading = allRequestsLoading || deptsLoading;
+    const chartsLoading = allRequestsLoading || deptsLoading || budgetsLoading;
     
     const spendByDeptVsBudgetData = useMemo(() => {
         if (!filteredRequests || !allDepartments || !allBudgetItems) return [];
@@ -429,7 +430,7 @@ export default function DashboardPage() {
 
     const filterTitle = useMemo(() => {
         const month = availableMonths.find(m => m.value === monthFilter);
-        return month ? month.label : 'Current Month';
+        return month ? month.label : 'All Time';
     }, [monthFilter, availableMonths]);
 
 
@@ -768,7 +769,7 @@ export default function DashboardPage() {
                         <TrendingUp className="h-4 w-4 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
-                        {requestsLoading ? (
+                        {mainWidgetsLoading ? (
                              <div className="flex items-center justify-center h-24">
                               <Loader className="h-6 w-6 animate-spin" />
                             </div>
@@ -788,7 +789,7 @@ export default function DashboardPage() {
                         <AlertCircle className="h-4 w-4 text-muted-foreground" />
                       </CardHeader>
                       <CardContent>
-                        {requestsLoading ? (
+                        {mainWidgetsLoading ? (
                              <div className="flex items-center justify-center h-24">
                               <Loader className="h-6 w-6 animate-spin" />
                             </div>
@@ -816,7 +817,7 @@ export default function DashboardPage() {
                             <AlertTriangle className="h-4 w-4 text-destructive" />
                           </CardHeader>
                           <CardContent>
-                            {requestsLoading ? (
+                            {mainWidgetsLoading ? (
                               <div className="flex items-center justify-center h-24">
                                 <Loader className="h-6 w-6 animate-spin" />
                               </div>
@@ -927,7 +928,7 @@ export default function DashboardPage() {
                           <CardDescription>Live view of requests awaiting action.</CardDescription>
                       </CardHeader>
                       <CardContent className="pt-4">
-                        {requestsLoading ? (
+                        {mainWidgetsLoading ? (
                           <div className="flex items-center justify-center h-24">
                             <Loader className="h-6 w-6 animate-spin" />
                           </div>
@@ -1024,16 +1025,20 @@ export default function DashboardPage() {
                         <CardContent>
                             <ChartContainer config={spendByDeptChartConfig} className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    {spendByDeptVsBudgetData.length > 0 ? (
-                                    <BarChart data={spendByDeptVsBudgetData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
-                                        <CartesianGrid vertical={false} />
-                                        <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} interval={0} />
-                                        <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} />
-                                        <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
-                                        <Legend content={<ChartLegendContent />} />
-                                        {monthFilter !== 'all_time' && <Bar dataKey="budget" fill="var(--color-budget)" radius={4} />}
-                                        <Bar dataKey="spend" fill="var(--color-spend)" radius={4} />
-                                    </BarChart>
+                                    {chartsLoading ? (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <Loader className="h-6 w-6 animate-spin" />
+                                        </div>
+                                    ) : spendByDeptVsBudgetData.length > 0 ? (
+                                        <BarChart data={spendByDeptVsBudgetData} margin={{ top: 20, right: 20, bottom: 5, left: 20 }}>
+                                            <CartesianGrid vertical={false} />
+                                            <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} interval={0} />
+                                            <YAxis tickFormatter={(value) => `$${Number(value) / 1000}k`} />
+                                            <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+                                            <Legend content={<ChartLegendContent />} />
+                                            {monthFilter !== 'all_time' && <Bar dataKey="budget" fill="var(--color-budget)" radius={4} />}
+                                            <Bar dataKey="spend" fill="var(--color-spend)" radius={4} />
+                                        </BarChart>
                                     ) : (
                                         <div className="flex items-center justify-center h-full text-muted-foreground">No data for the selected period.</div>
                                     )}
@@ -1049,7 +1054,11 @@ export default function DashboardPage() {
                         <CardContent>
                             <ChartContainer config={requestsByStatusChartConfig} className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    {requestsByStatusData.length > 0 ? (
+                                    {allRequestsLoading ? (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <Loader className="h-6 w-6 animate-spin" />
+                                        </div>
+                                    ) : requestsByStatusData.length > 0 ? (
                                         <PieChart>
                                             <Tooltip content={<ChartTooltipContent />} />
                                             <Pie data={requestsByStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
@@ -1074,7 +1083,11 @@ export default function DashboardPage() {
                         <CardContent>
                             <ChartContainer config={fulfillmentStatusChartConfig} className="h-[300px] w-full">
                                  <ResponsiveContainer width="100%" height="100%">
-                                    {fulfillmentStatusData.length > 0 ? (
+                                    {fulfillmentLoading ? (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <Loader className="h-6 w-6 animate-spin" />
+                                        </div>
+                                    ) : fulfillmentStatusData.length > 0 ? (
                                         <PieChart>
                                             <Tooltip content={<ChartTooltipContent />} />
                                             <Pie data={fulfillmentStatusData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
