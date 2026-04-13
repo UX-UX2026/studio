@@ -173,7 +173,7 @@ export default function DashboardPage() {
   const allRequestsForUserQuery = useMemo(() => {
     if (!firestore) return null;
     
-    let q = query(collection(firestore, 'procurementRequests'));
+    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
 
     if (role === 'Manager' || role === 'Requester') {
         if (!userDepartmentId) return null;
@@ -185,13 +185,13 @@ export default function DashboardPage() {
     }
     
     return q;
-  }, [firestore, role, userDepartmentId, reportingDepartments]);
+  }, [firestore, role, userDepartmentId, reportingDepartments, openStatuses]);
   
   const { data: allRequestsForUser, loading: allRequestsLoading } = useCollection<ApprovalRequest>(allRequestsForUserQuery);
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
-    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', ['In Fulfillment', 'Completed']));
+    let q = query(collection(firestore, 'procurementRequests'), where('status', '==', 'In Fulfillment'));
 
     if (role === 'Executive') {
         if (reportingDepartments && reportingDepartments.length > 0) {
@@ -317,7 +317,7 @@ export default function DashboardPage() {
       return { count, totalAmount, averageAmount };
     }, [filteredRequests]);
 
-    const allUserOpenRequests = useMemo(() => allRequestsForUser?.filter(req => openStatuses.includes(req.status)) || [], [allRequestsForUser, openStatuses]);
+    const allUserOpenRequests = useMemo(() => allRequestsForUser || [], [allRequestsForUser]);
 
 
     const requestsLoading = allRequestsLoading || deptsLoading || budgetsLoading;
