@@ -1,3 +1,4 @@
+
 export type ApprovalItem = {
     id: number | string;
     type: "Recurring" | "One-Off";
@@ -32,6 +33,7 @@ export type ApprovalRequest = {
     timeline: {
         stage: string;
         actor: string;
+        actorId?: string;
         date: string | null;
         status: 'completed' | 'pending' | 'waiting' | 'rejected';
         delegatedById?: string;
@@ -43,7 +45,3 @@ export type ApprovalRequest = {
     createdAt?: { seconds: number, nanoseconds: number };
     updatedAt?: { seconds: number, nanoseconds: number };
 };
-
-    
-
-    
