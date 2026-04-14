@@ -72,6 +72,7 @@ import {
   Pie,
   Cell,
   Legend,
+  LabelList,
 } from "recharts";
 import {
   ChartContainer,
@@ -175,7 +176,7 @@ export default function DashboardPage() {
     return query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
   }, [firestore, openStatuses]);
   const { data: allOpenRequests, loading: allOpenRequestsLoading } = useCollection<ApprovalRequest>(allOpenRequestsQuery);
-
+  
   const allRequestsForUser = useMemo(() => {
     if (!allOpenRequests || !role) return [];
 
@@ -373,6 +374,33 @@ export default function DashboardPage() {
 
     }, [filteredRequests, allDepartments, allBudgetItems, role, departmentsForFilter, monthFilter, departmentFilter]);
 
+    const spendByCategoryData = useMemo(() => {
+        if (!filteredRequests) return [];
+
+        const categorySpend = filteredRequests.flatMap(req => req.items).reduce((acc, item) => {
+            const category = item.category || 'Uncategorized';
+            const itemTotal = item.qty * item.unitPrice;
+            acc[category] = (acc[category] || 0) + itemTotal;
+            return acc;
+        }, {} as Record<string, number>);
+
+        return Object.entries(categorySpend)
+            .map(([name, spend]) => ({ name, spend }))
+            .sort((a, b) => b.spend - a.spend);
+
+    }, [filteredRequests]);
+
+    const spendByDeptPieData = useMemo(() => {
+        if (!spendByDeptVsBudgetData) return [];
+        return spendByDeptVsBudgetData
+            .filter(d => d.spend > 0)
+            .map(dept => ({
+                name: dept.name,
+                value: dept.spend,
+                fill: `var(--color-${dept.name})`
+            }));
+    }, [spendByDeptVsBudgetData]);
+
     const spendByDeptChartConfig = {
         spend: {
           label: "Spend",
@@ -428,6 +456,27 @@ export default function DashboardPage() {
         Ordered: { label: "Ordered", color: "hsl(var(--chart-3))" },
         Completed: { label: "Completed", color: "hsl(var(--chart-4))" },
         Pending: { label: "Pending", color: "hsl(var(--chart-5))" },
+    } satisfies ChartConfig;
+
+    const spendByDeptPieChartConfig = useMemo(() => {
+        if (!spendByDeptPieData) return {} as ChartConfig;
+        const config: ChartConfig = {};
+        let i = 1;
+        spendByDeptPieData.forEach(dept => {
+            config[dept.name] = {
+                label: dept.name,
+                color: `hsl(var(--chart-${i}))`
+            }
+            i = (i % 5) + 1;
+        });
+        return config;
+    }, [spendByDeptPieData]);
+    
+    const spendByCategoryChartConfig = {
+        spend: {
+          label: "Spend",
+          color: "hsl(var(--chart-1))",
+        },
     } satisfies ChartConfig;
 
     const filterTitle = useMemo(() => {
@@ -1016,7 +1065,7 @@ export default function DashboardPage() {
                 </div>
             </TabsContent>
             <TabsContent value="visualizations">
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-2">
+                <div className="grid gap-6 md:grid-cols-2">
                     <Card>
                         <CardHeader>
                             <CardTitle>Spend vs. Budget by Department ({filterTitle})</CardTitle>
@@ -1077,10 +1126,10 @@ export default function DashboardPage() {
                             </ChartContainer>
                         </CardContent>
                     </Card>
-                    <Card className="lg:col-span-2">
+                    <Card>
                         <CardHeader>
                             <CardTitle>Fulfillment Status Overview</CardTitle>
-                            <CardDescription>Breakdown of all fulfillment tasks across active requests, filtered by your role.</CardDescription>
+                            <CardDescription>Breakdown of all fulfillment tasks across active requests.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <ChartContainer config={fulfillmentStatusChartConfig} className="h-[300px] w-full">
@@ -1101,6 +1150,71 @@ export default function DashboardPage() {
                                         </PieChart>
                                     ) : (
                                         <div className="flex items-center justify-center h-full text-muted-foreground">No items in fulfillment.</div>
+                                    )}
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                     <Card>
+                        <CardHeader>
+                            <CardTitle>Spend by Department ({filterTitle})</CardTitle>
+                            <CardDescription>Distribution of total spend across departments.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ChartContainer config={spendByDeptPieChartConfig} className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    {chartsLoading ? (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <Loader className="h-6 w-6 animate-spin" />
+                                        </div>
+                                    ) : spendByDeptPieData.length > 0 ? (
+                                        <PieChart>
+                                            <Tooltip content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+                                            <Pie data={spendByDeptPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} labelLine={false} label={({ percent }) => `${(percent * 100).toFixed(0)}%`}>
+                                                {spendByDeptPieData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                                                ))}
+                                            </Pie>
+                                            <ChartLegend content={<ChartLegendContent nameKey="name" />} />
+                                        </PieChart>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">No spend data to display.</div>
+                                    )}
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                        </CardContent>
+                    </Card>
+                    <Card className="md:col-span-2">
+                        <CardHeader>
+                            <CardTitle>Spend by Category ({filterTitle})</CardTitle>
+                            <CardDescription>Top spending categories for the selected period.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                             <ChartContainer config={spendByCategoryChartConfig} className="h-[300px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    {chartsLoading ? (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">
+                                            <Loader className="h-6 w-6 animate-spin" />
+                                        </div>
+                                    ) : spendByCategoryData.length > 0 ? (
+                                        <BarChart data={spendByCategoryData.slice(0, 10)} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 50 }}>
+                                            <CartesianGrid horizontal={false} />
+                                            <YAxis dataKey="name" type="category" tickLine={false} axisLine={false} interval={0} width={120} />
+                                            <XAxis dataKey="spend" type="number" hide />
+                                            <Tooltip cursor={false} content={<ChartTooltipContent formatter={(value) => formatCurrency(Number(value))} />} />
+                                            <Bar dataKey="spend" fill="var(--color-spend)" radius={4} layout="vertical">
+                                                <LabelList
+                                                    dataKey="spend"
+                                                    position="right"
+                                                    offset={8}
+                                                    className="fill-foreground"
+                                                    fontSize={12}
+                                                    formatter={(value: number) => formatCurrency(value)}
+                                                />
+                                            </Bar>
+                                        </BarChart>
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full text-muted-foreground">No category spend data.</div>
                                     )}
                                 </ResponsiveContainer>
                             </ChartContainer>
