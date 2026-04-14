@@ -3,7 +3,7 @@ import { addDoc, collection, serverTimestamp, type Firestore } from 'firebase/fi
 
 export type LogErrorOptions = {
     userId?: string;
-    userName?: string;
+    userName?: string | null;
     action: string;
     errorMessage: string;
     errorStack?: string;
