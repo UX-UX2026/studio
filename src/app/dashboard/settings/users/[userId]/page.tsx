@@ -133,7 +133,7 @@ export default function UserProfilePage() {
             updateData.delegatedToName = delegatedUser.displayName;
         } else {
             updateData.delegatedToName = '';
-            updateData.delegatedToId = null;
+            updateData.delegatedToId = undefined;
         }
 
         if ('id' in updateData) {
@@ -339,7 +339,7 @@ export default function UserProfilePage() {
                          <CardContent className="space-y-4">
                              <div className="space-y-1.5">
                                 <Label htmlFor="delegatedToId">Delegate Approval To</Label>
-                                <Select value={formData.delegatedToId || 'none'} onValueChange={v => handleFormChange('delegatedToId', v === 'none' ? null : v)}>
+                                <Select value={formData.delegatedToId || 'none'} onValueChange={v => handleFormChange('delegatedToId', v === 'none' ? undefined : v)}>
                                     <SelectTrigger id="delegatedToId"><SelectValue placeholder="Not Set" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None</SelectItem>

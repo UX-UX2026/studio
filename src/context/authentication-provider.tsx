@@ -26,7 +26,7 @@ export interface UserProfile {
     photoURL?: string;
     alternateEmail?: string;
     notificationPreference?: 'Primary' | 'Alternate' | 'Both';
-    delegatedToId?: string | null;
+    delegatedToId?: string;
     delegatedToName?: string;
     reportingDepartments?: string[];
     companyIds?: string[];

@@ -125,7 +125,7 @@ export default function UsersPage() {
           updateData.department = value === 'unassigned' ? 'Unassigned' : (selectedDept?.name || 'Unassigned');
         } else if (field === 'delegatedToId') {
           const delegate = users?.find(u => u.id === value);
-          updateData.delegatedToId = value === 'none' ? null : (delegate?.id || null);
+          updateData.delegatedToId = value === 'none' ? undefined : (delegate?.id || undefined);
           updateData.delegatedToName = value === 'none' ? '' : (delegate?.displayName || '');
         } else {
           // Generic handler for other fields like 'role', 'status', 'companyIds', 'reportingDepartments'
