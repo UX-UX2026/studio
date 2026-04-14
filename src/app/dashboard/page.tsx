@@ -170,24 +170,29 @@ export default function DashboardPage() {
 
   const openStatuses = useMemo(() => ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Queries Raised'], []);
 
-  const allRequestsForUserQuery = useMemo(() => {
+  const allOpenRequestsQuery = useMemo(() => {
     if (!firestore) return null;
-    
-    let q = query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
+    return query(collection(firestore, 'procurementRequests'), where('status', 'in', openStatuses));
+  }, [firestore, openStatuses]);
+  const { data: allOpenRequests, loading: allOpenRequestsLoading } = useCollection<ApprovalRequest>(allOpenRequestsQuery);
+
+  const allRequestsForUser = useMemo(() => {
+    if (!allOpenRequests || !role) return [];
 
     if (role === 'Manager' || role === 'Requester') {
-        if (!userDepartmentId) return null;
-        q = query(q, where('departmentId', '==', userDepartmentId));
-    } else if (role === 'Executive') {
-        if (reportingDepartments && reportingDepartments.length > 0) {
-            q = query(q, where('departmentId', 'in', reportingDepartments));
-        }
+        if (!userDepartmentId) return [];
+        return allOpenRequests.filter(req => req.departmentId === userDepartmentId);
     }
     
-    return q;
-  }, [firestore, role, userDepartmentId, reportingDepartments, openStatuses]);
-  
-  const { data: allRequestsForUser, loading: allRequestsLoading } = useCollection<ApprovalRequest>(allRequestsForUserQuery);
+    if (role === 'Executive') {
+        if (reportingDepartments && reportingDepartments.length > 0) {
+            return allOpenRequests.filter(req => req.departmentId && reportingDepartments.includes(req.departmentId));
+        }
+    }
+
+    // Admins, Procurement Officers etc. see all open requests.
+    return allOpenRequests;
+  }, [allOpenRequests, role, userDepartmentId, reportingDepartments]);
 
   const fulfillmentQuery = useMemo(() => {
     if (!firestore) return null;
@@ -317,11 +322,8 @@ export default function DashboardPage() {
       return { count, totalAmount, averageAmount };
     }, [filteredRequests]);
 
-    const allUserOpenRequests = useMemo(() => allRequestsForUser || [], [allRequestsForUser]);
-
-
-    const mainWidgetsLoading = allRequestsLoading || deptsLoading;
-    const chartsLoading = allRequestsLoading || deptsLoading || budgetsLoading;
+    const mainWidgetsLoading = allOpenRequestsLoading || deptsLoading;
+    const chartsLoading = allOpenRequestsLoading || deptsLoading || budgetsLoading;
     
     const spendByDeptVsBudgetData = useMemo(() => {
         if (!filteredRequests || !allDepartments || !allBudgetItems) return [];
@@ -384,8 +386,8 @@ export default function DashboardPage() {
 
 
     const requestsByStatusData = useMemo(() => {
-        if (!allUserOpenRequests) return [];
-        const statusCounts = allUserOpenRequests.reduce((acc, req) => {
+        if (!allRequestsForUser) return [];
+        const statusCounts = allRequestsForUser.reduce((acc, req) => {
             acc[req.status] = (acc[req.status] || 0) + 1;
             return acc;
         }, {} as Record<string, number>);
@@ -395,11 +397,11 @@ export default function DashboardPage() {
             value: value, 
             fill: `var(--color-${name.replace(/ /g, "")})` 
         }));
-    }, [allUserOpenRequests]);
+    }, [allRequestsForUser]);
     
     const requestsByStatusChartConfig = useMemo(() => {
-        if (!allUserOpenRequests) return {} as ChartConfig;
-        const statusSet = new Set(allUserOpenRequests.map(req => req.status));
+        if (!allRequestsForUser) return {} as ChartConfig;
+        const statusSet = new Set(allRequestsForUser.map(req => req.status));
         const config: ChartConfig = {};
         let i = 1;
         statusSet.forEach(status => {
@@ -410,7 +412,7 @@ export default function DashboardPage() {
             i = (i % 5) + 1;
         });
         return config;
-    }, [allUserOpenRequests]);
+    }, [allRequestsForUser]);
 
     const fulfillmentStatusData = useMemo(() => {
         return Object.entries(fulfillmentSummary).map(([name, value]) => ({ 
@@ -867,14 +869,14 @@ export default function DashboardPage() {
                               </TableRow>
                             </TableHeader>
                             <TableBody>
-                              {allRequestsLoading ? (
+                              {allOpenRequestsLoading ? (
                                   <TableRow>
                                       <TableCell colSpan={6} className="text-center h-24">
                                           <Loader className="h-6 w-6 animate-spin mx-auto" />
                                       </TableCell>
                                   </TableRow>
-                              ) : allUserOpenRequests && allUserOpenRequests.length > 0 ? (
-                                allUserOpenRequests.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
+                              ) : allRequestsForUser && allRequestsForUser.length > 0 ? (
+                                allRequestsForUser.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)).slice(0, 5).map((req) => (
                                   <TableRow key={req.id}>
                                     <TableCell className="font-medium">
                                       <Link href={`/dashboard/approvals?id=${req.id}`} className="hover:underline text-primary cursor-pointer">{req.id}</Link>
@@ -1054,7 +1056,7 @@ export default function DashboardPage() {
                         <CardContent>
                             <ChartContainer config={requestsByStatusChartConfig} className="h-[300px] w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    {allRequestsLoading ? (
+                                    {allOpenRequestsLoading ? (
                                         <div className="flex items-center justify-center h-full text-muted-foreground">
                                             <Loader className="h-6 w-6 animate-spin" />
                                         </div>
