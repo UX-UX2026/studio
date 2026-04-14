@@ -6,7 +6,7 @@ import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
@@ -39,6 +39,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
+import { Switch } from "@/components/ui/switch";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -448,7 +449,7 @@ export default function ProcurementQuickSubmitPage() {
             toast({
                 variant: "destructive",
                 title: "Reason Required",
-                description: "Please provide a reason for your edit request.",
+                description: "Please provide a reason for requesting to edit this submission.",
             });
             return;
         }
