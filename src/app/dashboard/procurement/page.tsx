@@ -534,7 +534,7 @@ export default function ProcurementQuickSubmitPage() {
         let newStatus: ApprovalRequest['status'];
         const departmentWorkflow = department?.workflow;
 
-        let timeline = departmentWorkflow && departmentWorkflow.length > 0
+        let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({
                 stage: stage.name,
                 actor: String(stage.role) || 'System',
@@ -1252,9 +1252,9 @@ export default function ProcurementQuickSubmitPage() {
                     <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
-                                user={user}
+                                user={user!}
                                 profile={profile}
-                                userRole={role} 
+                                userRole={role!} 
                                 items={draftItems}
                                 setItems={setDraftItems}
                                 isLocked={isLocked}

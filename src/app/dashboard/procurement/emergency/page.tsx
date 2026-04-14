@@ -249,7 +249,7 @@ export default function EmergencyProcurementPage() {
         let newStatus: ApprovalRequest['status'];
         const departmentWorkflow = department?.workflow;
 
-        let timeline = departmentWorkflow && departmentWorkflow.length > 0
+        let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({ stage: stage.name, actor: String(stage.role) || 'System', date: null, status: 'waiting' as const }))
             : [
                 { stage: "Request Submission", actor: "Requester", date: null, status: 'waiting' as const },
@@ -329,7 +329,7 @@ export default function EmergencyProcurementPage() {
             console.error("Save Request Error:", error);
             setSaveStatus('idle');
             toast({ variant: 'destructive', title: 'Save Failed', description: error.message || 'Could not save your request.' });
-            await logErrorToFirestore(firestore, { userId: user.uid, userName: actorString, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
         }
     };
 
@@ -399,7 +399,7 @@ export default function EmergencyProcurementPage() {
                     <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
-                                user={user} profile={profile} userRole={role} items={draftItems} setItems={setDraftItems}
+                                user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems}
                                 isLocked={isLocked} recurringItems={null} recurringLoading={false} departmentId={selectedDepartmentId}
                                 departmentName={departmentName} budgetItems={budgetItems}
                             />
