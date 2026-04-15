@@ -6,7 +6,7 @@ import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, Switch, ChevronRight } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
@@ -39,7 +39,6 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
-import { Switch } from "@/components/ui/switch";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -427,11 +426,10 @@ export default function ProcurementQuickSubmitPage() {
         const { status } = periodStatusInfo;
         
         // These statuses always lock the form for editing.
-        if (status === 'Completed' || status === 'Approved' || status === 'In Fulfillment' || status === 'Pending Executive') {
+        if (['Completed', 'Approved', 'In Fulfillment', 'Pending Executive'].includes(status)) {
             return true;
         }
         
-        // A requester is locked out if it's pending manager approval.
         if (role === 'Requester' && status === 'Pending Manager Approval') {
             return true;
         }
@@ -970,7 +968,7 @@ export default function ProcurementQuickSubmitPage() {
             fulfillmentComments: [],
         }));
     
-        setItems(newItems);
+        setDraftItems(newItems);
         setEditingRequestId(null); // This becomes a new draft, not an edit of the old one.
         toast({ title: 'Submission Loaded', description: `Loaded ${newItems.length} items as a new draft.` });
         setIsLoadConfirmDialogOpen(false);
@@ -1589,4 +1587,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
