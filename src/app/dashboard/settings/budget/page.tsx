@@ -296,7 +296,7 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true, raw: true });
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, raw: false });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
                 const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true } as any);
@@ -406,13 +406,13 @@ export default function BudgetPage() {
             const newMonthHeaders = derivedHeaders.slice(forecastStartIndex, forecastStartIndex + 12);
             const forecastIndices = Array.from({ length: 12 }, (_, i) => forecastStartIndex + i);
 
-            const newItems: Omit<BudgetItem, 'id'|'budgetUploadId'>[] = dataRowsForImport.map(row => {
+            const newItems = dataRowsForImport.map(row => {
                 const categoryValue = row[categoryIndex] ? String(row[categoryIndex]).trim() : '';
                 if (!categoryValue) return null;
                 const forecasts = forecastIndices.map(index => parseNumericValue(row[index]));
                 const yearTotalValue = (yearTotalIndex !== -1) ? parseNumericValue(row[yearTotalIndex]) : forecasts.reduce((sum, current) => sum + current, 0);
                 return { departmentId: selectedDepartmentId, departmentName: selectedDepartmentName, category: categoryValue, forecasts, yearTotal: yearTotalValue, expenseType: activeTab };
-            }).filter((item): item is Omit<BudgetItem, 'id'|'budgetUploadId'> => item !== null);
+            }).filter((item): item is Omit<BudgetItem, 'id' | 'budgetUploadId'> => item !== null);
             
             const batch = writeBatch(firestore);
             const activeUploadsQuery = query(collection(firestore, 'budgetUploads'), where('departmentId', '==', selectedDepartmentId), where('financialYear', '==', financialYear), where('isActive', '==', true), where('uploadType', '==', activeTab));
@@ -698,7 +698,7 @@ function BudgetTabContent({
             )}
             {loading ? (
                 <div className="flex items-center justify-center h-40 border-2 border-dashed rounded-lg"><Loader className="h-8 w-8 animate-spin" /></div>
-            ) : selectedDepartmentId ? (
+             ) : selectedDepartmentId ? (
                 <div className="space-y-2">
                     <div className="flex justify-between items-center"><h3 className="text-lg font-semibold">{`Active Budget: ${selectedDepartmentName ? ` - FY ${financialYear}` : ''}`}</h3><Button variant="outline" size="sm" onClick={handleExport} disabled={!budgetItems || budgetItems.length === 0}><Download className="h-4 w-4 mr-2" /> Export Active</Button></div>
                     <div className="overflow-auto border rounded-lg">
@@ -728,4 +728,3 @@ function BudgetTabContent({
         </>
     );
 }
-
