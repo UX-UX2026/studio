@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
-import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, RecurringItem } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -93,17 +93,6 @@ type BudgetItem = {
     expenseType?: 'Operational' | 'Capital';
     forecasts: number[];
     yearTotal: number;
-};
-
-type RecurringItem = {
-    id: string;
-    category: string;
-    name: string;
-    amount: number;
-    expenseType: 'Operational' | 'Capital';
-    active: boolean;
-    departmentId?: string;
-    departmentName?: string;
 };
 
 type Item = {
@@ -438,11 +427,11 @@ export default function ProcurementQuickSubmitPage() {
         const { status } = periodStatusInfo;
         
         // These statuses always lock the form for editing.
-        if (['Completed', 'Approved', 'In Fulfillment', 'Pending Executive'].includes(status)) {
+        if (['Completed', 'Approved', 'In Fulfillment'].includes(status)) {
             return true;
         }
 
-        if (role === 'Requester' && (status === 'Pending Manager Approval')) {
+        if (role === 'Requester' && status === 'Pending Manager Approval') {
              return true;
         }
         

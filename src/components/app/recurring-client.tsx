@@ -14,19 +14,7 @@ import { collection, addDoc, doc, setDoc, deleteDoc, serverTimestamp } from "fir
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 import { Label } from "../ui/label";
-
-type RecurringItem = {
-    id: string;
-    category: string;
-    name: string;
-    amount: number;
-    expenseType: 'Operational' | 'Capital';
-    nextLoad: string;
-    active: boolean;
-    frequency: string;
-    departmentId?: string;
-    departmentName?: string;
-};
+import type { RecurringItem } from "@/lib/approvals-mock-data";
 
 // This component now only handles rendering the items
 export function RecurringClient({ items, view = 'list', categories }: { items: RecurringItem[], view?: 'grid' | 'list', categories: string[] }) {

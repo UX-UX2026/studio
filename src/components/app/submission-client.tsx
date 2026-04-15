@@ -45,6 +45,7 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Label } from "@/components/ui/label";
 import * as XLSX from 'xlsx';
+import type { RecurringItem } from "@/lib/approvals-mock-data";
 
 
 type Item = {
@@ -62,15 +63,6 @@ type Item = {
   comments?: string;
   addedById?: string;
   addedByName?: string;
-};
-
-type RecurringItem = {
-    id: string;
-    category: string;
-    name: string;
-    amount: number;
-    active: boolean;
-    expenseType?: 'Operational' | 'Capital';
 };
 
 type BudgetItem = {

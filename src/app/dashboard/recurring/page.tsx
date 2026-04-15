@@ -15,19 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { procurementCategories } from "@/lib/procurement-categories";
-
-type RecurringItem = {
-    id: string;
-    category: string;
-    name: string;
-    amount: number;
-    expenseType: 'Operational' | 'Capital';
-    nextLoad: string;
-    active: boolean;
-    frequency: string;
-    departmentId?: string;
-    departmentName?: string;
-};
+import type { RecurringItem } from "@/lib/approvals-mock-data";
 
 type Department = {
     id: string;

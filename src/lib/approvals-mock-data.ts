@@ -45,3 +45,16 @@ export type ApprovalRequest = {
     createdAt?: { seconds: number, nanoseconds: number };
     updatedAt?: { seconds: number, nanoseconds: number };
 };
+
+export type RecurringItem = {
+    id: string;
+    category: string;
+    name: string;
+    amount: number;
+    expenseType: 'Operational' | 'Capital';
+    nextLoad: string;
+    active: boolean;
+    frequency: string;
+    departmentId?: string;
+    departmentName?: string;
+};
