@@ -426,13 +426,13 @@ export default function ProcurementQuickSubmitPage() {
 
         const { status } = periodStatusInfo;
         
-        if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
+        // These statuses always lock the form for editing.
+        if (status === 'Completed' || status === 'Approved' || status === 'In Fulfillment' || status === 'Pending Executive') {
             return true;
         }
+        
+        // A requester is locked out if it's pending manager approval.
         if (role === 'Requester' && status === 'Pending Manager Approval') {
-            return true;
-        }
-        if (role === 'Manager' && status === 'Pending Executive') {
             return true;
         }
 
@@ -552,7 +552,7 @@ export default function ProcurementQuickSubmitPage() {
             ];
 
         if (timeline.length > 0) {
-            timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' };
+            timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
         }
 
         if (isDraft) {
@@ -568,7 +568,7 @@ export default function ProcurementQuickSubmitPage() {
                 if (managerReviewIndex > -1) timeline[managerReviewIndex].status = 'pending';
             } else if (newStatus === 'Pending Executive') {
                 const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
-                if (managerReviewIndex > -1) timeline[managerReviewIndex] = { ...timeline[managerReviewIndex], status: 'completed', actor: 'System (Skipped)', date: currentDate };
+                if (managerReviewIndex > -1) timeline[managerReviewIndex] = { ...timeline[managerReviewIndex], status: 'completed' as const, actor: 'System (Skipped)', date: currentDate };
                 
                 const execIndex = timeline.findIndex(s => s.stage === 'Executive Approval');
                 if (execIndex > -1) timeline[execIndex].status = 'pending';
@@ -970,7 +970,7 @@ export default function ProcurementQuickSubmitPage() {
             fulfillmentComments: [],
         }));
     
-        setDraftItems(newItems);
+        setItems(newItems);
         setEditingRequestId(null); // This becomes a new draft, not an edit of the old one.
         toast({ title: 'Submission Loaded', description: `Loaded ${newItems.length} items as a new draft.` });
         setIsLoadConfirmDialogOpen(false);
@@ -1589,3 +1589,4 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+
