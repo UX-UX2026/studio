@@ -299,7 +299,7 @@ export default function BudgetPage() {
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true, raw: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true });
+                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true } as any);
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
