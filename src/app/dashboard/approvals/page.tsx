@@ -1293,42 +1293,48 @@ export default function ApprovalsPage() {
     const [viewMode, setViewMode] = useState<'list' | 'tile'>('list');
     const [monthFilter, setMonthFilter] = useState<string>('All Months');
 
+    // Refactored data fetching
     const requestsQuery = useMemo(() => {
-        if (!firestore || !role || !profile) return null;
-    
-        const baseQuery = collection(firestore, 'procurementRequests');
-    
+        if (!firestore) return null;
+        // A single, simple query that is less likely to fail or need a complex index.
+        return query(collection(firestore, 'procurementRequests'), where('status', 'not-in', ['Draft', 'Archived']));
+    }, [firestore]);
+    const { data: allApprovals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+
+    const approvals = useMemo(() => {
+        if (!allApprovals || !role) return null;
+
+        // Admin sees everything (that's not a draft/archived)
         if (role === 'Administrator') {
-            return query(baseQuery, where('status', 'not-in', ['Draft', 'Archived']));
+            return allApprovals;
         }
+
         if (role === 'Executive') {
             const statuses = ['Pending Executive', 'Pending Manager Approval', 'Approved', 'Queries Raised', 'In Fulfillment', 'Completed'];
-            if (reportingDepartments && reportingDepartments.length > 0) {
-                return query(
-                    baseQuery,
-                    where('status', 'in', statuses),
-                    where('departmentId', 'in', reportingDepartments)
-                );
-            }
-            return query(baseQuery, where('status', 'in', statuses));
+            return allApprovals.filter(req => {
+                const hasCorrectStatus = statuses.includes(req.status);
+                if (!hasCorrectStatus) return false;
+                // If exec is scoped to depts, filter by them. Otherwise, they see all.
+                if (reportingDepartments && reportingDepartments.length > 0) {
+                    return !!req.departmentId && reportingDepartments.includes(req.departmentId);
+                }
+                return true;
+            });
         }
-        if (role === 'Manager') {
-            if (!userDepartmentId) return null;
-            return query(baseQuery, where('departmentId', '==', userDepartmentId), where('status', 'not-in', ['Draft', 'Archived']));
-        }
-        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
-            return query(baseQuery, where('status', 'in', ['Approved', 'In Fulfillment', 'Completed']));
-        }
-        if (role === 'Requester') {
-            if (!userDepartmentId) return null;
-            return query(baseQuery, where('departmentId', '==', userDepartmentId), where('status', 'not-in', ['Draft', 'Archived']));
-        }
-    
-        return null;
-    }, [firestore, role, userDepartmentId, profile, reportingDepartments]);
 
-    const { data: approvals, loading: approvalsLoading } = useCollection<ApprovalRequest>(requestsQuery);
-    
+        if (role === 'Manager' || role === 'Requester') {
+            if (!userDepartmentId) return [];
+            return allApprovals.filter(req => req.departmentId === userDepartmentId);
+        }
+        
+        if (role === 'Procurement Officer' || role === 'Procurement Assistant') {
+            const statuses = ['Approved', 'In Fulfillment', 'Completed'];
+            return allApprovals.filter(req => statuses.includes(req.status));
+        }
+
+        return [];
+    }, [allApprovals, role, userDepartmentId, reportingDepartments]);
+
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
