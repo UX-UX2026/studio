@@ -7,6 +7,7 @@ import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
@@ -39,7 +40,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
-import { Switch } from "@/components/ui/switch";
+import { procurementCategories } from "@/lib/procurement-categories";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -292,6 +293,16 @@ export default function ProcurementQuickSubmitPage() {
         return validStatus.includes(activeRequest.status);
     }, [role, activeRequest]);
 
+    const departmentCategories = useMemo(() => {
+        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
+        const categoriesFromCurrentItems = draftItems.map(item => item.category).filter(Boolean);
+        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems, ...procurementCategories]);
+        if (!combined.has('Uncategorized')) {
+            combined.add('Uncategorized');
+        }
+        return Array.from(combined).sort();
+    }, [budgetItems, draftItems]);
+
     // Handle incoming query params to resume a draft
     useEffect(() => {
         const deptId = searchParams.get('deptId');
@@ -427,7 +438,7 @@ export default function ProcurementQuickSubmitPage() {
         const { status } = periodStatusInfo;
         
         // These statuses always lock the form for editing.
-        if (['Completed', 'Approved', 'In Fulfillment'].includes(status)) {
+        if (['Completed', 'Approved', 'In Fulfillment', 'Pending Executive'].includes(status)) {
             return true;
         }
 
@@ -1230,7 +1241,7 @@ export default function ProcurementQuickSubmitPage() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                         <CardContent className="border-t pt-5">
-                            <RecurringClient />
+                            <RecurringClient items={recurringItems || []} categories={departmentCategories} />
                         </CardContent>
                     </CollapsibleContent>
                 </Collapsible>
