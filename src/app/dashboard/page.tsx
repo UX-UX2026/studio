@@ -727,7 +727,7 @@ export default function DashboardPage() {
 
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: user.displayName || user.email || 'Unknown',
                 action: action,
                 details: `Archived draft for ${draftToArchive.period}`,
                 entity: { type: 'procurementRequest', id: deletingRequestId },
@@ -739,7 +739,7 @@ export default function DashboardPage() {
             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
             await logErrorToFirestore(firestore, {
                 userId: user.uid,
-                userName: user.displayName,
+                userName: user.displayName || user.email || 'Unknown',
                 action,
                 errorMessage: error.message,
                 errorStack: error.stack
