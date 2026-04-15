@@ -429,7 +429,7 @@ export default function ProcurementQuickSubmitPage() {
         if (status === 'Completed' || status === 'Pending Executive' || status === 'Approved' || status === 'In Fulfillment') {
             return true;
         }
-        if (role === 'Requester' && (status === 'Pending Manager Approval' || status === 'Pending Executive')) {
+        if (role === 'Requester' && status === 'Pending Manager Approval') {
             return true;
         }
         if (role === 'Manager' && status === 'Pending Executive') {
