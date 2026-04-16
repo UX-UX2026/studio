@@ -125,13 +125,20 @@ export default function IntegrationsPage() {
     }
     
     const handleConfigChange = (platform: 'odoo' | 'quickbooks' | 'xero' | 'sage', field: string, value: string) => {
-        const setterMap = {
-            odoo: setOdooConfig,
-            quickbooks: setQuickbooksConfig,
-            xero: setXeroConfig,
-            sage: setSageConfig,
-        };
-        setterMap[platform](prev => ({...prev, [field]: value}));
+        switch (platform) {
+            case 'odoo':
+                setOdooConfig(prev => ({ ...prev, [field]: value }));
+                break;
+            case 'quickbooks':
+                setQuickbooksConfig(prev => ({ ...prev, [field]: value }));
+                break;
+            case 'xero':
+                setXeroConfig(prev => ({ ...prev, [field]: value }));
+                break;
+            case 'sage':
+                setSageConfig(prev => ({ ...prev, [field]: value }));
+                break;
+        }
     };
 
     const handleSaveChanges = async () => {
