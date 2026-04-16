@@ -142,6 +142,12 @@ export default function ProcurementPeriodsPage() {
             if (selectedDepartmentId === '__all__') {
                 if (!departments) throw new Error("Department list not loaded.");
 
+                if (!periodSettings) {
+                    toast({ variant: "destructive", title: "Error", description: "Period settings are not available." });
+                    setIsSaving(false);
+                    return;
+                }
+
                 const batch = writeBatch(firestore);
                 departments.forEach(dept => {
                     const deptRef = doc(firestore, 'departments', dept.id);
@@ -252,7 +258,7 @@ export default function ProcurementPeriodsPage() {
                                 Add Custom Period
                             </Button>
                             <Button onClick={handleSaveChanges} disabled={isSaving}>
-                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Save className="mr-2 h-4 w-4" />}
+                                {isSaving ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Save className="h-4 w-4 mr-2" />}
                                 Save Changes
                             </Button>
                         </div>
