@@ -143,7 +143,7 @@ export default function BudgetPage() {
         }
     }, [user, role, userLoading, router]);
     
-    const loading = userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading);
+    const loading = !!(userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading));
     
     const selectedDepartment = useMemo(() => {
         return departments?.find(d => d.id === selectedDepartmentId);
