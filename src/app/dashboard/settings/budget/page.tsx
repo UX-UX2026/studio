@@ -63,7 +63,7 @@ type BudgetItem = {
     id: string;
     budgetUploadId: string;
     departmentId: string;
-    departmentName?: string;
+    departmentName: string;
     category: string;
     forecasts: number[];
     yearTotal: number;
