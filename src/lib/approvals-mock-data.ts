@@ -55,6 +55,6 @@ export type RecurringItem = {
     nextLoad: string;
     active: boolean;
     frequency: string;
-    departmentId?: string;
-    departmentName?: string;
+    departmentId?: string | null;
+    departmentName?: string | null;
 };
