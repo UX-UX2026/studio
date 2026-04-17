@@ -310,7 +310,7 @@ export default function UsersPage() {
                                             </Select>
                                         </TableCell>
                                          <TableCell>
-                                            <Select value={u.status} onValueChange={(value) => handleUpdateUser(u.id, 'status', value)}>
+                                            <Select value={u.status || ''} onValueChange={(value) => handleUpdateUser(u.id, 'status', value)}>
                                                 <SelectTrigger className={cn(u.status === 'Active' ? 'text-green-800 border-green-300' : 'text-gray-600')}>
                                                     <SelectValue />
                                                 </SelectTrigger>
