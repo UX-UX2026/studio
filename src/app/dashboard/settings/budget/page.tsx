@@ -38,6 +38,7 @@ import { format } from "date-fns";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { BudgetItem } from "@/lib/approvals-mock-data";
 
 type Department = {
     id: string;
@@ -58,17 +59,6 @@ type BudgetUpload = {
     isActive: boolean;
     uploadType: 'Operational' | 'Capital';
 }
-
-type BudgetItem = {
-    id: string;
-    budgetUploadId: string;
-    departmentId: string;
-    departmentName: string;
-    category: string;
-    forecasts: number[];
-    yearTotal: number;
-    expenseType: 'Operational' | 'Capital';
-};
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -143,7 +133,7 @@ export default function BudgetPage() {
         }
     }, [user, role, userLoading, router]);
     
-    const loading = userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading);
+    const loading = userLoading || deptsLoading || uploadsLoading || (!!activeUpload && budgetsLoading);
     
     const selectedDepartment = useMemo(() => {
         return departments?.find(d => d.id === selectedDepartmentId);
@@ -664,7 +654,7 @@ function BudgetTabContent({
     handleImportClick: () => void;
     handleExport: () => void;
     isDraggingOver: boolean;
-    loading: boolean | null;
+    loading: boolean;
     budgetItems: BudgetItem[] | null;
     budgetUploads: BudgetUpload[] | null;
     uploadsLoading: boolean;

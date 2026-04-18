@@ -2,6 +2,7 @@
 'use client';
 
 import { useMemo } from 'react';
+import type { BudgetItem } from '@/lib/approvals-mock-data';
 
 // Using a more complete Item type that includes what's needed for the drilldown
 type Item = {
@@ -13,15 +14,6 @@ type Item = {
     category: string;
     unitPrice: number;
     comments?: string;
-};
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    expenseType?: 'Operational' | 'Capital';
-    forecasts: number[];
-    yearTotal: number;
 };
 
 type Department = {

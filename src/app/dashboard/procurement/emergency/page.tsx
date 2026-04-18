@@ -10,7 +10,7 @@ import { Loader, AlertTriangle, Globe, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
-import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, BudgetItem } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -60,15 +60,6 @@ type AppMetadata = {
     id: string;
     limitToOneSubmissionPerPeriod?: boolean;
 }
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    expenseType?: 'Operational' | 'Capital';
-    forecasts: number[];
-    yearTotal: number;
-};
 
 type Item = {
   id: number | string;
@@ -335,7 +326,7 @@ export default function EmergencyProcurementPage() {
 
     const loading = userLoading || deptsLoading || periodRequestsLoading || budgetsLoading || metadataLoading || companiesLoading;
 
-    if (loading) {
+    if (loading || !user || !profile || !role) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -399,7 +390,7 @@ export default function EmergencyProcurementPage() {
                     <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
-                                user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems}
+                                user={user} profile={profile} userRole={role} items={draftItems} setItems={setDraftItems}
                                 isLocked={isLocked} recurringItems={null} recurringLoading={false} departmentId={selectedDepartmentId}
                                 departmentName={departmentName} budgetItems={budgetItems}
                             />

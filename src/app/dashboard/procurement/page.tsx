@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, RecurringItem, BudgetItem } from "@/lib/approvals-mock-data";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -85,15 +85,6 @@ type AppMetadata = {
     limitToOneSubmissionPerPeriod?: boolean;
     pdfSettings?: { primaryColor?: string; };
 }
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    expenseType?: 'Operational' | 'Capital';
-    forecasts: number[];
-    yearTotal: number;
-};
 
 type Item = {
   id: number | string;
@@ -1051,19 +1042,15 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
 
-    useEffect(() => {
-      const allowedRolesList = ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'];
-      if (userLoading) return;
-      if (!user) {
-        router.push('/dashboard');
-        return;
-      }
-      if (role && !allowedRolesList.includes(role)) {
-        router.push('/dashboard');
-      }
-    }, [user, role, userLoading, router]);
-
     const loading = userLoading || draftsLoading || periodRequestsLoading || deptsLoading || budgetsLoading || recurringLoading || metadataLoading || usersLoading || previousSubmissionsLoading || companiesLoading || auditLogsLoading;
+    
+    if (loading || !user || !profile || !role) {
+        return (
+            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
+                <Loader className="h-8 w-8 animate-spin" />
+            </div>
+        );
+    }
     
     const operationalBudgetProgress = useMemo(() => {
         const { procurement, forecast } = operationalSummary.totals;
@@ -1077,14 +1064,6 @@ export default function ProcurementQuickSubmitPage() {
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [capitalSummary]);
 
-    if (loading || !user || !profile || !role) {
-        return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
-    
     return (
         <div className="space-y-6">
             <Card>

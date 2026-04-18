@@ -55,6 +55,17 @@ export type RecurringItem = {
     nextLoad: string;
     active: boolean;
     frequency: string;
-    departmentId?: string | null;
-    departmentName?: string | null;
+    departmentId: string | null;
+    departmentName: string | null;
+};
+
+export type BudgetItem = {
+    id: string;
+    budgetUploadId: string;
+    departmentId: string;
+    departmentName: string;
+    category: string;
+    expenseType: 'Operational' | 'Capital';
+    forecasts: number[];
+    yearTotal: number;
 };

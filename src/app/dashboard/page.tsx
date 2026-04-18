@@ -34,7 +34,7 @@ import {
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useRouter } from "next/navigation";
-import { type ApprovalRequest } from '@/lib/approvals-mock-data';
+import { type ApprovalRequest, type BudgetItem } from '@/lib/approvals-mock-data';
 import { useFirestore, useCollection, useUser, useDoc } from '@/firebase';
 import { collection, query, orderBy, limit, where, doc, updateDoc, addDoc, serverTimestamp, getDocs, type Firestore } from 'firebase/firestore';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -91,14 +91,6 @@ type Department = {
     name: string;
     budgetHeaders?: string[];
     budgetYear?: number;
-};
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    forecasts: number[];
-    yearTotal: number;
 };
 
 type AuditEvent = {
