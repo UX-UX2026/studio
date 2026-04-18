@@ -494,7 +494,7 @@ export function SubmissionClient({
                     addedById: user.uid,
                     addedByName: profile?.displayName || user.email || 'User',
                 };
-            }).filter((item): item is Item => item !== null);
+            }).filter(Boolean);
             
             setItems(prev => [...prev, ...newItems]);
 
