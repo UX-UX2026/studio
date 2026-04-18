@@ -45,25 +45,8 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Label } from "@/components/ui/label";
 import * as XLSX from 'xlsx';
-import type { RecurringItem } from "@/lib/approvals-mock-data";
+import type { RecurringItem, ApprovalItem as Item } from "@/lib/approvals-mock-data";
 
-
-type Item = {
-  id: number | string;
-  type: "Recurring" | "One-Off";
-  expenseType: 'Operational' | 'Capital';
-  description: string;
-  brand: string;
-  qty: number;
-  category: string;
-  unitPrice: number;
-  fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
-  receivedQty: number;
-  fulfillmentComments: string[];
-  comments?: string;
-  addedById?: string;
-  addedByName?: string;
-};
 
 type BudgetItem = {
     id: string;

@@ -143,7 +143,7 @@ export default function BudgetPage() {
         }
     }, [user, role, userLoading, router]);
     
-    const loading = !!(userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading));
+    const loading = userLoading || deptsLoading || uploadsLoading || (activeUpload && budgetsLoading);
     
     const selectedDepartment = useMemo(() => {
         return departments?.find(d => d.id === selectedDepartmentId);
@@ -412,7 +412,7 @@ export default function BudgetPage() {
                 const forecasts = forecastIndices.map(index => parseNumericValue(row[index]));
                 const yearTotalValue = (yearTotalIndex !== -1) ? parseNumericValue(row[yearTotalIndex]) : forecasts.reduce((sum, current) => sum + current, 0);
                 return { departmentId: selectedDepartmentId, departmentName: selectedDepartmentName, category: categoryValue, forecasts, yearTotal: yearTotalValue, expenseType: activeTab };
-            }).filter((item): item is Omit<BudgetItem, 'id' | 'budgetUploadId'> => item !== null);
+            }).filter(Boolean);
             
             const batch = writeBatch(firestore);
             const activeUploadsQuery = query(collection(firestore, 'budgetUploads'), where('departmentId', '==', selectedDepartmentId), where('financialYear', '==', financialYear), where('isActive', '==', true), where('uploadType', '==', activeTab));
@@ -664,7 +664,7 @@ function BudgetTabContent({
     handleImportClick: () => void;
     handleExport: () => void;
     isDraggingOver: boolean;
-    loading: boolean;
+    loading: boolean | null;
     budgetItems: BudgetItem[] | null;
     budgetUploads: BudgetUpload[] | null;
     uploadsLoading: boolean;
