@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -70,7 +71,7 @@ export default function RecycleBinPage() {
         const action = 'request.draft_restore';
         try {
             const docRef = doc(firestore, 'procurementRequests', id);
-            await updateDoc(docRef, { status: 'Draft', updatedAt: serverTimestamp() });
+            await updateDoc(docRef, { status: 'Draft', updatedAt: serverTimestamp() as any });
             toast({ title: 'Draft Restored', description: 'The submission has been moved back to drafts.' });
             
             await addDoc(collection(firestore, 'auditLogs'), {

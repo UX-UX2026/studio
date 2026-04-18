@@ -590,7 +590,7 @@ export default function ProcurementQuickSubmitPage() {
             timeline: timeline,
             comments: editingRequestId ? periodRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: draftItems,
-            updatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp() as any,
         };
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
@@ -602,10 +602,7 @@ export default function ProcurementQuickSubmitPage() {
                 await updateDoc(docRef, baseRequestData);
                 docId = editingRequestId;
             } else {
-                const docRef = await addDoc(collection(firestore, 'procurementRequests'), {
-                    ...baseRequestData,
-                    createdAt: serverTimestamp()
-                });
+                const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() as any });
                 docId = docRef.id;
             }
 
@@ -861,7 +858,7 @@ export default function ProcurementQuickSubmitPage() {
         const action = 'request.draft_archive';
         try {
             const docRef = doc(firestore, 'procurementRequests', deletingRequestId);
-            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() });
+            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() as any });
             
             toast({ title: 'Draft Archived', description: 'The draft has been moved to the recycle bin.' });
 
@@ -914,7 +911,7 @@ export default function ProcurementQuickSubmitPage() {
             const docRef = doc(firestore, 'procurementRequests', editingRequestId);
             await updateDoc(docRef, { 
                 status: 'Archived', 
-                updatedAt: serverTimestamp(),
+                updatedAt: serverTimestamp() as any,
                 comments: arrayUnion({
                     actor: actorString,
                     actorId: user.uid,

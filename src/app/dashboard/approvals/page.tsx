@@ -1038,7 +1038,7 @@ const RequestDetailsView = ({
 
         const updateData = { 
             status: 'Completed' as const, 
-            updatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp() as any,
             timeline: newTimeline
         };
         const action = 'request.manual_complete';

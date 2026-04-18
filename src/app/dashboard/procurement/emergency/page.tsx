@@ -302,7 +302,7 @@ export default function EmergencyProcurementPage() {
             timeline: timeline,
             comments: editingRequestId ? periodRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
             items: draftItems,
-            updatedAt: serverTimestamp(),
+            updatedAt: serverTimestamp() as any,
         };
 
         const action = isDraft ? 'request.draft_save' : 'request.submit';
@@ -314,7 +314,7 @@ export default function EmergencyProcurementPage() {
                 await updateDoc(docRef, baseRequestData);
                 docId = editingRequestId;
             } else {
-                const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() });
+                const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() as any });
                 docId = docRef.id;
             }
 

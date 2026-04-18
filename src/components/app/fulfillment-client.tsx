@@ -97,7 +97,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
 
           if (allItemsCompleted && requestData.status !== 'Completed') {
               updatePayload.status = 'Completed';
-              updatePayload.updatedAt = serverTimestamp();
+              updatePayload.updatedAt = serverTimestamp() as any;
 
               const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
               const actorName = `${profile?.displayName || user?.email || 'User'} (System)`;

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -721,7 +722,7 @@ export default function DashboardPage() {
         const action = 'request.draft_archive';
         try {
             const docRef = doc(firestore, 'procurementRequests', deletingRequestId);
-            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() });
+            await updateDoc(docRef, { status: 'Archived', updatedAt: serverTimestamp() as any });
             
             toast({ title: 'Draft Archived', description: 'The draft has been moved to the recycle bin.' });
 
