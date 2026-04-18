@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -45,17 +46,8 @@ import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Label } from "@/components/ui/label";
 import * as XLSX from 'xlsx';
-import type { RecurringItem, ApprovalItem as Item } from "@/lib/approvals-mock-data";
+import type { RecurringItem, ApprovalItem as Item, BudgetItem } from "@/lib/approvals-mock-data";
 
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    expenseType?: 'Operational' | 'Capital';
-    forecasts: number[];
-    yearTotal: number;
-};
 
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat("en-ZA", {

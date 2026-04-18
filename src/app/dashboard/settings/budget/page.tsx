@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -289,7 +290,7 @@ export default function BudgetPage() {
                 const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, raw: false });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true } as any);
+                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {

@@ -677,7 +677,7 @@ export default function ProcurementQuickSubmitPage() {
         }
 
         const requestRef = doc(firestore, 'procurementRequests', editingRequestId);
-        const updateData = { status: newStatus, timeline: newTimeline };
+        const updateData: Partial<ApprovalRequest> = { status: newStatus, timeline: newTimeline };
         const action = 'request.approve';
 
         const finalToastMessage = toastMessage;
