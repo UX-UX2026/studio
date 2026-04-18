@@ -475,19 +475,19 @@ export function SubmissionClient({
                 throw new Error("CSV is missing required columns: description, qty, unitPrice.");
             }
 
-            const newItems: Item[] = rows.slice(1).map((row, i) => {
+            const newItems = rows.slice(1).map((row, i) => {
                 if (row.every(cell => cell === null || cell === '')) return null; // skip empty rows
 
                 return {
                     id: Date.now() + i,
-                    type: "One-Off",
+                    type: "One-Off" as const,
                     expenseType: expenseType,
                     description: String(row[descIndex] || ''),
                     brand: brandIndex > -1 ? String(row[brandIndex] || '') : '',
                     qty: parseInt(String(row[qtyIndex]), 10) || 1,
                     category: categoryIndex > -1 ? String(row[categoryIndex] || '') : 'Uncategorized',
                     unitPrice: parseFloat(String(row[priceIndex])) || 0,
-                    fulfillmentStatus: 'Pending',
+                    fulfillmentStatus: 'Pending' as const,
                     receivedQty: 0,
                     fulfillmentComments: [],
                     comments: commentsIndex > -1 ? String(row[commentsIndex] || '') : "",
