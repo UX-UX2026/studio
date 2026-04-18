@@ -1080,7 +1080,7 @@ export default function ProcurementQuickSubmitPage() {
         return Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [capitalSummary]);
 
-    if (loading) {
+    if (loading || !user || !profile || !role) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />
@@ -1252,9 +1252,9 @@ export default function ProcurementQuickSubmitPage() {
                     <CardContent>
                         <TabsContent value="submission">
                             <SubmissionClient 
-                                user={user!}
+                                user={user}
                                 profile={profile}
-                                userRole={role!} 
+                                userRole={role} 
                                 items={draftItems}
                                 setItems={setDraftItems}
                                 isLocked={isLocked}

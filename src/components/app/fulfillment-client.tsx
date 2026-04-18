@@ -193,7 +193,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
           </TableHeader>
           <TableBody>
             {items.map((item) => {
-              const outstandingQty = item.qty - item.receivedQty;
+              const outstandingQty = item.qty - (item.receivedQty || 0);
               return (
                 <TableRow key={item.id} className={outstandingQty > 0 && item.approvedOn > '10' ? "bg-red-500/10" : ""}>
                   <TableCell className="font-medium">{item.item}</TableCell>
@@ -202,7 +202,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                   <TableCell>
                       <Input
                           type="number"
-                          value={item.receivedQty}
+                          value={item.receivedQty || 0}
                           onChange={(e) => handleItemUpdate(item.id, 'receivedQty', parseInt(e.target.value) || 0)}
                           className="w-20"
                           disabled={!canEdit}
