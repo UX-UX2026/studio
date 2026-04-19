@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import {
@@ -29,7 +28,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { type UserRole, useUser } from "@/firebase/auth/use-user";
 import { useFirestore } from "@/firebase";
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, type FieldValue } from "firebase/firestore";
 import type { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
 import { logErrorToFirestore } from "@/lib/error-logger";
 
@@ -119,7 +118,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
               toast({ title: "Request Completed", description: `Request ${itemToUpdate.procurementRequestId} automatically marked as complete.` });
           }
           
-          await updateDoc(requestRef, updatePayload);
+          await updateDoc(requestRef, updatePayload as { [x: string]: any; });
 
           toast({ title: "Fulfillment item updated." });
 
@@ -221,7 +220,7 @@ export function FulfillmentClient({ items: initialItems, role }: { items: Fulfil
                   </TableCell>
                   <TableCell>
                       {canEdit ? (
-                           <Select value={item.fulfillmentStatus} onValueChange={(value) => handleItemUpdate(item.id, 'fulfillmentStatus', value)}>
+                           <Select value={item.fulfillmentStatus || ''} onValueChange={(value) => handleItemUpdate(item.id, 'fulfillmentStatus', value)}>
                               <SelectTrigger className="w-[120px]">
                                 <SelectValue />
                               </SelectTrigger>

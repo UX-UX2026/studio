@@ -228,7 +228,7 @@ export default function UserProfilePage() {
                             </div>
                             <div className="space-y-1.5">
                                 <Label>Status</Label>
-                                <Select value={formData.status || 'Invited'} onValueChange={v => handleFormChange('status', v)}>
+                                <Select value={formData.status || ''} onValueChange={v => handleFormChange('status', v)}>
                                     <SelectTrigger><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="Active">Active</SelectItem>

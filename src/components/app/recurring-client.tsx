@@ -109,7 +109,7 @@ export function RecurringClient({ items, view = 'list', categories }: { items: R
                     <Card key={item.id} className="flex flex-col justify-between hover:shadow-lg transition-shadow">
                         <CardHeader>
                             <div className="flex justify-between items-start gap-2">
-                                 <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
+                                 <Select value={item.category || ''} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
                                     <SelectTrigger className="text-sm font-medium uppercase text-primary tracking-wider bg-transparent border-0 border-b rounded-none focus-visible:ring-0 p-0 h-auto">
                                         <SelectValue placeholder="Category"/>
                                     </SelectTrigger>
@@ -201,7 +201,7 @@ export function RecurringClient({ items, view = 'list', categories }: { items: R
                                 <Input defaultValue={item.name} onBlur={e => handleItemChange(item.id, 'name', e.target.value)} className="bg-transparent border-0" readOnly={!canManage}/>
                             </TableCell>
                             <TableCell>
-                                 <Select value={item.category} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
+                                 <Select value={item.category || ''} onValueChange={(value) => handleItemChange(item.id, 'category', value)} disabled={!canManage}>
                                     <SelectTrigger className="bg-transparent border-0">
                                         <SelectValue placeholder="Select Category" />
                                     </SelectTrigger>
