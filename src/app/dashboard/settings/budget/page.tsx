@@ -287,10 +287,10 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, raw: false });
+                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false, cellDates: true });
+                const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false });
                 
                 const hiddenRowIndices = new Set<number>();
                 if (worksheet['!rows']) {
@@ -426,8 +426,10 @@ export default function BudgetPage() {
 
             const budgetsCollectionRef = collection(firestore, 'budgets');
             newItems.forEach(item => {
-                const newDocRef = doc(budgetsCollectionRef);
-                batch.set(newDocRef, { ...item, budgetUploadId: newUploadRef.id });
+                if(item) {
+                    const newDocRef = doc(budgetsCollectionRef);
+                    batch.set(newDocRef, { ...item, budgetUploadId: newUploadRef.id });
+                }
             });
 
             // Only update department if it's an operational budget to avoid overwriting with capital headers
@@ -719,3 +721,5 @@ function BudgetTabContent({
         </>
     );
 }
+
+    
