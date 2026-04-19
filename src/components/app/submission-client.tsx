@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useRef, useEffect } from "react";
@@ -450,10 +449,10 @@ export function SubmissionClient({
                 throw new Error("CSV is missing required columns: description, qty, unitPrice.");
             }
 
-            const newItems = rows.slice(1).map((row, i): Item | null => {
-                if (row.every(cell => cell === null || cell === '')) return null; // skip empty rows
+            const importedItems = rows.slice(1).map((row, i): Item | null => {
+                if (row.every(cell => cell === null || cell === '')) return null;
 
-                return {
+                const newItem: Item = {
                     id: Date.now() + i,
                     type: "One-Off",
                     expenseType: expenseType,
@@ -469,11 +468,12 @@ export function SubmissionClient({
                     addedById: user.uid,
                     addedByName: profile?.displayName || user.email || 'User',
                 };
+                return newItem;
             }).filter(Boolean);
             
-            setItems(prev => [...prev, ...newItems]);
+            setItems(prev => [...prev, ...importedItems as Item[]]);
 
-            toast({ title: "Import Successful", description: `${newItems.length} ${expenseType.toLowerCase()} items were added.` });
+            toast({ title: "Import Successful", description: `${importedItems.length} ${expenseType.toLowerCase()} items were added.` });
         } catch (error: any) {
             console.error("CSV Parsing Error:", error);
             toast({ variant: "destructive", title: "Import Failed", description: error.message || "Could not parse the file." });
@@ -667,3 +667,6 @@ export function SubmissionClient({
   );
 }
 
+
+
+    
