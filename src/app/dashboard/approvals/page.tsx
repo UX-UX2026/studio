@@ -39,7 +39,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
-import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, BudgetItem } from "@/lib/approvals-mock-data";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
@@ -89,15 +89,6 @@ type ApprovalGroup = {
     id: string;
     name: string;
     memberIds: string[];
-};
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-    forecasts: number[];
-    yearTotal: number;
-    expenseType?: 'Operational' | 'Capital';
 };
 
 type AuditEvent = {
