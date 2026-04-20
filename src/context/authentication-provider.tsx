@@ -75,7 +75,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const firestore = getFirestore(app);
         try {
           // This must be awaited to ensure persistence is enabled before use.
-          await enableIndexedDbPersistence(firestore, { synchronizeTabs: true });
+          await enableIndexedDbPersistence(firestore);
           console.log("Firestore offline persistence with tab synchronization enabled.");
         } catch (err: any) {
           if (err.code === 'failed-precondition') {
