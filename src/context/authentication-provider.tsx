@@ -2,13 +2,12 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { type Firestore, getFirestore, initializeFirestore } from 'firebase/firestore';
+import { type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/client';
-import { persistentLocalCache } from 'firebase/firestore';
 
 
 // Define the UserProfile shape
@@ -50,30 +49,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-let firestoreInstance: Firestore | null = null;
-
-// This function ensures Firestore is initialized only once with persistence.
-const getAppFirestore = (app: FirebaseApp): Firestore => {
-    if (firestoreInstance) {
-        return firestoreInstance;
-    }
-
-    try {
-        // Try to initialize with persistence.
-        firestoreInstance = initializeFirestore(app, {
-            cache: persistentLocalCache({ synchronizeTabs: true })
-        });
-        console.log("Firestore offline persistence with tab synchronization enabled.");
-    } catch (err: any) {
-        // This error can occur on subsequent attempts in strict mode or with HMR.
-        // We can safely get the existing instance.
-        console.warn(`Firestore persistence initialization failed (this is common in development): ${(err as Error).message}. Re-using existing instance.`);
-        firestoreInstance = getFirestore(app);
-    }
-    
-    return firestoreInstance;
-};
-
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -96,7 +71,24 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         
-        const firestore = getAppFirestore(app);
+        // Correctly initialize Firestore with persistence
+        const firestore = getFirestore(app);
+        try {
+          // This must be awaited to ensure persistence is enabled before use.
+          await enableIndexedDbPersistence(firestore, { synchronizeTabs: true });
+          console.log("Firestore offline persistence with tab synchronization enabled.");
+        } catch (err: any) {
+          if (err.code === 'failed-precondition') {
+            // This is a normal scenario in multi-tab environments.
+            console.warn("Firestore persistence failed: another tab may have it enabled.");
+          } else if (err.code === 'unimplemented') {
+            // The browser doesn't support persistence.
+            console.warn("Firestore persistence is not supported in this browser.");
+          } else {
+            // A more serious error occurred.
+            console.error("Firestore persistence initialization failed:", err);
+          }
+        }
         
         setFirebaseServices({ app, auth, firestore });
       } catch (err) {
