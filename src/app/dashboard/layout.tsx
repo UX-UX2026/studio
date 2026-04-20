@@ -37,7 +37,7 @@ import { signOut } from "firebase/auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import useInactivityTimeout from "@/hooks/use-inactivity-timeout";
-import type { AppMetadata } from '@/app/dashboard/settings/security/page';
+import type { AppMetadata } from '@/types';
 import { doc } from "firebase/firestore";
 import { useTheme } from "next-themes";
 import { useFont } from "@/context/font-provider";
