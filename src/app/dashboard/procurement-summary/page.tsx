@@ -86,30 +86,22 @@ export default function ProcurementSummaryPage() {
     
         const isCurrentDeptValid = visibleDepartments.some(d => d.id === selectedDepartmentId);
     
-        // Only update if the current selection is invalid or not set, AND there are departments to choose from
         if ((!selectedDepartmentId || !isCurrentDeptValid) && visibleDepartments.length > 0) {
             setSelectedDepartmentId(visibleDepartments[0].id);
         } else if (visibleDepartments.length === 0 && selectedDepartmentId) {
-            // If the list of visible departments becomes empty, clear the selection
             setSelectedDepartmentId('');
         }
-    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
+    }, [visibleDepartments, deptsLoading]);
     
     useEffect(() => {
         const isCurrentPeriodValid = availablePeriods.includes(selectedPeriod);
     
-        if (availablePeriods.length > 0) {
-            // If current period is not valid or not set, set it to the first available one
-            if (!selectedPeriod || !isCurrentPeriodValid) {
-                setSelectedPeriod(availablePeriods[0]);
-            }
-        } else {
-            // If there are no available periods, clear the selection
-            if (selectedPeriod !== '') {
-                setSelectedPeriod('');
-            }
+        if (availablePeriods.length > 0 && (!selectedPeriod || !isCurrentPeriodValid)) {
+            setSelectedPeriod(availablePeriods[0]);
+        } else if (availablePeriods.length === 0 && selectedPeriod) {
+            setSelectedPeriod('');
         }
-    }, [availablePeriods, selectedPeriod]);
+    }, [availablePeriods]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
@@ -369,3 +361,4 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
+

@@ -221,7 +221,6 @@ export default function ProcurementQuickSubmitPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        // If params have been handled or data isn't ready, do nothing.
         if (initialParamsProcessed.current || deptsLoading || !departments) {
             return;
         }
@@ -233,9 +232,7 @@ export default function ProcurementQuickSubmitPage() {
             if (departments.some(d => d.id === deptId)) {
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
-                // Mark that we've processed the initial params.
                 initialParamsProcessed.current = true;
-                // This will trigger a re-render, but the ref will prevent the logic from running again.
                 router.replace('/dashboard/procurement', { scroll: false });
             }
         }
@@ -261,7 +258,7 @@ export default function ProcurementQuickSubmitPage() {
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
+    }, [departmentsForUser, deptsLoading]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -1175,7 +1172,7 @@ export default function ProcurementQuickSubmitPage() {
                                 profile={profile}
                                 userRole={role} 
                                 items={draftItems}
-                                setItems={setDraftItems}
+                                setItems={setItems}
                                 isLocked={isLocked}
                                 recurringItems={recurringItems}
                                 recurringLoading={recurringLoading}
@@ -1507,3 +1504,4 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+

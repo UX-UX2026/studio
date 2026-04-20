@@ -88,7 +88,6 @@ export default function EmergencyProcurementPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        // If params have been handled or data isn't ready, do nothing.
         if (initialParamsProcessed.current || deptsLoading || !departments) {
             return;
         }
@@ -123,17 +122,20 @@ export default function EmergencyProcurementPage() {
     // Set default department and period
     useEffect(() => {
         if (deptsLoading || !departmentsForUser) return;
+        
+        // Set default department if not already set
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-        // Use functional update to avoid dependency loop
+        
+        // Set default period if not already set
         setSelectedPeriod(currentPeriod => {
-            if (!currentPeriod) { // Only set if it's currently empty
+            if (!currentPeriod) {
                 return format(new Date(), "MMMM yyyy");
             }
             return currentPeriod;
         });
-    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
+    }, [departmentsForUser, deptsLoading]);
 
     // Effect to initialize or load a draft
     useEffect(() => {
@@ -281,7 +283,7 @@ export default function EmergencyProcurementPage() {
             console.error("Save Request Error:", error);
             setSaveStatus('idle');
             toast({ variant: 'destructive', title: 'Save Failed', description: error.message || 'Could not save your request.' });
-            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName || null, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName || 'N/A', action, errorMessage: error.message, errorStack: error.stack });
         }
     };
 
@@ -392,3 +394,4 @@ export default function EmergencyProcurementPage() {
         </div>
     );
 }
+
