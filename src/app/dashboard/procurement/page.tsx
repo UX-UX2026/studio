@@ -258,7 +258,7 @@ export default function ProcurementQuickSubmitPage() {
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [departmentsForUser, deptsLoading]);
+    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -1172,7 +1172,7 @@ export default function ProcurementQuickSubmitPage() {
                                 profile={profile}
                                 userRole={role} 
                                 items={draftItems}
-                                setItems={setItems}
+                                setItems={setDraftItems}
                                 isLocked={isLocked}
                                 recurringItems={recurringItems}
                                 recurringLoading={recurringLoading}
@@ -1504,4 +1504,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
