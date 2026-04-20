@@ -683,7 +683,7 @@ export default function ProcurementQuickSubmitPage() {
         const finalToastMessage = toastMessage;
         
         try {
-            await updateDoc(requestRef, updateData);
+            await updateDoc(requestRef, updateData as { [x: string]: any; });
             toast(finalToastMessage);
 
             const auditDetails = `Approved request ${activeRequest.id}, new status "${newStatus}"`;
@@ -1017,8 +1017,8 @@ export default function ProcurementQuickSubmitPage() {
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: actorString,
-                action,
-                details: `Notified manager for period ${selectedPeriod} in ${department.name}`,
+                action: 'notification.sent',
+                details: `Manager notification sent to ${manager.displayName} for period ${selectedPeriod} in ${department.name}`,
                 entity: { type: 'procurementRequest', id: editingRequestId || 'new' },
                 timestamp: serverTimestamp()
             });
@@ -1030,12 +1030,13 @@ export default function ProcurementQuickSubmitPage() {
                 title: "Notification Failed",
                 description: error.message,
             });
-            await logErrorToFirestore(firestore, {
+            await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
                 userName: actorString,
-                action,
-                errorMessage: error.message,
-                errorStack: error.stack,
+                action: 'notification.failed',
+                details: `Failed to send manager notification: ${error.message}`,
+                entity: { type: 'procurementRequest', id: editingRequestId || 'new' },
+                timestamp: serverTimestamp()
             });
         } finally {
             setIsNotifying(false);

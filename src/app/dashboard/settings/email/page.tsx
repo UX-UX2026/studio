@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -44,6 +45,9 @@ function MailflowTest() {
         }
 
         setIsSending(true);
+        const action = 'notification.test_sent';
+        const failAction = 'notification.test_failed';
+
         try {
             const response = await fetch('/api/send-email', {
                 method: 'POST',
@@ -67,11 +71,18 @@ function MailflowTest() {
                     title: 'Email Service Not Configured',
                     description: 'Please set your email credentials in the .env file.',
                 });
+                throw new Error('Email service not configured');
             } else {
                 toast({
                     title: 'Test Email Sent',
                     description: `A test email has been sent to ${recipient}.`,
                 });
+                if (user && firestore) {
+                     await addDoc(collection(firestore, 'auditLogs'), {
+                        userId: user.uid, userName: user.displayName, action,
+                        details: `Sent test email to ${recipient}.`, timestamp: serverTimestamp()
+                    });
+                }
             }
 
         } catch (error: any) {
@@ -81,12 +92,9 @@ function MailflowTest() {
                 description: error.message,
             });
             if (user && firestore) {
-                await logErrorToFirestore(firestore, {
-                    userId: user.uid,
-                    userName: user.displayName || 'System',
-                    action: 'mailflow.test',
-                    errorMessage: error.message,
-                    errorStack: error.stack,
+                await addDoc(collection(firestore, 'auditLogs'), {
+                    userId: user.uid, userName: user.displayName, action: failAction,
+                    details: `Failed to send test email to ${recipient}: ${error.message}`, timestamp: serverTimestamp()
                 });
             }
         } finally {
@@ -180,8 +188,10 @@ function RemindersSettings() {
             return;
         }
         setIsSending(true);
-        const action = 'reminders.manual_send';
+        const successAction = 'notification.reminder_sent';
+        const failAction = 'notification.reminder_failed';
         let sentCount = 0;
+        
         try {
             for (const req of pendingRequests) {
                 const pendingStage = req.timeline.find(t => t.status === 'pending');
@@ -192,31 +202,41 @@ function RemindersSettings() {
                 const recipients = snapshot.docs.map(d => d.data().email).filter(Boolean);
 
                 if (recipients.length > 0) {
-                     await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            to: recipients.join(','),
-                            subject: `REMINDER: Request ${req.id.substring(0,8)}... is Awaiting Approval`,
-                            html: reminderTemplate(req, pendingStage.stage, `${window.location.origin}/dashboard/approvals?id=${req.id}`)
-                        })
-                    });
-                    sentCount++;
+                     try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                to: recipients.join(','),
+                                subject: `REMINDER: Request ${req.id.substring(0,8)}... is Awaiting Approval`,
+                                html: reminderTemplate(req, pendingStage.stage, `${window.location.origin}/dashboard/approvals?id=${req.id}`)
+                            })
+                        });
+                        if (!response.ok) throw new Error('Server responded with an error');
+                        sentCount++;
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid, userName: 'System', action: successAction,
+                            details: `Reminder sent to ${recipients.join(', ')} for request ${req.id}`,
+                            entity: { type: 'procurementRequest', id: req.id },
+                            timestamp: serverTimestamp()
+                        });
+                    } catch (emailError: any) {
+                         await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid, userName: 'System', action: failAction,
+                            details: `Failed to send reminder to ${recipients.join(', ')}: ${emailError.message}`,
+                            entity: { type: 'procurementRequest', id: req.id },
+                            timestamp: serverTimestamp()
+                        });
+                    }
                 }
             }
 
             await setDoc(appMetadataRef, { reminderSettings: { frequency, lastSent: new Date() } }, { merge: true });
             
             toast({ title: 'Reminders Sent', description: `Sent ${sentCount} reminder emails.` });
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid, userName: user.displayName, action,
-                details: `Manually triggered and sent ${sentCount} reminders.`,
-                timestamp: serverTimestamp()
-            });
-
         } catch (error: any) {
              toast({ variant: 'destructive', title: 'Send failed', description: error.message });
-             await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+             await logErrorToFirestore(firestore, { userId: user.uid, userName: 'System', action: 'reminders.manual_send_process', errorMessage: error.message, errorStack: error.stack });
         } finally {
             setIsSending(false);
         }

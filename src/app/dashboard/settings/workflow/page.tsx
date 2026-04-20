@@ -252,6 +252,12 @@ export default function WorkflowPage() {
                 title: 'Test Email Sent',
                 description: `Sent to: ${finalRecipients.join(', ')}`,
             });
+            
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid, userName: user.displayName, action: 'notification.test_sent',
+                details: `Sent workflow test email for stage '${stage.name}' to ${finalRecipients.join(', ')}`,
+                timestamp: serverTimestamp()
+            });
     
         } catch (error: any) {
             console.error("Test Notification Error:", error);
@@ -260,12 +266,10 @@ export default function WorkflowPage() {
                 title: "Test Failed",
                 description: error.message,
             });
-            await logErrorToFirestore(firestore, {
-                userId: user.uid,
-                userName: user.displayName,
-                action: 'workflow.test_notification',
-                errorMessage: error.message,
-                errorStack: error.stack,
+            await addDoc(collection(firestore, 'auditLogs'), {
+                userId: user.uid, userName: user.displayName, action: 'notification.test_failed',
+                details: `Failed to send workflow test email for stage '${stage.name}': ${error.message}`,
+                timestamp: serverTimestamp()
             });
         } finally {
             setIsTesting(null);

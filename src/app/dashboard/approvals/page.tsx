@@ -634,14 +634,15 @@ const RequestDetailsView = ({
                             entity: { type: 'procurementRequest', id: request.id },
                             timestamp: serverTimestamp()
                         });
-                    } catch (emailError) {
+                    } catch (emailError: any) {
                         console.error("Email API call to assistants failed:", emailError);
-                        await logErrorToFirestore(firestore, {
+                        await addDoc(collection(firestore, 'auditLogs'), {
                             userId: user.uid,
                             userName: 'System',
-                            action: 'notification.assistant_email_failed',
-                            errorMessage: (emailError as Error).message,
-                            errorStack: (emailError as Error).stack,
+                            action: 'notification.failed',
+                            details: `Failed to send fulfillment notification to assistants: ${emailError.message}`,
+                            entity: { type: 'procurementRequest', id: request.id },
+                            timestamp: serverTimestamp()
                         });
                     }
                 }
@@ -720,14 +721,15 @@ const RequestDetailsView = ({
                                     entity: { type: 'procurementRequest', id: request.id },
                                     timestamp: serverTimestamp()
                                 });
-                            } catch (emailError) {
+                            } catch (emailError: any) {
                                 console.error("Email API call failed:", emailError);
-                                await logErrorToFirestore(firestore, {
+                                await addDoc(collection(firestore, 'auditLogs'), {
                                     userId: user.uid,
                                     userName: 'System',
-                                    action: 'notification.email_api_failed',
-                                    errorMessage: (emailError as Error).message,
-                                    errorStack: (emailError as Error).stack,
+                                    action: 'notification.failed',
+                                    details: `Failed to send notification for stage '${nextStage.stage}': ${emailError.message}`,
+                                    entity: { type: 'procurementRequest', id: request.id },
+                                    timestamp: serverTimestamp()
                                 });
                             }
                         }
@@ -831,11 +833,31 @@ const RequestDetailsView = ({
                 if (submitterProfile.email) {
                     const link = `${window.location.origin}/dashboard/approvals?id=${request.id}`;
                     const emailHtml = requestRejectedTemplate(request, commentData, link);
-                    await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${request.id}`, html: emailHtml })
-                    });
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to: submitterProfile.email, subject: `Procurement Request Rejected: ${request.id}`, html: emailHtml })
+                        });
+                         if (!response.ok) throw new Error('Server responded with an error');
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.sent',
+                            details: `Rejection notification sent to ${submitterProfile.email}`,
+                            entity: { type: 'procurementRequest', id: request.id },
+                            timestamp: serverTimestamp()
+                        });
+                    } catch (emailError: any) {
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.failed',
+                            details: `Failed to send rejection notification to ${submitterProfile.email}: ${emailError.message}`,
+                            entity: { type: 'procurementRequest', id: request.id },
+                            timestamp: serverTimestamp()
+                        });
+                    }
                 }
             }
 
@@ -918,11 +940,31 @@ const RequestDetailsView = ({
                 if (submitterProfile.email) {
                     const link = `${window.location.origin}/dashboard/approvals?id=${request.id}`;
                     const emailHtml = queryRaisedTemplate(request, commentData, link);
-                    await fetch('/api/send-email', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${request.id}`, html: emailHtml })
-                    });
+                    try {
+                        const response = await fetch('/api/send-email', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ to: submitterProfile.email, subject: `Query on Procurement Request: ${request.id}`, html: emailHtml })
+                        });
+                        if (!response.ok) throw new Error('Server responded with an error');
+                        await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.sent',
+                            details: `Query notification sent to ${submitterProfile.email}`,
+                            entity: { type: 'procurementRequest', id: request.id },
+                            timestamp: serverTimestamp()
+                        });
+                    } catch (emailError: any) {
+                         await addDoc(collection(firestore, 'auditLogs'), {
+                            userId: user.uid,
+                            userName: 'System',
+                            action: 'notification.failed',
+                            details: `Failed to send query notification to ${submitterProfile.email}: ${emailError.message}`,
+                            entity: { type: 'procurementRequest', id: request.id },
+                            timestamp: serverTimestamp()
+                        });
+                    }
                 }
             }
 
