@@ -5,7 +5,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, Fragment } from "react";
+import { useEffect, useMemo, useState, Fragment, useRef } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -219,21 +219,27 @@ export default function ProcurementQuickSubmitPage() {
     }, [budgetItems, draftItems]);
 
     // Handle incoming query params to resume a draft
+    const initialParamsProcessed = useRef(false);
     useEffect(() => {
+        // If params have been handled or data isn't ready, do nothing.
+        if (initialParamsProcessed.current || deptsLoading || !departments) {
+            return;
+        }
+
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
 
         if (deptId && period) {
-            // Check if this is a valid department before setting
-            if (departments?.some(d => d.id === deptId)) {
+            if (departments.some(d => d.id === deptId)) {
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
-                // Clear the search params so a refresh doesn't keep reloading it
+                // Mark that we've processed the initial params.
+                initialParamsProcessed.current = true;
+                // This will trigger a re-render, but the ref will prevent the logic from running again.
                 router.replace('/dashboard/procurement', { scroll: false });
             }
         }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [searchParams, departments]);
+    }, [searchParams, departments, deptsLoading, router]);
 
     const departmentsForUser = useMemo(() => {
         if (!departments) return [];
@@ -503,7 +509,7 @@ export default function ProcurementQuickSubmitPage() {
 
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
 
-        const baseRequestData = {
+        const baseRequestData: Partial<ApprovalRequest> = {
             department: departmentName,
             departmentId: selectedDepartmentId,
             companyId: selectedCompanyId,

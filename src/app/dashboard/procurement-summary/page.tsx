@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -83,34 +84,32 @@ export default function ProcurementSummaryPage() {
     useEffect(() => {
         if (deptsLoading || !visibleDepartments) return;
     
-        setSelectedDepartmentId(currentDeptId => {
-            if (visibleDepartments.length === 0) {
-                return '';
-            }
-            const isCurrentDeptValid = visibleDepartments.some(d => d.id === currentDeptId);
-            if (isCurrentDeptValid) {
-                return currentDeptId;
-            }
-            // If current is invalid or not set, default to the first one
-            return visibleDepartments[0].id;
-        });
+        const isCurrentDeptValid = visibleDepartments.some(d => d.id === selectedDepartmentId);
     
-    }, [visibleDepartments, deptsLoading]);
-
+        // Only update if the current selection is invalid or not set, AND there are departments to choose from
+        if ((!selectedDepartmentId || !isCurrentDeptValid) && visibleDepartments.length > 0) {
+            setSelectedDepartmentId(visibleDepartments[0].id);
+        } else if (visibleDepartments.length === 0 && selectedDepartmentId) {
+            // If the list of visible departments becomes empty, clear the selection
+            setSelectedDepartmentId('');
+        }
+    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
+    
     useEffect(() => {
-        setSelectedPeriod(currentPeriod => {
-            // if availablePeriods is empty, reset
-            if (availablePeriods.length === 0) {
-                return '';
+        const isCurrentPeriodValid = availablePeriods.includes(selectedPeriod);
+    
+        if (availablePeriods.length > 0) {
+            // If current period is not valid or not set, set it to the first available one
+            if (!selectedPeriod || !isCurrentPeriodValid) {
+                setSelectedPeriod(availablePeriods[0]);
             }
-            // if currentPeriod is still in the list, keep it
-            if (availablePeriods.includes(currentPeriod)) {
-                return currentPeriod;
+        } else {
+            // If there are no available periods, clear the selection
+            if (selectedPeriod !== '') {
+                setSelectedPeriod('');
             }
-            // otherwise, reset to the first available period
-            return availablePeriods[0];
-        });
-    }, [availablePeriods]);
+        }
+    }, [availablePeriods, selectedPeriod]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];

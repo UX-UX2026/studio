@@ -5,7 +5,7 @@
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, Fragment } from "react";
+import { useEffect, useMemo, useState, Fragment, useRef } from "react";
 import { Loader, AlertTriangle, Globe, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
@@ -86,18 +86,25 @@ export default function EmergencyProcurementPage() {
     }, [selectedDepartmentId, departments, companies]);
 
     // Handle incoming query params to resume a draft
+    const initialParamsProcessed = useRef(false);
     useEffect(() => {
+        // If params have been handled or data isn't ready, do nothing.
+        if (initialParamsProcessed.current || deptsLoading || !departments) {
+            return;
+        }
+
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
 
         if (deptId && period) {
-            if (departments?.some(d => d.id === deptId)) {
+            if (departments.some(d => d.id === deptId)) {
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
+                initialParamsProcessed.current = true;
                 router.replace('/dashboard/procurement/emergency', { scroll: false });
             }
         }
-    }, [searchParams, departments, router]);
+    }, [searchParams, departments, deptsLoading, router]);
 
     const departmentsForUser = useMemo(() => {
         if (!departments) return [];
@@ -232,7 +239,7 @@ export default function EmergencyProcurementPage() {
 
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
 
-        const baseRequestData = {
+        const baseRequestData: Partial<ApprovalRequest> = {
             department: departmentName,
             departmentId: selectedDepartmentId,
             companyId: selectedCompanyId,
@@ -274,7 +281,7 @@ export default function EmergencyProcurementPage() {
             console.error("Save Request Error:", error);
             setSaveStatus('idle');
             toast({ variant: 'destructive', title: 'Save Failed', description: error.message || 'Could not save your request.' });
-            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName, action, errorMessage: error.message, errorStack: error.stack });
+            await logErrorToFirestore(firestore, { userId: user.uid, userName: user.displayName || null, action, errorMessage: error.message, errorStack: error.stack });
         }
     };
 
