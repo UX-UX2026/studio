@@ -105,7 +105,7 @@ export default function EmergencyProcurementPage() {
             return departments;
         }
         if (role === 'Executive') {
-            return departments.filter(d => reportingDepartments.includes(d.id));
+            return departments.filter(d => d.id && reportingDepartments && reportingDepartments.includes(d.id));
         }
         if (role === 'Manager' || role === 'Requester') {
             return departments.filter(d => d.name === userDepartment);
@@ -119,10 +119,14 @@ export default function EmergencyProcurementPage() {
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-        if (!selectedPeriod) {
-            setSelectedPeriod(format(new Date(), "MMMM yyyy"));
-        }
-    }, [departmentsForUser, deptsLoading, selectedDepartmentId, selectedPeriod]);
+        // Use functional update to avoid dependency loop
+        setSelectedPeriod(currentPeriod => {
+            if (!currentPeriod) { // Only set if it's currently empty
+                return format(new Date(), "MMMM yyyy");
+            }
+            return currentPeriod;
+        });
+    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
 
     // Effect to initialize or load a draft
     useEffect(() => {

@@ -257,43 +257,40 @@ export default function ProcurementQuickSubmitPage() {
         }
     }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
 
-    // Update the list of open periods when the department changes
+    const baseGeneratedPeriods = useMemo(() => {
+        const periods = [];
+        const now = new Date();
+        for (let i = 0; i < 18; i++) {
+            periods.push(format(addMonths(now, i), "MMMM yyyy"));
+        }
+        return periods;
+    }, []);
+
+    // Update the list of open periods and selectedPeriod when the department changes
     useEffect(() => {
         if (selectedDepartmentId && departments) {
             const dept = departments.find(d => d.id === selectedDepartmentId);
-
-            // Generate base periods
-            const baseGeneratedPeriods: string[] = [];
-            const now = new Date();
-            for (let i = 0; i < 18; i++) {
-                baseGeneratedPeriods.push(format(addMonths(now, i), "MMMM yyyy"));
-            }
-
-            // Get all possible periods by combining generated and saved ones
             const periodSettings = dept?.periodSettings || {};
             const allKnownPeriods = new Set(baseGeneratedPeriods);
             Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
-
-            // Filter for only the open ones
             const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-            
-            // Sort them chronologically
             periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
             
             setOpenPeriods(periods);
             
             setSelectedPeriod(currentSelected => {
-                if (!periods.includes(currentSelected)) {
-                    return periods[0] || '';
+                if (periods.includes(currentSelected)) {
+                    return currentSelected;
                 }
-                return currentSelected;
+                return periods[0] || '';
             });
 
         } else {
             setOpenPeriods([]);
             setSelectedPeriod('');
         }
-    }, [selectedDepartmentId, departments]);
+    }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
+
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.
     useEffect(() => {
@@ -1146,7 +1143,7 @@ export default function ProcurementQuickSubmitPage() {
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                         <CardContent className="border-t pt-5">
-                            <RecurringClient items={recurringItems || []} categories={departmentCategories} />
+                            <RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} />
                         </CardContent>
                     </CollapsibleContent>
                 </Collapsible>
