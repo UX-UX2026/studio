@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -86,22 +85,27 @@ export default function ProcurementSummaryPage() {
     
         const isCurrentDeptValid = visibleDepartments.some(d => d.id === selectedDepartmentId);
     
-        if ((!selectedDepartmentId || !isCurrentDeptValid) && visibleDepartments.length > 0) {
-            setSelectedDepartmentId(visibleDepartments[0].id);
-        } else if (visibleDepartments.length === 0 && selectedDepartmentId) {
-            setSelectedDepartmentId('');
+        if (!isCurrentDeptValid) {
+            if (visibleDepartments.length > 0) {
+                setSelectedDepartmentId(visibleDepartments[0].id);
+            } else {
+                setSelectedDepartmentId('');
+            }
         }
-    }, [visibleDepartments, deptsLoading]);
+    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
     
     useEffect(() => {
+        if (requestsLoading) return;
         const isCurrentPeriodValid = availablePeriods.includes(selectedPeriod);
     
-        if (availablePeriods.length > 0 && (!selectedPeriod || !isCurrentPeriodValid)) {
-            setSelectedPeriod(availablePeriods[0]);
-        } else if (availablePeriods.length === 0 && selectedPeriod) {
-            setSelectedPeriod('');
+        if (!isCurrentPeriodValid) {
+            if (availablePeriods.length > 0) {
+                setSelectedPeriod(availablePeriods[0]);
+            } else {
+                setSelectedPeriod('');
+            }
         }
-    }, [availablePeriods]);
+    }, [availablePeriods, selectedPeriod, requestsLoading]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
@@ -361,4 +365,3 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
-

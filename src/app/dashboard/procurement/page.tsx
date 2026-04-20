@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -221,20 +220,19 @@ export default function ProcurementQuickSubmitPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        if (initialParamsProcessed.current || deptsLoading || !departments) {
-            return;
-        }
-
+        if (initialParamsProcessed.current || deptsLoading || !departments) return;
+    
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
-
+    
         if (deptId && period) {
             if (departments.some(d => d.id === deptId)) {
+                // We use replace to prevent this action from creating a new history entry
+                router.replace('/dashboard/procurement', { scroll: false });
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
-                initialParamsProcessed.current = true;
-                router.replace('/dashboard/procurement', { scroll: false });
             }
+            initialParamsProcessed.current = true;
         }
     }, [searchParams, departments, deptsLoading, router]);
 
@@ -271,28 +269,26 @@ export default function ProcurementQuickSubmitPage() {
 
     // Update the list of open periods and selectedPeriod when the department changes
     useEffect(() => {
-        if (selectedDepartmentId && departments) {
-            const dept = departments.find(d => d.id === selectedDepartmentId);
-            const periodSettings = dept?.periodSettings || {};
-            const allKnownPeriods = new Set(baseGeneratedPeriods);
-            Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
-            const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-            periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-            
-            setOpenPeriods(periods);
-            
-            setSelectedPeriod(currentSelected => {
-                if (periods.includes(currentSelected)) {
-                    return currentSelected;
-                }
-                return periods[0] || '';
-            });
-
-        } else {
+        if (!selectedDepartmentId || !departments) {
             setOpenPeriods([]);
             setSelectedPeriod('');
+            return;
         }
-    }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
+    
+        const dept = departments.find(d => d.id === selectedDepartmentId);
+        const periodSettings = dept?.periodSettings || {};
+        const allKnownPeriods = new Set(baseGeneratedPeriods);
+        Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
+        const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
+        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        
+        setOpenPeriods(periods);
+        
+        // Only update selectedPeriod if it's not in the new list of open periods
+        if (!periods.includes(selectedPeriod)) {
+            setSelectedPeriod(periods[0] || '');
+        }
+    }, [selectedDepartmentId, departments, baseGeneratedPeriods, selectedPeriod]);
 
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.

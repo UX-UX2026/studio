@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -88,20 +87,19 @@ export default function EmergencyProcurementPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        if (initialParamsProcessed.current || deptsLoading || !departments) {
-            return;
-        }
-
+        if (initialParamsProcessed.current || deptsLoading || !departments) return;
+    
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
-
+    
         if (deptId && period) {
             if (departments.some(d => d.id === deptId)) {
+                // We use replace to prevent this action from creating a new history entry
+                router.replace('/dashboard/procurement/emergency', { scroll: false });
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
-                initialParamsProcessed.current = true;
-                router.replace('/dashboard/procurement/emergency', { scroll: false });
             }
+            initialParamsProcessed.current = true;
         }
     }, [searchParams, departments, deptsLoading, router]);
 
@@ -128,14 +126,11 @@ export default function EmergencyProcurementPage() {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
         
-        // Set default period if not already set
-        setSelectedPeriod(currentPeriod => {
-            if (!currentPeriod) {
-                return format(new Date(), "MMMM yyyy");
-            }
-            return currentPeriod;
-        });
-    }, [departmentsForUser, deptsLoading]);
+        // Set default period only if it's currently empty
+        if (!selectedPeriod) {
+            setSelectedPeriod(format(new Date(), "MMMM yyyy"));
+        }
+    }, [departmentsForUser, deptsLoading, selectedDepartmentId, selectedPeriod]);
 
     // Effect to initialize or load a draft
     useEffect(() => {
@@ -394,4 +389,3 @@ export default function EmergencyProcurementPage() {
         </div>
     );
 }
-
