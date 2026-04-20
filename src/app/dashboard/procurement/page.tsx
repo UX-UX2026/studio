@@ -12,7 +12,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, WorkflowStage, AuditEvent } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -51,76 +51,11 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-type Department = {
-    id: string;
-    name: string;
-    managerId?: string;
-    budgetHeaders?: string[];
-    workflow?: WorkflowStage[];
-    budgetYear?: number;
-    periodSettings?: {
-        [period: string]: {
-            status: 'Open' | 'Locked';
-        }
-    },
-    companyIds?: string[];
-};
-
 type UserProfileData = {
     id: string;
     displayName: string;
     email: string;
     role: string;
-};
-
-type Company = {
-    id: string;
-    name: string;
-    logoUrl?: string;
-};
-
-type AppMetadata = {
-    id: string;
-    adminIsSetUp?: boolean;
-    limitToOneSubmissionPerPeriod?: boolean;
-    pdfSettings?: { primaryColor?: string; };
-}
-
-type Item = {
-  id: number | string;
-  type: "Recurring" | "One-Off";
-  expenseType: 'Operational' | 'Capital';
-  description: string;
-  brand: string;
-  qty: number;
-  category: string;
-  unitPrice: number;
-  fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
-  receivedQty: number;
-  fulfillmentComments: string[];
-  comments?: string;
-  addedById?: string;
-  addedByName?: string;
-};
-
-type WorkflowStage = {
-    id: string;
-    name: string;
-    role: any;
-    permissions: string[];
-};
-
-type AuditEvent = {
-    id: string;
-    userId: string;
-    userName: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-    entity?: {
-        type: string;
-        id: string;
-    };
 };
 
 export default function ProcurementQuickSubmitPage() {
@@ -134,7 +69,7 @@ export default function ProcurementQuickSubmitPage() {
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
     
-    const [draftItems, setDraftItems] = useState<Item[]>([]);
+    const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
@@ -306,7 +241,7 @@ export default function ProcurementQuickSubmitPage() {
             return departments;
         }
         if (role === 'Executive') {
-            return departments.filter(d => reportingDepartments.includes(d.id));
+            return departments.filter(d => d.id && reportingDepartments && reportingDepartments.includes(d.id));
         }
         if (role === 'Manager' || role === 'Requester') {
             return departments.filter(d => d.name === userDepartment);
@@ -328,7 +263,7 @@ export default function ProcurementQuickSubmitPage() {
             const dept = departments.find(d => d.id === selectedDepartmentId);
 
             // Generate base periods
-            const baseGeneratedPeriods = [];
+            const baseGeneratedPeriods: string[] = [];
             const now = new Date();
             for (let i = 0; i < 18; i++) {
                 baseGeneratedPeriods.push(format(addMonths(now, i), "MMMM yyyy"));
@@ -347,14 +282,18 @@ export default function ProcurementQuickSubmitPage() {
             
             setOpenPeriods(periods);
             
-            if (!periods.includes(selectedPeriod)) {
-                setSelectedPeriod(periods[0] || '');
-            }
+            setSelectedPeriod(currentSelected => {
+                if (!periods.includes(currentSelected)) {
+                    return periods[0] || '';
+                }
+                return currentSelected;
+            });
+
         } else {
             setOpenPeriods([]);
             setSelectedPeriod('');
         }
-    }, [selectedDepartmentId, departments, selectedPeriod]);
+    }, [selectedDepartmentId, departments]);
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.
     useEffect(() => {
@@ -366,7 +305,7 @@ export default function ProcurementQuickSubmitPage() {
         const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
 
         // Prepare a function to convert master recurring items to submission items
-        const mapRecurringToSubmissionItem = (item: RecurringItem): Item => ({
+        const mapRecurringToSubmissionItem = (item: RecurringItem): ApprovalItem => ({
             id: item.id,
             type: "Recurring",
             expenseType: item.expenseType || 'Operational', // Use from master, default to Operational

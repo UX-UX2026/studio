@@ -39,27 +39,7 @@ import { format } from "date-fns";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { BudgetItem } from "@/lib/approvals-mock-data";
-
-type Department = {
-    id: string;
-    name: string;
-    budgetHeaders?: string[];
-    budgetYear?: number;
-};
-
-type BudgetUpload = {
-    id: string;
-    departmentId: string;
-    departmentName: string;
-    financialYear: number;
-    uploadedAt: { seconds: number, nanoseconds: number };
-    uploadedById: string;
-    uploadedByName: string;
-    monthHeaders: string[];
-    isActive: boolean;
-    uploadType: 'Operational' | 'Capital';
-}
+import type { BudgetItem, Department, BudgetUpload } from "@/types";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -76,7 +56,7 @@ export default function BudgetPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
-    const [financialYear, setFinancialYear] = useState<number>(new Date().getFullYear());
+    const [financialYear, setFinancialYear] = useState<number>(0);
     const [activeTab, setActiveTab] = useState<'Operational' | 'Capital'>('Operational');
 
     // State for mapping dialog
@@ -102,7 +82,7 @@ export default function BudgetPage() {
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const budgetUploadsQuery = useMemo(() => {
-        if (!firestore || !selectedDepartmentId) return null;
+        if (!firestore || !selectedDepartmentId || financialYear === 0) return null;
         return query(
             collection(firestore, 'budgetUploads'), 
             where('departmentId', '==', selectedDepartmentId), 
@@ -141,8 +121,16 @@ export default function BudgetPage() {
     }, [selectedDepartmentId, departments]);
 
     useEffect(() => {
-        if (selectedDepartment) {
-            setFinancialYear(selectedDepartment.budgetYear || new Date().getFullYear());
+        // This effect runs only once on client mount to avoid hydration errors.
+        if (financialYear === 0) {
+            setFinancialYear(new Date().getFullYear());
+        }
+    }, []);
+
+    useEffect(() => {
+        // This effect sets the year when the department changes.
+        if (selectedDepartment?.budgetYear) {
+            setFinancialYear(selectedDepartment.budgetYear);
         }
     }, [selectedDepartment]);
 
@@ -287,7 +275,7 @@ export default function BudgetPage() {
         reader.onload = async (e) => {
             try {
                 const data = e.target?.result;
-                const workbook = XLSX.read(data, { type: 'array', cellFormula: false, cellHTML: false, cellDates: true });
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
                 const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
                 const allData: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: null, raw: false });
@@ -556,7 +544,7 @@ export default function BudgetPage() {
                             </div>
                             <div className="grid gap-1.5">
                                 <Label htmlFor="financial-year">Financial Year</Label>
-                                <Input id="financial-year" type="number" value={financialYear} onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))} className="w-[120px] bg-background" placeholder="e.g., 2026" disabled={!selectedDepartmentId} />
+                                <Input id="financial-year" type="number" value={financialYear || ''} onChange={(e) => setFinancialYear(parseInt(e.target.value, 10))} className="w-[120px] bg-background" placeholder="e.g., 2026" disabled={!selectedDepartmentId} />
                             </div>
                         </div>
 
