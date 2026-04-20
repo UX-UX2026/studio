@@ -59,7 +59,7 @@ export default function ProcurementSummaryPage() {
             return departments;
         }
         if (role === 'Executive') {
-            return departments.filter(d => reportingDepartments.includes(d.id));
+            return departments.filter(d => d.id && reportingDepartments.includes(d.id));
         }
         if (role === 'Manager' || role === 'Requester') {
             return departments.filter(d => d.name === userDepartment);
@@ -83,23 +83,34 @@ export default function ProcurementSummaryPage() {
     useEffect(() => {
         if (deptsLoading || !visibleDepartments) return;
     
-        if (!selectedDepartmentId && visibleDepartments.length > 0) {
-            setSelectedDepartmentId(visibleDepartments[0].id);
-        } else if (selectedDepartmentId && !visibleDepartments.some(d => d.id === selectedDepartmentId)) {
-            setSelectedDepartmentId(visibleDepartments[0]?.id || '');
-        }
+        setSelectedDepartmentId(currentDeptId => {
+            if (visibleDepartments.length === 0) {
+                return '';
+            }
+            const isCurrentDeptValid = visibleDepartments.some(d => d.id === currentDeptId);
+            if (isCurrentDeptValid) {
+                return currentDeptId;
+            }
+            // If current is invalid or not set, default to the first one
+            return visibleDepartments[0].id;
+        });
     
-    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
+    }, [visibleDepartments, deptsLoading]);
 
     useEffect(() => {
-        if (availablePeriods.length > 0 && !selectedPeriod) {
-            setSelectedPeriod(availablePeriods[0]);
-        } else if (availablePeriods.length > 0 && !availablePeriods.includes(selectedPeriod)) {
-            setSelectedPeriod(availablePeriods[0]);
-        } else if (availablePeriods.length === 0) {
-            setSelectedPeriod('');
-        }
-    }, [availablePeriods, selectedPeriod]);
+        setSelectedPeriod(currentPeriod => {
+            // if availablePeriods is empty, reset
+            if (availablePeriods.length === 0) {
+                return '';
+            }
+            // if currentPeriod is still in the list, keep it
+            if (availablePeriods.includes(currentPeriod)) {
+                return currentPeriod;
+            }
+            // otherwise, reset to the first available period
+            return availablePeriods[0];
+        });
+    }, [availablePeriods]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
