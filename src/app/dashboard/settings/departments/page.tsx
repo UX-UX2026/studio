@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -34,25 +35,9 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { useDebugLog } from "@/context/debug-log-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
+import type { Department, Company } from "@/types";
+import type { UserProfile } from "@/context/authentication-provider";
 
-type Department = {
-    id: string;
-    name: string;
-    managerId: string | null;
-    budget: number;
-    companyIds?: string[];
-};
-
-type UserProfile = {
-    id: string;
-    displayName: string;
-    role: string;
-}
-
-type Company = {
-    id: string;
-    name: string;
-};
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -104,8 +89,8 @@ export default function DepartmentsPage() {
         if (isDialogOpen) {
             if (editingDepartment) {
                 setName(editingDepartment.name);
-                setManagerId(editingDepartment.managerId);
-                setBudget(editingDepartment.budget);
+                setManagerId(editingDepartment.managerId || null);
+                setBudget(editingDepartment.budget || 0);
                 setCompanyIds(editingDepartment.companyIds || []);
             } else {
                 setName('');
@@ -264,7 +249,7 @@ export default function DepartmentsPage() {
         const csvContent = [
             headers.join(','),
             ...departments.map(dept =>
-                headers.map(header => `"${(dept as any)[header]}"`).join(',')
+                headers.map(header => `"${(dept as any)[header] || ''}"`).join(',')
             )
         ].join('\n');
 
@@ -373,9 +358,9 @@ export default function DepartmentsPage() {
                                 {departments && departments.map((dept) => (
                                     <TableRow key={dept.id}>
                                         <TableCell className="font-medium">{dept.name}</TableCell>
-                                        <TableCell>{getManagerName(dept.managerId)}</TableCell>
+                                        <TableCell>{getManagerName(dept.managerId || null)}</TableCell>
                                         <TableCell className="text-xs text-muted-foreground">{getCompanyNames(dept.companyIds)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(dept.budget)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(dept.budget || 0)}</TableCell>
                                         <TableCell className="text-right">
                                             <Button variant="ghost" size="icon" onClick={() => handleEdit(dept)}>
                                                 <Edit className="h-4 w-4" />

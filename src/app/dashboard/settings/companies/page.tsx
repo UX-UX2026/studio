@@ -23,12 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
-
-type Company = {
-    id: string;
-    name: string;
-    logoUrl?: string;
-};
+import type { Company } from "@/types";
 
 export default function CompaniesPage() {
     const { user, role, loading: userLoading } = useUser();

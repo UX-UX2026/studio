@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -18,16 +19,7 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-
-type Department = {
-    id: string;
-    name: string;
-    periodSettings?: {
-        [period: string]: {
-            status: 'Open' | 'Locked';
-        }
-    };
-};
+import type { Department } from "@/types";
 
 export default function ProcurementPeriodsPage() {
     const { user, role, loading: userLoading } = useUser();

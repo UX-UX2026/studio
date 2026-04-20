@@ -32,19 +32,7 @@ import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, ord
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-
-type ApprovalGroup = {
-    id: string;
-    name: string;
-    memberIds: string[];
-};
-
-type UserProfile = {
-    id: string;
-    displayName: string;
-    email: string;
-    photoURL?: string;
-};
+import type { ApprovalGroup, UserProfileData } from "@/types";
 
 export default function ApprovalGroupsPage() {
     const { user, role, loading: userLoading } = useUser();
@@ -55,7 +43,7 @@ export default function ApprovalGroupsPage() {
     const { data: groups, loading: groupsLoading } = useCollection<ApprovalGroup>(groupsQuery);
     
     const usersQuery = useMemo(() => query(collection(firestore, 'users'), orderBy('displayName')), [firestore]);
-    const { data: allUsers, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+    const { data: allUsers, loading: usersLoading } = useCollection<UserProfileData>(usersQuery);
 
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingGroup, setEditingGroup] = useState<ApprovalGroup | null>(null);

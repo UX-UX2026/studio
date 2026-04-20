@@ -18,7 +18,7 @@ import { requestActionRequiredTemplate, queryRaisedTemplate, requestRejectedTemp
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { doc, setDoc, serverTimestamp, addDoc, collection, query, where, getDocs } from "firebase/firestore";
-import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, AppMetadata } from "@/types";
 import { formatDistanceToNow } from "date-fns";
 
 function MailflowTest() {
@@ -133,14 +133,6 @@ const templates = [
     { name: "Request Rejected", description: "Sent to the submitter when their request is rejected.", template: requestRejectedTemplate(mockRequest, { ...mockComment, text: "REJECTED: Budget exceeded." }, mockLink) },
     { name: "Workflow Test", description: "Used when testing workflow notifications from the settings page.", template: workflowTestTemplate('Manager Review', ['manager@example.com', 'admin@example.com']) }
 ];
-
-type AppMetadata = {
-    id: string;
-    reminderSettings?: {
-        frequency: 'daily' | 'weekly' | 'off';
-        lastSent?: { seconds: number, nanoseconds: number };
-    };
-};
 
 function RemindersSettings() {
     const { user } = useUser();

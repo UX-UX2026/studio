@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -38,16 +39,7 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { type UserProfile } from "@/context/authentication-provider";
 import { Badge } from "@/components/ui/badge";
-
-type Department = {
-    id: string;
-    name: string;
-};
-
-type Company = {
-    id: string;
-    name: string;
-};
+import type { Department, Company } from "@/types";
 
 export default function UsersPage() {
     const { user: adminUser, role: adminRole, loading: userLoading } = useUser();

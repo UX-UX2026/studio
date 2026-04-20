@@ -24,6 +24,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, setDoc, addDoc, serverTimestamp, query, where, getDocs } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { workflowTestTemplate } from "@/lib/email-templates";
+import type { WorkflowStage, Department, ApprovalGroup, UserProfileData } from "@/types";
 
 const allPermissions = [
     { id: 'capture', label: 'Capture & Edit Items' },
@@ -35,37 +36,6 @@ const allPermissions = [
     { id: 'process', label: 'Process for Fulfillment' },
     { id: 'monitor', label: 'Monitor Fulfillment' },
 ];
-
-type WorkflowStage = {
-    id: string;
-    name: string;
-    role: UserRole;
-    approvalGroupId?: string;
-    approvalGroupName?: string;
-    permissions: string[];
-    useAlternateEmail?: boolean;
-    alternateEmail?: string;
-    sendToBoth?: boolean;
-};
-
-type Department = {
-  id: string;
-  name: string;
-  workflow?: WorkflowStage[];
-};
-
-type UserProfile = {
-    id: string;
-    displayName: string;
-    email: string;
-    role: string;
-};
-
-type ApprovalGroup = {
-    id: string;
-    name: string;
-    memberIds: string[];
-};
 
 const initialWorkflow: WorkflowStage[] = [
     { id: 'stage-0', name: 'Request Creation', role: 'Requester', permissions: ['capture', 'submit', 'comment'], useAlternateEmail: false, alternateEmail: '', sendToBoth: false },
@@ -87,7 +57,7 @@ export default function WorkflowPage() {
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
-    const { data: users, loading: usersLoading } = useCollection<UserProfile>(usersQuery);
+    const { data: users, loading: usersLoading } = useCollection<UserProfileData>(usersQuery);
 
     const approvalGroupsQuery = useMemo(() => collection(firestore, 'approvalGroups'), [firestore]);
     const { data: approvalGroups, loading: groupsLoading } = useCollection<ApprovalGroup>(approvalGroupsQuery);
@@ -157,7 +127,7 @@ export default function WorkflowPage() {
         const newStage: WorkflowStage = {
             id: `stage-${Date.now()}`,
             name: 'New Stage',
-            role: null,
+            role: undefined,
             permissions: [],
             useAlternateEmail: false,
             alternateEmail: '',
@@ -431,7 +401,7 @@ export default function WorkflowPage() {
                                                     </SelectContent>
                                                 </Select>
                                             ) : (
-                                                <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value)}>
+                                                <Select value={stage.role || ''} onValueChange={(value) => handleUpdateStage(stage.id, 'role', value as UserRole)}>
                                                     <SelectTrigger>
                                                         <SelectValue placeholder="Select a role" />
                                                     </SelectTrigger>

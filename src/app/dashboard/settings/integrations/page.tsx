@@ -16,43 +16,7 @@ import { logErrorToFirestore } from "@/lib/error-logger";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-
-type OdooConfig = {
-    url?: string;
-    db?: string;
-    username?: string;
-    apiKey?: string;
-    purchaseOrderModel?: string;
-    vendorBillModel?: string;
-    vendorModel?: string;
-};
-
-type QuickBooksConfig = {
-    clientId?: string;
-    clientSecret?: string;
-    realmId?: string;
-};
-
-type XeroConfig = {
-    clientId?: string;
-    clientSecret?: string;
-    tenantId?: string;
-};
-
-type SageConfig = {
-    clientId?: string;
-    clientSecret?: string;
-};
-
-type AppMetadata = {
-    id: string;
-    odooConfig?: OdooConfig;
-    quickbooksConfig?: QuickBooksConfig;
-    xeroConfig?: XeroConfig;
-    sageConfig?: SageConfig;
-    accountingPlatform?: 'odoo' | 'quickbooks' | 'xero' | 'sage';
-};
+import type { AppMetadata, OdooConfig, QuickBooksConfig, XeroConfig, SageConfig } from "@/types";
 
 export default function IntegrationsPage() {
     const { user, role, loading: userLoading } = useUser();

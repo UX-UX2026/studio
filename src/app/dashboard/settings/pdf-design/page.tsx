@@ -14,15 +14,7 @@ import { useFirestore, useDoc } from "@/firebase";
 import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import Link from "next/link";
-
-type PdfSettings = {
-    primaryColor?: string;
-};
-
-type AppMetadata = {
-    id: string;
-    pdfSettings?: PdfSettings;
-};
+import type { PdfSettings, AppMetadata } from "@/types";
 
 export default function PdfDesignPage() {
     const { user, role, loading: userLoading } = useUser();

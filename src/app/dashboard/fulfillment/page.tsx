@@ -19,13 +19,8 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
-import { ApprovalRequest, ApprovalItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, ApprovalItem, Department } from "@/types";
 import { useRoles } from "@/lib/roles-provider";
-
-type Department = {
-  id: string;
-  name: string;
-};
 
 export type FulfillmentItem = ApprovalItem & {
   procurementRequestId: string;

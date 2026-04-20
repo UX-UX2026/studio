@@ -8,7 +8,7 @@ import { Loader, AlertTriangle, Calendar as CalendarIcon, ChevronRight } from "l
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
-import type { ApprovalRequest, BudgetItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, BudgetItem, Department } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -25,12 +25,6 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-type Department = {
-    id: string;
-    name: string;
-    budgetHeaders?: string[];
-    budgetYear?: number;
-};
 
 export default function ProcurementSummaryPage() {
     const { user, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();

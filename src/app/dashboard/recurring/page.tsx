@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -15,18 +16,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { procurementCategories } from "@/lib/procurement-categories";
-import type { RecurringItem } from "@/lib/approvals-mock-data";
-
-type Department = {
-    id: string;
-    name: string;
-};
-
-type BudgetItem = {
-    id: string;
-    departmentId: string;
-    category: string;
-};
+import type { RecurringItem, Department, BudgetItem } from "@/types";
 
 export default function RecurringItemsPage() {
     const { user, role, departmentId: userDepartmentId, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();

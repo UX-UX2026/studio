@@ -2,29 +2,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { BudgetItem } from '@/lib/approvals-mock-data';
-
-// Using a more complete Item type that includes what's needed for the drilldown
-type Item = {
-    id: number | string;
-    type: "Recurring" | "One-Off";
-    expenseType: 'Operational' | 'Capital';
-    description: string;
-    qty: number;
-    category: string;
-    unitPrice: number;
-    comments?: string;
-};
-
-type Department = {
-    id: string;
-    name: string;
-    budgetHeaders?: string[];
-    budgetYear?: number;
-};
+import type { BudgetItem, ApprovalItem, Department } from '@/types';
 
 export function useBudgetSummary(
-    procurementItems: Item[],
+    procurementItems: ApprovalItem[],
     selectedDepartmentId: string,
     selectedPeriod: string,
     budgetItems: BudgetItem[] | null,
@@ -44,7 +25,7 @@ export function useBudgetSummary(
             ? selectedDept?.budgetHeaders?.findIndex(h => h.toLowerCase().startsWith(monthName.toLowerCase().substring(0,3))) ?? -1
             : -1;
 
-        const calculateSummary = (itemsToSummarize: Item[], expenseType: 'Operational' | 'Capital') => {
+        const calculateSummary = (itemsToSummarize: ApprovalItem[], expenseType: 'Operational' | 'Capital') => {
             const budgetItemsForType = budgetItems.filter(bi => bi.expenseType === expenseType);
 
             const allCategories = new Set([
@@ -68,7 +49,7 @@ export function useBudgetSummary(
                 const comments = itemsForCategory.filter(item => item.comments).map(item => item.comments).join('; ');
 
                 return { category, procurementTotal, forecastTotal, variance, isOverBudget, comments, items: itemsForCategory };
-            }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; items: Item[] }[];
+            }).filter(Boolean) as { category: string; procurementTotal: number; forecastTotal: number; variance: number; isOverBudget: boolean; comments: string; items: ApprovalItem[] }[];
             
             const totals = lines.reduce((acc, line) => {
                 acc.procurement += line.procurementTotal;

@@ -12,19 +12,7 @@ import { collection, query, orderBy, where } from "firebase/firestore";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
-
-type AuditEvent = {
-    id: string;
-    userId: string;
-    userName: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-    entity?: {
-        type: string;
-        id: string;
-    };
-};
+import type { AuditEvent } from "@/types";
 
 export default function NotificationLogPage() {
     const { user, role, loading: userLoading } = useUser();

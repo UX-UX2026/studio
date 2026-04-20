@@ -10,7 +10,7 @@ import { Loader, AlertTriangle, Globe, Check } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc } from "firebase/firestore";
-import type { ApprovalRequest, BudgetItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, WorkflowStage } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -35,56 +35,6 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-type Department = {
-    id: string;
-    name: string;
-    managerId?: string;
-    budgetHeaders?: string[];
-    workflow?: WorkflowStage[];
-    budgetYear?: number;
-    periodSettings?: {
-        [period: string]: {
-            status: 'Open' | 'Locked';
-        }
-    },
-    companyIds?: string[];
-};
-
-type Company = {
-    id: string;
-    name: string;
-    logoUrl?: string;
-};
-
-type AppMetadata = {
-    id: string;
-    limitToOneSubmissionPerPeriod?: boolean;
-}
-
-type Item = {
-  id: number | string;
-  type: "Recurring" | "One-Off";
-  expenseType: 'Operational' | 'Capital';
-  description: string;
-  brand: string;
-  qty: number;
-  category: string;
-  unitPrice: number;
-  fulfillmentStatus: 'Pending' | 'Sourcing' | 'Quoted' | 'Ordered' | 'Completed';
-  receivedQty: number;
-  fulfillmentComments: string[];
-  comments?: string;
-  addedById?: string;
-  addedByName?: string;
-};
-
-type WorkflowStage = {
-    id: string;
-    name: string;
-    role: any;
-    permissions: string[];
-};
-
 export default function EmergencyProcurementPage() {
     const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
@@ -96,7 +46,7 @@ export default function EmergencyProcurementPage() {
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
     
-    const [draftItems, setDraftItems] = useState<Item[]>([]);
+    const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [justification, setJustification] = useState<string>('');
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');

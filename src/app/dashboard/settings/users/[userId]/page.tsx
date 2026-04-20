@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -25,23 +26,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
-
-type Department = {
-    id: string;
-    name: string;
-};
-
-type Company = {
-    id: string;
-    name: string;
-};
-
-type AuditEvent = {
-    id: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-};
+import type { Department, Company, AuditEvent } from "@/types";
 
 export default function UserProfilePage() {
     const params = useParams();

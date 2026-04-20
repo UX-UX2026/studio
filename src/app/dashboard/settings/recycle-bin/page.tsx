@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, doc, updateDoc, deleteDoc, serverTimestamp, addDoc, orderBy } from "firebase/firestore";
 import { format } from "date-fns";
-import { type ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest } from "@/types";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import {

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useUser, UserRole } from "@/firebase/auth/use-user";
@@ -26,17 +27,7 @@ import { useFirestore, useCollection } from "@/firebase";
 import { collection, doc, addDoc, setDoc, deleteDoc, serverTimestamp, query, orderBy } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { procurementCategories } from "@/lib/procurement-categories";
-
-type Vendor = {
-    id: string;
-    name: string;
-    contactPerson: string;
-    email: string;
-    phone: string;
-    address: string;
-    category: string;
-    status: 'Active' | 'Inactive';
-};
+import type { Vendor } from "@/types";
 
 export default function VendorsPage() {
     const { user, role, loading: userLoading } = useUser();

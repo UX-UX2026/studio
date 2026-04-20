@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -39,7 +38,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, doc, updateDoc, arrayUnion, addDoc, serverTimestamp, getDocs, getDoc, setDoc } from "firebase/firestore";
-import type { ApprovalRequest, BudgetItem } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest, BudgetItem, Company, AppMetadata, Department, ApprovalGroup, AuditEvent } from "@/types";
 import { useRoles } from "@/lib/roles-provider";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
@@ -50,59 +49,6 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { User } from "firebase/auth";
 import { format } from "date-fns";
-
-type Company = {
-    id: string;
-    name: string;
-    logoUrl?: string;
-};
-
-type PdfSettings = {
-    primaryColor?: string;
-};
-
-type AppMetadata = {
-    id: string;
-    pdfSettings?: PdfSettings;
-};
-
-type WorkflowStage = {
-    id: string;
-    name: string;
-    role?: UserRole;
-    approvalGroupId?: string;
-    permissions: string[];
-    useAlternateEmail?: boolean;
-    alternateEmail?: string;
-    sendToBoth?: boolean;
-};
-
-type Department = {
-  id: string;
-  name: string;
-  workflow?: WorkflowStage[];
-  budgetHeaders?: string[];
-  budgetYear?: number;
-};
-
-type ApprovalGroup = {
-    id: string;
-    name: string;
-    memberIds: string[];
-};
-
-type AuditEvent = {
-    id: string;
-    userId: string;
-    userName: string;
-    action: string;
-    details: string;
-    timestamp: { seconds: number; nanoseconds: number; };
-    entity?: {
-        type: string;
-        id: string;
-    };
-};
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {

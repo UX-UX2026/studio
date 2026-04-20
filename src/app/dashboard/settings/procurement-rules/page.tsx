@@ -13,12 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
-
-type AppMetadata = {
-    id: string;
-    adminIsSetUp?: boolean;
-    limitToOneSubmissionPerPeriod?: boolean;
-}
+import type { AppMetadata } from "@/types";
 
 export default function ProcurementRulesPage() {
     const { user, role, loading: userLoading } = useUser();

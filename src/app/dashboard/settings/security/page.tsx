@@ -13,16 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
 import { logErrorToFirestore } from "@/lib/error-logger";
-
-export type SecuritySettings = {
-    autoLogoutEnabled?: boolean;
-    inactivityTimeoutMinutes?: number;
-};
-
-export type AppMetadata = {
-    id: string;
-    securitySettings?: SecuritySettings;
-};
+import type { SecuritySettings, AppMetadata } from "@/types";
 
 export default function SecuritySettingsPage() {
     const { user, role, loading: userLoading } = useUser();
