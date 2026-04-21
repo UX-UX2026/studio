@@ -120,17 +120,18 @@ export default function EmergencyProcurementPage() {
     // Set default department and period
     useEffect(() => {
         if (deptsLoading || !departmentsForUser) return;
-        
-        // Set default department if not already set
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-        
-        // Set default period only if it's currently empty
-        if (!selectedPeriod) {
+    }, [departmentsForUser, deptsLoading]);
+
+    useEffect(() => {
+        // This runs only once on mount to set an initial period.
+        if (selectedPeriod === '') {
             setSelectedPeriod(format(new Date(), "MMMM yyyy"));
         }
-    }, [departmentsForUser, deptsLoading, selectedDepartmentId, selectedPeriod]);
+    }, [selectedPeriod]);
+
 
     // Effect to initialize or load a draft
     useEffect(() => {
@@ -389,3 +390,5 @@ export default function EmergencyProcurementPage() {
         </div>
     );
 }
+
+    

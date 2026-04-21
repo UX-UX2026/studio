@@ -226,13 +226,13 @@ export default function ProcurementQuickSubmitPage() {
         const period = searchParams.get('period');
     
         if (deptId && period) {
+            initialParamsProcessed.current = true; // Mark as processed immediately
             if (departments.some(d => d.id === deptId)) {
-                // We use replace to prevent this action from creating a new history entry
-                router.replace('/dashboard/procurement', { scroll: false });
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
+                 // We use replace to prevent this action from creating a new history entry
+                router.replace('/dashboard/procurement', { scroll: false });
             }
-            initialParamsProcessed.current = true;
         }
     }, [searchParams, departments, deptsLoading, router]);
 
@@ -256,7 +256,7 @@ export default function ProcurementQuickSubmitPage() {
         if (!selectedDepartmentId && departmentsForUser.length > 0) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [departmentsForUser, deptsLoading, selectedDepartmentId]);
+    }, [departmentsForUser, deptsLoading]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -267,11 +267,10 @@ export default function ProcurementQuickSubmitPage() {
         return periods;
     }, []);
 
-    // Update the list of open periods and selectedPeriod when the department changes
+    // Effect to update the list of open periods when the department changes
     useEffect(() => {
         if (!selectedDepartmentId || !departments) {
             setOpenPeriods([]);
-            setSelectedPeriod('');
             return;
         }
     
@@ -283,12 +282,16 @@ export default function ProcurementQuickSubmitPage() {
         periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
         
         setOpenPeriods(periods);
-        
-        // Only update selectedPeriod if it's not in the new list of open periods
-        if (!periods.includes(selectedPeriod)) {
-            setSelectedPeriod(periods[0] || '');
+    }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
+
+    // Effect to update selectedPeriod only when openPeriods changes
+    useEffect(() => {
+        if (openPeriods.length > 0 && !openPeriods.includes(selectedPeriod)) {
+            setSelectedPeriod(openPeriods[0] || '');
+        } else if (openPeriods.length === 0) {
+            setSelectedPeriod('');
         }
-    }, [selectedDepartmentId, departments, baseGeneratedPeriods, selectedPeriod]);
+    }, [openPeriods]);
 
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.
@@ -1447,7 +1450,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
@@ -1500,3 +1503,5 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
+
+    

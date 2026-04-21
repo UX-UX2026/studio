@@ -92,10 +92,10 @@ export default function ProcurementSummaryPage() {
                 setSelectedDepartmentId('');
             }
         }
-    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
+    }, [visibleDepartments, deptsLoading]);
     
     useEffect(() => {
-        if (requestsLoading) return;
+        if (requestsLoading || !availablePeriods) return;
         const isCurrentPeriodValid = availablePeriods.includes(selectedPeriod);
     
         if (!isCurrentPeriodValid) {
@@ -105,7 +105,7 @@ export default function ProcurementSummaryPage() {
                 setSelectedPeriod('');
             }
         }
-    }, [availablePeriods, selectedPeriod, requestsLoading]);
+    }, [availablePeriods, requestsLoading]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
@@ -365,3 +365,5 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
+
+    
