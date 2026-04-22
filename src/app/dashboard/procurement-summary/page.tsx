@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -45,7 +44,7 @@ export default function ProcurementSummaryPage() {
         const activeStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Completed'];
         return query(collection(firestore, 'procurementRequests'), where('status', 'in', activeStatuses));
     }, [firestore]);
-    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(allRequests);
+    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
 
     const budgetsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
@@ -105,7 +104,7 @@ export default function ProcurementSummaryPage() {
                 setSelectedPeriod('');
             }
         }
-    }, [availablePeriods, requestsLoading]);
+    }, [availablePeriods, requestsLoading, selectedPeriod]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
