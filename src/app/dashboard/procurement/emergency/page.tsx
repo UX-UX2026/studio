@@ -109,7 +109,7 @@ export default function EmergencyProcurementPage() {
             return departments;
         }
         if (role === 'Executive') {
-            return departments.filter(d => d.id && reportingDepartments && reportingDepartments.includes(d.id));
+            return departments.filter(d => d.id && reportingDepartments.includes(d.id));
         }
         if (role === 'Manager' || role === 'Requester') {
             return departments.filter(d => d.name === userDepartment);
@@ -126,11 +126,9 @@ export default function EmergencyProcurementPage() {
     }, [departmentsForUser, deptsLoading]);
 
     useEffect(() => {
-        // This runs only once on mount to set an initial period.
-        if (selectedPeriod === '') {
-            setSelectedPeriod(format(new Date(), "MMMM yyyy"));
-        }
-    }, [selectedPeriod]);
+        // This effect runs only once when the component mounts to set the initial period.
+        setSelectedPeriod(format(new Date(), "MMMM yyyy"));
+    }, []);
 
 
     // Effect to initialize or load a draft
@@ -390,5 +388,7 @@ export default function EmergencyProcurementPage() {
         </div>
     );
 }
+
+    
 
     

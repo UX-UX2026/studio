@@ -45,7 +45,7 @@ export default function ProcurementSummaryPage() {
         const activeStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Completed'];
         return query(collection(firestore, 'procurementRequests'), where('status', 'in', activeStatuses));
     }, [firestore]);
-    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(allRequests);
 
     const budgetsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
