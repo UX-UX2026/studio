@@ -253,10 +253,14 @@ export default function ProcurementQuickSubmitPage() {
     // Set default department based on user role and data
     useEffect(() => {
         if (deptsLoading || !departmentsForUser) return;
-        if (!selectedDepartmentId && departmentsForUser.length > 0) {
+        
+        const deptIdFromUrl = searchParams.get('deptId');
+        if (deptIdFromUrl) return;
+
+        if (departmentsForUser.length > 0 && !selectedDepartmentId) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [departmentsForUser, deptsLoading]);
+    }, [deptsLoading, departmentsForUser, searchParams, selectedDepartmentId]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -288,7 +292,7 @@ export default function ProcurementQuickSubmitPage() {
     useEffect(() => {
         if (openPeriods.length > 0 && !openPeriods.includes(selectedPeriod)) {
             setSelectedPeriod(openPeriods[0] || '');
-        } else if (openPeriods.length === 0) {
+        } else if (openPeriods.length === 0 && selectedPeriod !== '') {
             setSelectedPeriod('');
         }
     }, [openPeriods]);
@@ -1450,7 +1454,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </Dialog>
+            </AlertDialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
@@ -1503,5 +1507,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-    
