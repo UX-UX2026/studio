@@ -257,7 +257,7 @@ export default function ProcurementQuickSubmitPage() {
         if (departmentsForUser.length > 0 && !selectedDepartmentId) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [deptsLoading, departmentsForUser]);
+    }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -287,12 +287,13 @@ export default function ProcurementQuickSubmitPage() {
 
     // Effect to update selectedPeriod only when openPeriods changes
     useEffect(() => {
-        const isCurrentPeriodOpen = openPeriods.includes(selectedPeriod);
-
-        if (openPeriods.length > 0 && !isCurrentPeriodOpen) {
-            setSelectedPeriod(openPeriods[0]);
-        } else if (openPeriods.length === 0 && selectedPeriod !== '') {
-            setSelectedPeriod('');
+        if (openPeriods.length > 0) {
+            const isCurrentPeriodOpen = openPeriods.includes(selectedPeriod);
+            if (!isCurrentPeriodOpen) {
+                setSelectedPeriod(openPeriods[0]);
+            }
+        } else {
+             setSelectedPeriod('');
         }
     }, [openPeriods]);
 
@@ -1506,7 +1507,5 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-    
 
     
