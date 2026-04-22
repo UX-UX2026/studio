@@ -220,7 +220,8 @@ export default function ProcurementQuickSubmitPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        if (initialParamsProcessed.current || deptsLoading || !departments) return;
+        if (deptsLoading || !departments) return;
+        if (initialParamsProcessed.current) return;
     
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
@@ -287,6 +288,7 @@ export default function ProcurementQuickSubmitPage() {
 
     // Effect to update selectedPeriod only when openPeriods changes
     useEffect(() => {
+        if (initialParamsProcessed.current) return;
         if (openPeriods.length > 0) {
             const isCurrentPeriodOpen = openPeriods.includes(selectedPeriod);
             if (!isCurrentPeriodOpen) {
@@ -1507,5 +1509,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-    
