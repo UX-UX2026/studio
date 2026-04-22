@@ -252,15 +252,12 @@ export default function ProcurementQuickSubmitPage() {
 
     // Set default department based on user role and data
     useEffect(() => {
-        if (deptsLoading || !departmentsForUser) return;
+        if (deptsLoading || !departmentsForUser || initialParamsProcessed.current) return;
         
-        const deptIdFromUrl = searchParams.get('deptId');
-        if (deptIdFromUrl) return;
-
         if (departmentsForUser.length > 0 && !selectedDepartmentId) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
-    }, [deptsLoading, departmentsForUser, searchParams]);
+    }, [deptsLoading, departmentsForUser]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
@@ -290,8 +287,10 @@ export default function ProcurementQuickSubmitPage() {
 
     // Effect to update selectedPeriod only when openPeriods changes
     useEffect(() => {
-        if (openPeriods.length > 0 && !openPeriods.includes(selectedPeriod)) {
-            setSelectedPeriod(openPeriods[0] || '');
+        const isCurrentPeriodOpen = openPeriods.includes(selectedPeriod);
+
+        if (openPeriods.length > 0 && !isCurrentPeriodOpen) {
+            setSelectedPeriod(openPeriods[0]);
         } else if (openPeriods.length === 0 && selectedPeriod !== '') {
             setSelectedPeriod('');
         }
@@ -1392,7 +1391,7 @@ export default function ProcurementQuickSubmitPage() {
                                         {saveStatus === 'saving' && lastAction === 'submit' ? (
                                             <Loader className="mr-2 h-4 w-4 animate-spin"/>
                                         ) : saveStatus === 'saved' && lastAction === 'submit' ? (
-                                            <Check className="mr-2 h-4 w-4" />
+                                            <Check className="h-4 w-4" />
                                         ) : null}
                                         {saveStatus === 'saving' && lastAction === 'submit' ? 'Saving Submission...' : saveStatus === 'saved' && lastAction === 'submit' ? 'Submitted' : 'Submit For Approval'}
                                     </Button>
@@ -1454,7 +1453,7 @@ export default function ProcurementQuickSubmitPage() {
                         <AlertDialogAction onClick={handleLoadPrevious}>Load Items</AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
+            </Dialog>
             
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
                 <DialogContent>
