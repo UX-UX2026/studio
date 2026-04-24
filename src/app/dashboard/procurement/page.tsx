@@ -58,7 +58,7 @@ type UserProfileData = {
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
+    const { user, profile, role, department: userDepartment, departmentId: userDepartmentId, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -297,7 +297,7 @@ export default function ProcurementQuickSubmitPage() {
         } else {
              setSelectedPeriod('');
         }
-    }, [openPeriods]);
+    }, [openPeriods, selectedPeriod]);
 
 
     // Effect to initialize or load a draft, now with logic to sync recurring items.
