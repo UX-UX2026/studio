@@ -58,7 +58,7 @@ type UserProfileData = {
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
+    const { user, profile, role, department: userDepartment, departmentId: userDepartmentId, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -220,16 +220,18 @@ export default function ProcurementQuickSubmitPage() {
     // Handle incoming query params to resume a draft
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
-        if (initialParamsProcessed.current || deptsLoading || !departments) return;
+        if (deptsLoading || !departments) return;
+        if (initialParamsProcessed.current) return;
     
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
     
         if (deptId && period) {
-            initialParamsProcessed.current = true;
+            initialParamsProcessed.current = true; // Mark as processed immediately
             if (departments.some(d => d.id === deptId)) {
                 setSelectedDepartmentId(deptId);
                 setSelectedPeriod(period);
+                 // We use replace to prevent this action from creating a new history entry
                 router.replace('/dashboard/procurement', { scroll: false });
             }
         }
@@ -249,9 +251,11 @@ export default function ProcurementQuickSubmitPage() {
         return [];
     }, [departments, role, userDepartment, reportingDepartments]);
 
+    // Set default department based on user role and data
     useEffect(() => {
-        if (initialParamsProcessed.current) return;
-        if (!deptsLoading && departmentsForUser.length > 0 && !selectedDepartmentId) {
+        if (deptsLoading || !departmentsForUser || initialParamsProcessed.current) return;
+        
+        if (departmentsForUser.length > 0 && !selectedDepartmentId) {
             setSelectedDepartmentId(departmentsForUser[0].id);
         }
     }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
@@ -264,27 +268,34 @@ export default function ProcurementQuickSubmitPage() {
         }
         return periods;
     }, []);
-    
+
+    // Effect to update the list of open periods when the department changes
     useEffect(() => {
         if (!selectedDepartmentId || !departments) {
             setOpenPeriods([]);
             return;
         }
+    
         const dept = departments.find(d => d.id === selectedDepartmentId);
         const periodSettings = dept?.periodSettings || {};
         const allKnownPeriods = new Set(baseGeneratedPeriods);
         Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
         const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
         periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        
         setOpenPeriods(periods);
     }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
-    
+
+    // Effect to update selectedPeriod only when openPeriods changes
     useEffect(() => {
-        if (initialParamsProcessed.current || openPeriods.length === 0) return;
-        
-        const isCurrentPeriodValid = openPeriods.includes(selectedPeriod);
-        if (!isCurrentPeriodValid) {
-            setSelectedPeriod(openPeriods[0]);
+        if (initialParamsProcessed.current) return;
+        if (openPeriods.length > 0) {
+            const isCurrentPeriodOpen = openPeriods.includes(selectedPeriod);
+            if (!isCurrentPeriodOpen) {
+                setSelectedPeriod(openPeriods[0]);
+            }
+        } else {
+             setSelectedPeriod('');
         }
     }, [openPeriods, selectedPeriod]);
 
