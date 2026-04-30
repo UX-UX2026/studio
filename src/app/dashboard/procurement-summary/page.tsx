@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, Calendar as CalendarIcon, ChevronRight } from "lucide-react";
+import { Loader, AlertTriangle, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
@@ -82,7 +82,6 @@ export default function ProcurementSummaryPage() {
         return Array.from(periods).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
     }, [allRequests, selectedDepartmentId]);
 
-    // Robust default department setter
     useEffect(() => {
         if (deptsLoading || !visibleDepartments || visibleDepartments.length === 0) return;
         if (!selectedDepartmentId || !visibleDepartments.some(d => d.id === selectedDepartmentId)) {
@@ -90,14 +89,13 @@ export default function ProcurementSummaryPage() {
         }
     }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
     
-    // Robust default period setter
     useEffect(() => {
         if (requestsLoading || !availablePeriods) return;
         if (availablePeriods.length > 0) {
             if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) {
                 setSelectedPeriod(availablePeriods[0]);
             }
-        } else {
+        } else if (selectedPeriod !== '') {
             setSelectedPeriod('');
         }
     }, [availablePeriods, requestsLoading, selectedPeriod]);
@@ -177,7 +175,6 @@ export default function ProcurementSummaryPage() {
                 </div>
              ) : (
                 <div className="space-y-8">
-                    {/* Operational Summary */}
                     <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
@@ -185,7 +182,7 @@ export default function ProcurementSummaryPage() {
                                     <TableHead className="font-bold">Operational Line Items</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
-                                    <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                    <TableHead className="text-right font-bold">Variance</TableHead>
                                     <TableHead className="font-bold">Comments</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -259,7 +256,6 @@ export default function ProcurementSummaryPage() {
                         </Table>
                     </div>
 
-                    {/* Capital Summary */}
                     <div className="overflow-auto rounded-lg border">
                         <Table>
                             <TableHeader>
@@ -267,7 +263,7 @@ export default function ProcurementSummaryPage() {
                                     <TableHead className="font-bold">Capital Line Items</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Procurement</TableHead>
                                     <TableHead className="text-right font-bold">{monthForHeader} Forecast</TableHead>
-                                    <TableHead className="text-right font-bold">Procurement vs Forecast</TableHead>
+                                    <TableHead className="text-right font-bold">Variance</TableHead>
                                     <TableHead className="font-bold">Comments</TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -341,7 +337,6 @@ export default function ProcurementSummaryPage() {
                         </Table>
                     </div>
 
-                    {/* Grand Total */}
                      <Table>
                         <TableFooter>
                              <TableRow className="bg-card hover:bg-card text-lg font-bold border-t-2 border-primary">

@@ -1,43 +1,28 @@
 'use client';
 
-import { useUser, type UserRole } from "@/firebase/auth/use-user";
-import type { UserProfile } from '@/context/authentication-provider';
+import { useUser } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, Fragment, useRef } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { Loader, Globe, Trash2, History, Check, ChevronDown, Bell, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, getDocs, arrayUnion, getDoc } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, AuditEvent } from "@/types";
+import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs } from "firebase/firestore";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { format, addMonths, formatDistanceToNow } from "date-fns";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { format, addMonths } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { RecurringClient } from "@/components/app/recurring-client";
-import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
-import { procurementCategories } from "@/lib/procurement-categories";
+import { submissionReadyForReviewTemplate, requestActionRequiredTemplate } from "@/lib/email-templates";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -48,15 +33,8 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-type UserProfileData = {
-    id: string;
-    displayName: string;
-    email: string;
-    role: string;
-};
-
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, loading: userLoading, departmentId: userDeptId, reportingDepartments } = useUser();
+    const { user, profile, role, department: userDepartment, loading: userLoading, reportingDepartments } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -71,8 +49,6 @@ export default function ProcurementQuickSubmitPage() {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
-    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
     const [isNotifying, setIsNotifying] = useState(false);
 
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
@@ -82,41 +58,14 @@ export default function ProcurementQuickSubmitPage() {
     const [rejectionReason, setRejectionReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
-    const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
-    const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
-
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [archiveReason, setArchiveReason] = useState('');
-
-    const [openCategory, setOpenCategory] = useState<string | null>(null);
-    const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
     const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
-    
-    const allDraftsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'procurementRequests'), where('status', '==', 'Draft'));
-    }, [firestore]);
-    const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
-
-    const userDrafts = useMemo(() => {
-        if (!user || !allDrafts) return [];
-        let draftsForUser: ApprovalRequest[];
-        if (role === 'Manager' && userDepartment) {
-            draftsForUser = allDrafts.filter(draft => draft.department === userDepartment);
-        } else if (['Administrator', 'Executive', 'Procurement Officer'].includes(role || '')) {
-            draftsForUser = allDrafts;
-        } else { 
-            draftsForUser = allDrafts.filter(draft => draft.submittedById === user.uid);
-        }
-        return draftsForUser
-            .filter(draft => draft.id !== editingRequestId)
-            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-    }, [user, allDrafts, editingRequestId, role, userDepartment]);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
@@ -147,33 +96,6 @@ export default function ProcurementQuickSubmitPage() {
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
-    const usersQuery = useMemo(() => collection(firestore, 'users'), [firestore]);
-    const { data: allUsers, loading: usersLoading } = useCollection<UserProfileData>(usersQuery);
-
-    const previousSubmissionsQuery = useMemo(() => {
-        if (!firestore || !selectedDepartmentId) return null;
-        return query(
-            collection(firestore, 'procurementRequests'),
-            where('departmentId', '==', selectedDepartmentId),
-            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment'])
-        );
-    }, [firestore, selectedDepartmentId]);
-    const { data: previousSubmissions } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
-
-    const auditLogsQuery = useMemo(() => {
-        if (!firestore || !editingRequestId) return null;
-        return query(
-            collection(firestore, 'auditLogs'), 
-            where('entity.id', '==', editingRequestId)
-        );
-    }, [firestore, editingRequestId]);
-    const { data: unsortedAuditLogs } = useCollection<AuditEvent>(auditLogsQuery);
-    
-    const auditLogs = useMemo(() => {
-        if (!unsortedAuditLogs) return null;
-        return [...unsortedAuditLogs].sort((a, b) => (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0));
-    }, [unsortedAuditLogs]);
-
     const associatedCompanies = useMemo(() => {
         if (!selectedDepartmentId || !departments || !companies) return [];
         const dept = departments.find(d => d.id === selectedDepartmentId);
@@ -187,20 +109,10 @@ export default function ProcurementQuickSubmitPage() {
     }, [editingRequestId, periodRequests]);
 
     const canApproveOrReject = useMemo(() => {
-        if (!['Executive', 'Administrator'].includes(role || '')) return false;
+        if (!role || !['Executive', 'Administrator'].includes(role)) return false;
         if (!activeRequest) return false;
         return ['Pending Manager Approval', 'Pending Executive', 'Queries Raised'].includes(activeRequest.status);
     }, [role, activeRequest]);
-
-    const departmentCategories = useMemo(() => {
-        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
-        const categoriesFromCurrentItems = draftItems.map(item => item.category).filter(Boolean);
-        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems, ...procurementCategories]);
-        if (!combined.has('Uncategorized')) {
-            combined.add('Uncategorized');
-        }
-        return Array.from(combined).sort();
-    }, [budgetItems, draftItems]);
 
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
@@ -256,7 +168,7 @@ export default function ProcurementQuickSubmitPage() {
         const allKnownPeriods = new Set(baseGeneratedPeriods);
         Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
         const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-        periods.sort((a, b) => new Date(a).getTime() - new Date(a).getTime()); // Simplified sort for consistency
+        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
         setOpenPeriods(periods);
     }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
 
@@ -266,7 +178,7 @@ export default function ProcurementQuickSubmitPage() {
             if (!openPeriods.includes(selectedPeriod)) {
                 setSelectedPeriod(openPeriods[0]);
             }
-        } else {
+        } else if (selectedPeriod !== '') {
              setSelectedPeriod('');
         }
     }, [openPeriods, selectedPeriod]);
@@ -333,7 +245,7 @@ export default function ProcurementQuickSubmitPage() {
     const handleRequestEdit = async () => {
         if (!user || !firestore || !editingRequestId) return;
         if (!editRequestReason.trim()) {
-            toast({ variant: "destructive", title: "Reason Required", description: "Please provide a reason." });
+            toast({ variant: "destructive", title: "Reason Required" });
             return;
         }
         try {
@@ -355,7 +267,7 @@ export default function ProcurementQuickSubmitPage() {
 
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !profile || !departmentName || !selectedDepartmentId || !firestore) {
-            toast({ variant: "destructive", title: "Cannot save", description: "Missing user or department info." });
+            toast({ variant: "destructive", title: "Cannot save" });
             return;
         }
         
@@ -383,8 +295,6 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Manager Review", actor: "Manager", date: null, status: 'waiting' as const },
                 { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
                 { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
-                { stage: "In Fulfillment", actor: "Procurement", date: null, status: 'waiting' as const },
-                { stage: "Completed", actor: "System", date: null, status: 'waiting' as const },
             ];
 
         if (timeline.length > 0) {
@@ -454,7 +364,7 @@ export default function ProcurementQuickSubmitPage() {
         const actorName = `${profile.displayName || user.email} (${role})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
-        if (activeRequest.status === 'Pending Executive' || activeRequest.status === 'Pending Manager Approval' || activeRequest.status === 'Queries Raised') {
+        if (['Pending Executive', 'Pending Manager Approval', 'Queries Raised'].includes(activeRequest.status)) {
             newStatus = 'Approved';
             const mgrIdx = newTimeline.findIndex(s => s.stage === 'Manager Review');
             const execIdx = newTimeline.findIndex(s => s.stage === 'Executive Approval');
@@ -538,7 +448,7 @@ export default function ProcurementQuickSubmitPage() {
             const department = departments.find(d => d.id === selectedDepartmentId);
             if (!department?.managerId) throw new Error("No manager assigned.");
             const managerSnap = await getDoc(doc(firestore, 'users', department.managerId));
-            const manager = managerSnap.data() as UserProfileData;
+            const manager = managerSnap.data() as any;
             if (!manager?.email) throw new Error("Manager email not found.");
             
             const link = `${window.location.origin}/dashboard/procurement?deptId=${selectedDepartmentId}&period=${encodeURIComponent(selectedPeriod)}`;
@@ -562,7 +472,7 @@ export default function ProcurementQuickSubmitPage() {
         return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100);
     }, [capitalSummary]);
 
-    if (userLoading || deptsLoading || metadataLoading || companiesLoading || draftsLoading || periodRequestsLoading) {
+    if (userLoading || deptsLoading || metadataLoading || companiesLoading || periodRequestsLoading) {
         return <div className="flex h-screen items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
     }
 
@@ -574,7 +484,7 @@ export default function ProcurementQuickSubmitPage() {
                     <CardDescription>Consolidated view for managing procurement requests.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-3 items-end gap-4">
                         <div className="grid items-center gap-1.5">
                             <Label htmlFor="department">Department</Label>
                             <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
@@ -585,7 +495,7 @@ export default function ProcurementQuickSubmitPage() {
                         <div className="grid items-center gap-1.5">
                            <Label htmlFor="company">Company</Label>
                             <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}>
-                                <SelectTrigger id="company"><SelectValue placeholder="Select company..." /></SelectTrigger>
+                                <SelectTrigger id="company"><SelectValue placeholder={associatedCompanies.length === 0 ? "No companies linked" : "Select company..."} /></SelectTrigger>
                                 <SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
@@ -594,13 +504,6 @@ export default function ProcurementQuickSubmitPage() {
                              <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}>
                                 <SelectTrigger id="period"><SelectValue placeholder="Select period..." /></SelectTrigger>
                                 <SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid items-center gap-1.5">
-                            <Label htmlFor="load-previous">Load Previous</Label>
-                            <Select value={previousSubmissionToLoad || ""} onValueChange={(val) => { setPreviousSubmissionToLoad(val); handleLoadPrevious(); }} disabled={isLocked}>
-                                <SelectTrigger id="load-previous"><SelectValue placeholder="Select past..." /></SelectTrigger>
-                                <SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                     </div>
@@ -627,7 +530,7 @@ export default function ProcurementQuickSubmitPage() {
                     </CardHeader>
                     <CardContent>
                         <TabsContent value="submission">
-                            <SubmissionClient user={user} profile={profile} userRole={role as any} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
+                            <SubmissionClient user={user as any} profile={profile} userRole={role as any} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
                         </TabsContent>
                         <TabsContent value="summary">
                             <div className="space-y-8">
