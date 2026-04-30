@@ -36,7 +36,10 @@ export default function ProcurementSummaryPage() {
     const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
     // Data fetching
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const departmentsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'departments');
+    }, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
     const activeRequestsQuery = useMemo(() => {
@@ -89,12 +92,13 @@ export default function ProcurementSummaryPage() {
     
     // Robust default period setter
     useEffect(() => {
-        if (requestsLoading || !availablePeriods || availablePeriods.length === 0) {
-            if (!requestsLoading && availablePeriods.length === 0) setSelectedPeriod('');
-            return;
-        }
-        if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) {
-            setSelectedPeriod(availablePeriods[0]);
+        if (requestsLoading || !availablePeriods) return;
+        if (availablePeriods.length > 0) {
+            if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) {
+                setSelectedPeriod(availablePeriods[0]);
+            }
+        } else {
+            setSelectedPeriod('');
         }
     }, [availablePeriods, requestsLoading, selectedPeriod]);
 
@@ -121,8 +125,7 @@ export default function ProcurementSummaryPage() {
     const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
     const monthForHeader = selectedPeriod ? selectedPeriod.split(' ')[0] : '';
 
-    const allowedRoles = useMemo(() => ['Administrator', 'Manager', 'Procurement Officer', 'Executive', 'Requester'], []);
-    if (loading || !user || !role || !allowedRoles.includes(role)) {
+    if (loading || !user || !role) {
         return (
             <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
                 <Loader className="h-8 w-8 animate-spin" />

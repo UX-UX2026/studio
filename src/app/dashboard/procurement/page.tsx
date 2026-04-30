@@ -155,11 +155,10 @@ export default function ProcurementQuickSubmitPage() {
         return query(
             collection(firestore, 'procurementRequests'),
             where('departmentId', '==', selectedDepartmentId),
-            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']),
-            where('isEmergency', '==', false)
+            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment'])
         );
     }, [firestore, selectedDepartmentId]);
-    const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+    const { data: previousSubmissions } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
 
     const auditLogsQuery = useMemo(() => {
         if (!firestore || !editingRequestId) return null;
@@ -168,7 +167,7 @@ export default function ProcurementQuickSubmitPage() {
             where('entity.id', '==', editingRequestId)
         );
     }, [firestore, editingRequestId]);
-    const { data: unsortedAuditLogs, loading: auditLogsLoading } = useCollection<AuditEvent>(auditLogsQuery);
+    const { data: unsortedAuditLogs } = useCollection<AuditEvent>(auditLogsQuery);
     
     const auditLogs = useMemo(() => {
         if (!unsortedAuditLogs) return null;
@@ -257,7 +256,7 @@ export default function ProcurementQuickSubmitPage() {
         const allKnownPeriods = new Set(baseGeneratedPeriods);
         Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
         const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        periods.sort((a, b) => new Date(a).getTime() - new Date(a).getTime()); // Simplified sort for consistency
         setOpenPeriods(periods);
     }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
 
@@ -599,7 +598,7 @@ export default function ProcurementQuickSubmitPage() {
                         </div>
                         <div className="grid items-center gap-1.5">
                             <Label htmlFor="load-previous">Load Previous</Label>
-                            <Select value={previousSubmissionToLoad || ""} onValueChange={setPreviousSubmissionToLoad} disabled={isLocked}>
+                            <Select value={previousSubmissionToLoad || ""} onValueChange={(val) => { setPreviousSubmissionToLoad(val); handleLoadPrevious(); }} disabled={isLocked}>
                                 <SelectTrigger id="load-previous"><SelectValue placeholder="Select past..." /></SelectTrigger>
                                 <SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent>
                             </Select>

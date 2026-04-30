@@ -77,16 +77,15 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const auth = getAuth(app);
         
         let firestore: Firestore;
+        // Check if Firestore is already initialized to avoid "already called with different options" error
         try {
-          // Attempt to initialize with specific settings
+          firestore = getFirestore(app);
+        } catch (e) {
           firestore = initializeFirestore(app, {
             localCache: persistentLocalCache({
               tabManager: persistentMultipleTabManager()
             })
           });
-        } catch (e: any) {
-          // If already initialized (common in hot-reloading), just get the existing instance
-          firestore = getFirestore(app);
         }
         
         setFirebaseServices({ app, auth, firestore });
