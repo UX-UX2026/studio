@@ -2,7 +2,12 @@
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { type Firestore, getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { 
+  type Firestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
@@ -38,7 +43,6 @@ interface FirebaseServices {
 }
 
 // The context now only provides the core Firebase services and the auth User object.
-// Profile data is handled by the useUser hook.
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -64,37 +68,25 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
         if (!isConfigValid) {
           setInitError("Firebase configuration is missing or incomplete. For local development, please update your .env file. For production (e.g., Vercel), set the required environment variables in your project settings. Then, restart your development server or redeploy.");
-          setIsLoading(false); // Stop loading, show error
+          setIsLoading(false);
           return;
         }
 
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         
-        // Correctly initialize Firestore with persistence
-        const firestore = getFirestore(app);
-        try {
-          // This must be awaited to ensure persistence is enabled before use.
-          await enableIndexedDbPersistence(firestore);
-          console.log("Firestore offline persistence with tab synchronization enabled.");
-        } catch (err: any) {
-          if (err.code === 'failed-precondition') {
-            // This is a normal scenario in multi-tab environments.
-            console.warn("Firestore persistence failed: another tab may have it enabled.");
-          } else if (err.code === 'unimplemented') {
-            // The browser doesn't support persistence.
-            console.warn("Firestore persistence is not supported in this browser.");
-          } else {
-            // A more serious error occurred.
-            console.error("Firestore persistence initialization failed:", err);
-          }
-        }
+        // Initialize Firestore with the modern cache API (replacing deprecated enableIndexedDbPersistence)
+        const firestore = initializeFirestore(app, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
+        });
         
         setFirebaseServices({ app, auth, firestore });
       } catch (err) {
         console.error("Fatal: Firebase Initialization Error", err);
         setInitError((err as Error).message || "An unknown error occurred during Firebase setup.");
-        setIsLoading(false); // Stop loading, show error
+        setIsLoading(false);
       }
     };
 
@@ -102,24 +94,17 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!firebaseServices) {
-      if (!isLoading) {
-          // The error UI will be shown by the initError check
-      }
-      return;
-    }
+    if (!firebaseServices) return;
     
     const { auth } = firebaseServices;
 
-    // This listener now ONLY handles the user's authentication state (logged in or out).
-    // It does not touch the database.
     const unsubscribe = onAuthStateChanged(auth, (authUser) => {
       setUser(authUser);
       setIsLoading(false);
     });
 
     return () => unsubscribe();
-  }, [firebaseServices, isLoading]);
+  }, [firebaseServices]);
 
   useEffect(() => {
     if (isLoading) return; 
@@ -130,7 +115,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
-    } else if (!initError) { // Don't redirect if there's an init error
+    } else if (!initError) { 
       if (!isAuthPage) {
         router.replace('/login');
       }
