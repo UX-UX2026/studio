@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -40,12 +39,12 @@ export default function ProcurementSummaryPage() {
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
     
-    const requestsQuery = useMemo(() => {
+    const activeRequestsQuery = useMemo(() => {
         if (!firestore) return null;
         const activeStatuses = ['Pending Manager Approval', 'Pending Executive', 'Approved', 'In Fulfillment', 'Completed'];
         return query(collection(firestore, 'procurementRequests'), where('status', 'in', activeStatuses));
     }, [firestore]);
-    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(requestsQuery);
+    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(activeRequestsQuery);
 
     const budgetsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
@@ -80,29 +79,24 @@ export default function ProcurementSummaryPage() {
         return Array.from(periods).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
     }, [allRequests, selectedDepartmentId]);
 
+    // Robust default department setter
     useEffect(() => {
-        if (deptsLoading || !visibleDepartments) return;
-
-        const isCurrentDeptValid = visibleDepartments.some(d => d.id === selectedDepartmentId);
-        
-        if (!isCurrentDeptValid && visibleDepartments.length > 0) {
+        if (deptsLoading || !visibleDepartments || visibleDepartments.length === 0) return;
+        if (!selectedDepartmentId || !visibleDepartments.some(d => d.id === selectedDepartmentId)) {
             setSelectedDepartmentId(visibleDepartments[0].id);
-        } else if (visibleDepartments.length === 0 && selectedDepartmentId !== '') {
-            setSelectedDepartmentId('');
         }
-    }, [visibleDepartments, deptsLoading]);
+    }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
     
+    // Robust default period setter
     useEffect(() => {
-        if (requestsLoading || !availablePeriods) return;
-        
-        const isCurrentPeriodValid = availablePeriods.includes(selectedPeriod);
-    
-        if (!isCurrentPeriodValid && availablePeriods.length > 0) {
-            setSelectedPeriod(availablePeriods[0]);
-        } else if (availablePeriods.length === 0 && selectedPeriod !== '') {
-            setSelectedPeriod('');
+        if (requestsLoading || !availablePeriods || availablePeriods.length === 0) {
+            if (!requestsLoading && availablePeriods.length === 0) setSelectedPeriod('');
+            return;
         }
-    }, [availablePeriods, requestsLoading]);
+        if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) {
+            setSelectedPeriod(availablePeriods[0]);
+        }
+    }, [availablePeriods, requestsLoading, selectedPeriod]);
 
     const procurementItemsForSummary = useMemo(() => {
         if (!allRequests || !selectedDepartmentId || !selectedPeriod) return [];
@@ -362,5 +356,3 @@ export default function ProcurementSummaryPage() {
     </Card>
   );
 }
-
-    

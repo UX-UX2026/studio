@@ -488,7 +488,7 @@ export default function ProcurementQuickSubmitPage() {
         setIsSaving(true);
         const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        const actorString = `${profile.displayName || user.email} (${role})`;
+        const actorString = `${profile?.displayName || user.email} (${role})`;
         let newTimeline = [...activeRequest.timeline];
         const curIdx = newTimeline.findIndex(step => step.status === 'pending');
         if (curIdx !== -1) newTimeline[curIdx] = { ...newTimeline[curIdx], status: 'rejected', actor: actorString, date: currentDate };
@@ -512,7 +512,7 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: 'destructive', title: 'Reason Required' });
             return;
         }
-        const actorString = `${profile.displayName || user.email} (${role})`;
+        const actorString = `${profile?.displayName || user.email} (${role})`;
         try {
             await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { 
                 status: 'Archived', 

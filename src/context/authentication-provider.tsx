@@ -6,7 +6,8 @@ import {
   type Firestore, 
   initializeFirestore, 
   persistentLocalCache, 
-  persistentMultipleTabManager 
+  persistentMultipleTabManager,
+  getFirestore
 } from 'firebase/firestore';
 import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
@@ -75,12 +76,18 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
         const auth = getAuth(app);
         
-        // Initialize Firestore with the modern cache API (replacing deprecated enableIndexedDbPersistence)
-        const firestore = initializeFirestore(app, {
-          localCache: persistentLocalCache({
-            tabManager: persistentMultipleTabManager()
-          })
-        });
+        let firestore: Firestore;
+        try {
+          // Attempt to initialize with specific settings
+          firestore = initializeFirestore(app, {
+            localCache: persistentLocalCache({
+              tabManager: persistentMultipleTabManager()
+            })
+          });
+        } catch (e: any) {
+          // If already initialized (common in hot-reloading), just get the existing instance
+          firestore = getFirestore(app);
+        }
         
         setFirebaseServices({ app, auth, firestore });
       } catch (err) {
