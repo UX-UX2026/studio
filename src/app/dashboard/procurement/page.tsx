@@ -1,6 +1,6 @@
 'use client';
 
-import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import { useUser } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
@@ -253,6 +253,7 @@ export default function ProcurementQuickSubmitPage() {
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
+    
     const isLockedByWorkflow = useMemo(() => {
         if (!selectedDepartmentId || !selectedPeriod) return false;
         const periodStatusInfo = periodRequests?.find(req => !['Archived'].includes(req.status));
@@ -262,6 +263,7 @@ export default function ProcurementQuickSubmitPage() {
         if (role === 'Requester' && status === 'Pending Manager Approval') return true;
         return false;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, role]);
+    
     const isLocked = isLockedByWorkflow || !selectedPeriod;
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
@@ -309,8 +311,10 @@ export default function ProcurementQuickSubmitPage() {
         const isSubmitterTheDeptManager = user.uid === department.managerId;
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        
         let newStatus: ApprovalRequest['status'];
         const departmentWorkflow = department?.workflow;
+        
         let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({ stage: stage.name, actor: String(stage.role) || 'System', date: null, status: 'waiting' as const }))
             : [
@@ -319,9 +323,11 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
                 { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
             ];
+        
         if (timeline.length > 0) {
             timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
         }
+
         if (isDraft) {
             newStatus = 'Draft';
         } else {
@@ -336,6 +342,7 @@ export default function ProcurementQuickSubmitPage() {
                 if (execIndex > -1) timeline[execIndex].status = 'pending';
             }
         }
+        
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         const baseRequestData: Partial<ApprovalRequest> = {
             department: departmentName, departmentId: selectedDepartmentId, companyId: selectedCompanyId,
@@ -343,6 +350,7 @@ export default function ProcurementQuickSubmitPage() {
             status: newStatus, submittedBy: actorString, submittedById: user.uid, timeline: timeline,
             items: draftItems, updatedAt: serverTimestamp() as any,
         };
+        
         try {
             let docId: string;
             if (editingRequestId) {
@@ -477,7 +485,7 @@ export default function ProcurementQuickSubmitPage() {
     }, [capitalSummary]);
 
     if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) {
-        return <div className="flex h-screen items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
+        return <div className="flex h-[calc(100vh-4rem)] items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
     }
 
     return (

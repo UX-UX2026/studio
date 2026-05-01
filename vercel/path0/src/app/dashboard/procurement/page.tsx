@@ -1,20 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Loader } from 'lucide-react';
+import ActualPage from '@/app/dashboard/procurement/page';
 
-// Clean redirect component to prevent corrupted routes from picking up syntax errors
-export default function BrokenPathRedirect() {
-    const router = useRouter();
-    useEffect(() => {
-        router.replace('/dashboard/procurement');
-    }, [router]);
-    
-    return (
-        <div className="flex h-screen items-center justify-center">
-            <Loader className="h-8 w-8 animate-spin" />
-            <p className="ml-4">Redirecting...</p>
-        </div>
-    );
+/**
+ * Cleanup component: This file exists in some deployment environments and was 
+ * incorrectly set as a dummy redirect. We now proxy it to the actual procurement page 
+ * to ensure that users navigating here see the correct application state.
+ */
+export default function VercelPathProxy() {
+    return <ActualPage />;
 }

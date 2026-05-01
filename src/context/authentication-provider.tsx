@@ -15,8 +15,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Loader, AlertTriangle } from 'lucide-react';
 import { firebaseConfig } from '@/firebase/client';
 
-
-// Define the UserProfile shape
 export type UserRole = string | null;
 export type UserStatus = 'Active' | 'Invited' | null;
 
@@ -43,7 +41,6 @@ interface FirebaseServices {
   firestore: Firestore;
 }
 
-// The context now only provides the core Firebase services and the auth User object.
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -77,9 +74,8 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const auth = getAuth(app);
         
         let firestore: Firestore;
-        // Check if Firestore is already initialized to avoid "already called with different options" error
         try {
-          // Attempt to get existing instance
+          // Attempt to get existing instance to prevent "different options" error
           firestore = getFirestore(app);
         } catch (e) {
           // If not initialized, initialize with modern persistent cache
