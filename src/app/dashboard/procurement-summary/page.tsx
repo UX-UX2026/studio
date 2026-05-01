@@ -93,7 +93,7 @@ export default function ProcurementSummaryPage() {
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
     
-    const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
+    const loading = userLoading || requestsLoading || deptsLoading || (!!selectedDepartmentId && budgetsLoading);
 
     if (loading || !user || !role) {
         return <div className="flex h-[calc(100vh-4rem)] items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
@@ -137,7 +137,7 @@ export default function ProcurementSummaryPage() {
                                         <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500")}>{formatCurrency(item.variance)}</TableCell>
                                     </TableRow>
                                     {openCategory === item.category && (
-                                        <TableRow className="bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>
                                     )}
                                 </Fragment>
                             )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No operational data.</TableCell></TableRow>}
@@ -158,7 +158,7 @@ export default function ProcurementSummaryPage() {
                                         <TableCell className={cn("text-right font-mono font-semibold", item.procurementTotal > item.forecastTotal && "text-red-500")}>{formatCurrency(item.variance)}</TableCell>
                                     </TableRow>
                                     {openCapitalCategory === item.category && (
-                                        <TableRow className="bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>
+                                        <TableRow className="bg-muted/50 hover:bg-muted/50"><TableCell colSpan={4} className="p-2"><div className="p-2 bg-background rounded-md border"><Table><TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Total</TableHead></TableRow></TableHeader><TableBody>{item.items.map((subItem) => (<TableRow key={subItem.id}><TableCell>{subItem.description}</TableCell><TableCell className="text-center">{subItem.qty}</TableCell><TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell><TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell></TableRow>))}</TableBody></Table></div></TableCell></TableRow>
                                     )}
                                 </Fragment>
                             )) : <TableRow><TableCell colSpan={4} className="text-center h-24 text-muted-foreground">No capital data.</TableCell></TableRow>}

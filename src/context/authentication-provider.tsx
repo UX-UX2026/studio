@@ -79,8 +79,10 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         let firestore: Firestore;
         // Check if Firestore is already initialized to avoid "already called with different options" error
         try {
+          // Attempt to get existing instance
           firestore = getFirestore(app);
         } catch (e) {
+          // If not initialized, initialize with modern persistent cache
           firestore = initializeFirestore(app, {
             localCache: persistentLocalCache({
               tabManager: persistentMultipleTabManager()
