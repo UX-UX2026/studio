@@ -69,6 +69,7 @@ export default function ProcurementSummaryPage() {
         return Array.from(periods).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
     }, [allRequests, selectedDepartmentId]);
 
+    // Effect to stabilize department selection
     useEffect(() => {
         if (deptsLoading || !visibleDepartments || visibleDepartments.length === 0) return;
         if (!selectedDepartmentId || !visibleDepartments.some(d => d.id === selectedDepartmentId)) {
@@ -76,11 +77,14 @@ export default function ProcurementSummaryPage() {
         }
     }, [visibleDepartments, deptsLoading, selectedDepartmentId]);
     
+    // Effect to stabilize period selection
     useEffect(() => {
         if (requestsLoading || !availablePeriods) return;
         if (availablePeriods.length > 0) {
-            if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) setSelectedPeriod(availablePeriods[0]);
-        } else {
+            if (!selectedPeriod || !availablePeriods.includes(selectedPeriod)) {
+                setSelectedPeriod(availablePeriods[0]);
+            }
+        } else if (selectedPeriod !== '') {
             setSelectedPeriod('');
         }
     }, [availablePeriods, requestsLoading, selectedPeriod]);
@@ -91,7 +95,9 @@ export default function ProcurementSummaryPage() {
         return selectedRequest ? selectedRequest.items : [];
     }, [allRequests, selectedDepartmentId, selectedPeriod]);
 
-    const { operationalSummary, capitalSummary } = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
+    // Use a custom hook call with clear, non-circular inputs
+    const summaryData = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
+    const { operationalSummary, capitalSummary } = summaryData;
     
     const loading = userLoading || requestsLoading || deptsLoading || (!!selectedDepartmentId && budgetsLoading);
 

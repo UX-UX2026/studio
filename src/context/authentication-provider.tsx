@@ -65,7 +65,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       try {
         const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
         if (!isConfigValid) {
-          setInitError("Firebase configuration is missing or incomplete. Please update your environment variables and restart your development server.");
+          setInitError("Firebase configuration is missing. Please update your environment variables.");
           setIsLoading(false);
           return;
         }
@@ -75,10 +75,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         
         let firestore: Firestore;
         try {
-          // Attempt to get existing instance to prevent "different options" error
+          // Robust initialization: try to get existing instance first to avoid "different options" error
           firestore = getFirestore(app);
         } catch (e) {
-          // If not initialized, initialize with modern persistent cache
           firestore = initializeFirestore(app, {
             localCache: persistentLocalCache({
               tabManager: persistentMultipleTabManager()
@@ -88,7 +87,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         
         setFirebaseServices({ app, auth, firestore });
       } catch (err) {
-        console.error("Fatal: Firebase Initialization Error", err);
+        console.error("Firebase Initialization Error", err);
         setInitError((err as Error).message || "An unknown error occurred during Firebase setup.");
         setIsLoading(false);
       }
@@ -131,7 +130,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           <div className="flex h-screen w-full items-center justify-center bg-background p-8">
               <div className="flex max-w-lg flex-col items-center gap-4 rounded-lg border border-destructive bg-destructive/5 p-6 text-center text-destructive">
                   <AlertTriangle className="h-10 w-10" />
-                  <h1 className="text-xl font-bold">Firebase Configuration Error</h1>
+                  <h1 className="text-xl font-bold">Configuration Error</h1>
                   <p className="text-sm">{initError}</p>
               </div>
           </div>
