@@ -68,7 +68,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       try {
         const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
         if (!isConfigValid) {
-          setInitError("Firebase configuration is missing or incomplete. For local development, please update your .env file. For production (e.g., Vercel), set the required environment variables in your project settings. Then, restart your development server or redeploy.");
+          setInitError("Firebase configuration is missing or incomplete. Please update your environment variables and restart your development server.");
           setIsLoading(false);
           return;
         }

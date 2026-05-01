@@ -5,12 +5,11 @@ import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment, useRef } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
-import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, WorkflowStage, AuditEvent } from "@/types";
+import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, AuditEvent } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -85,6 +84,8 @@ export default function ProcurementQuickSubmitPage() {
     const [openCategory, setOpenCategory] = useState<string | null>(null);
     const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
+    const lastLoadedKey = useRef<string>('');
+
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
@@ -93,10 +94,7 @@ export default function ProcurementQuickSubmitPage() {
     
     const allDraftsQuery = useMemo(() => {
         if (!firestore) return null;
-        return query(
-            collection(firestore, 'procurementRequests'),
-            where('status', '==', 'Draft')
-        );
+        return query(collection(firestore, 'procurementRequests'), where('status', '==', 'Draft'));
     }, [firestore]);
     const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
 
@@ -133,11 +131,7 @@ export default function ProcurementQuickSubmitPage() {
 
     const recurringItemsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
-        return query(
-            collection(firestore, 'recurringItems'), 
-            where('active', '==', true), 
-            where('departmentId', '==', selectedDepartmentId)
-        );
+        return query(collection(firestore, 'recurringItems'), where('active', '==', true), where('departmentId', '==', selectedDepartmentId));
     }, [firestore, selectedDepartmentId]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
     
@@ -226,7 +220,7 @@ export default function ProcurementQuickSubmitPage() {
         const allKnownPeriods = new Set(baseGeneratedPeriods);
         Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
         const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        periods.sort((a, b) => new Date(a).getTime() - new Date(a).getTime());
         setOpenPeriods(periods);
     }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
 
@@ -244,6 +238,10 @@ export default function ProcurementQuickSubmitPage() {
             if (!selectedPeriod) setDraftItems([]);
             return;
         }
+
+        const currentKey = `${selectedDepartmentId}-${selectedPeriod}`;
+        if (lastLoadedKey.current === currentKey) return;
+
         const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
         const mapRecurringToSubmissionItem = (item: RecurringItem): ApprovalItem => ({
             id: item.id,
@@ -258,6 +256,7 @@ export default function ProcurementQuickSubmitPage() {
             receivedQty: 0,
             fulfillmentComments: [],
         });
+
         if (existingRequest) {
             const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
@@ -271,6 +270,7 @@ export default function ProcurementQuickSubmitPage() {
             const initialItems = recurringItems?.filter(item => item.active).map(mapRecurringToSubmissionItem) || [];
             setDraftItems(initialItems);
         }
+        lastLoadedKey.current = currentKey;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
@@ -377,7 +377,6 @@ export default function ProcurementQuickSubmitPage() {
             setSaveStatus('saved');
             toast({ title: isDraft ? "Draft Saved" : "Request Submitted" });
             setTimeout(() => { setSaveStatus('idle'); setLastAction(null); }, 3000);
-            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorString, action: isDraft ? 'request.draft_save' : 'request.submit', details: `${isDraft ? 'Saved draft' : 'Submitted request'} for ${selectedPeriod}.`, entity: { type: 'procurementRequest', id: docId }, timestamp: serverTimestamp() });
         } catch (error: any) {
             setSaveStatus('idle');
             setLastAction(null);
@@ -404,7 +403,6 @@ export default function ProcurementQuickSubmitPage() {
         try {
             await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: newStatus, timeline: newTimeline });
             toast({ title: "Request Approved" });
-            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorName, action: 'request.approve', details: `Approved request ${activeRequest.id}`, entity: { type: 'procurementRequest', id: editingRequestId }, timestamp: serverTimestamp() });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Approval Failed", description: error.message });
         } finally {
@@ -428,7 +426,6 @@ export default function ProcurementQuickSubmitPage() {
         try {
             await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Rejected', timeline: newTimeline, comments: arrayUnion(commentData) });
             toast({ title: "Request Rejected" });
-            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorString, action: 'request.reject', details: `Rejected request ${activeRequest.id}`, entity: { type: 'procurementRequest', id: editingRequestId }, timestamp: serverTimestamp() });
             setRejectionReason('');
             setIsRejectDialogOpen(false);
         } catch(error: any) {
@@ -440,12 +437,9 @@ export default function ProcurementQuickSubmitPage() {
 
     const handleDeleteDraft = async () => {
         if (!deletingRequestId || !user || !firestore || !profile) return;
-        const draftToArchive = userDrafts?.find(req => req.id === deletingRequestId);
-        if (!draftToArchive) return;
         try {
             await updateDoc(doc(firestore, 'procurementRequests', deletingRequestId), { status: 'Archived', updatedAt: serverTimestamp() as any });
             toast({ title: 'Draft Archived' });
-            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: `${profile?.displayName || user.email}`, action: 'request.draft_archive', details: `Archived draft for ${draftToArchive.period}`, entity: { type: 'procurementRequest', id: deletingRequestId }, timestamp: serverTimestamp() });
             if (editingRequestId === deletingRequestId) {
                 setEditingRequestId(null);
                 setDraftItems([]);
@@ -543,7 +537,7 @@ export default function ProcurementQuickSubmitPage() {
                         <div className="grid items-center gap-1.5">
                            <Label htmlFor="company">Company</Label>
                             <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}>
-                                <SelectTrigger id="company"><SelectValue placeholder="Select company..." /></SelectTrigger>
+                                <SelectTrigger id="company"><SelectValue placeholder={associatedCompanies.length === 0 ? "No companies linked" : "Select company..."} /></SelectTrigger>
                                 <SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>

@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, Fragment } from "react";
-import { Loader, AlertTriangle, ChevronRight } from "lucide-react";
+import { Loader, ChevronRight } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where } from "firebase/firestore";
@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
-import { Badge } from "@/components/ui/badge";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -95,7 +94,6 @@ export default function ProcurementSummaryPage() {
     const { operationalSummary, capitalSummary } = useBudgetSummary(procurementItemsForSummary, selectedDepartmentId, selectedPeriod, budgetItems, departments);
     
     const loading = userLoading || requestsLoading || deptsLoading || (selectedDepartmentId && budgetsLoading);
-    const monthForHeader = selectedPeriod ? selectedPeriod.split(' ')[0] : '';
 
     if (loading || !user || !role) {
         return <div className="flex h-[calc(100vh-4rem)] items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
