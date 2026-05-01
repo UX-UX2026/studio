@@ -1,28 +1,44 @@
 'use client';
 
-import { useUser } from "@/firebase/auth/use-user";
+import { useUser, type UserRole } from "@/firebase/auth/use-user";
+import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Loader, Globe, Trash2, History, Check, ChevronDown, Bell, X } from "lucide-react";
+import { useEffect, useMemo, useState, Fragment, useRef } from "react";
+import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X, ChevronRight } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, arrayUnion, getDoc, getDocs } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem } from "@/types";
+import { collection, query, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc, orderBy, getDocs, arrayUnion, getDoc } from "firebase/firestore";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem, WorkflowStage, AuditEvent } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import { cn } from "@/lib/utils";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
-import { format, addMonths } from "date-fns";
+import { format, addMonths, formatDistanceToNow } from "date-fns";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { RecurringClient } from "@/components/app/recurring-client";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { submissionReadyForReviewTemplate, requestActionRequiredTemplate } from "@/lib/email-templates";
+import { submissionReadyForReviewTemplate, requestActionRequiredTemplate, requestRejectedTemplate } from "@/lib/email-templates";
+import { procurementCategories } from "@/lib/procurement-categories";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -34,7 +50,7 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, loading: userLoading, reportingDepartments } = useUser();
+    const { user, profile, role, department: userDepartment, departmentId: userDepartmentId, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -49,6 +65,8 @@ export default function ProcurementQuickSubmitPage() {
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
+    const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+    const [deletingRequestId, setDeletingRequestId] = useState<string | null>(null);
     const [isNotifying, setIsNotifying] = useState(false);
 
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
@@ -58,14 +76,44 @@ export default function ProcurementQuickSubmitPage() {
     const [rejectionReason, setRejectionReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
 
+    const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
+    const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
+
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [archiveReason, setArchiveReason] = useState('');
+
+    const [openCategory, setOpenCategory] = useState<string | null>(null);
+    const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
     const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
     const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
+    
+    const allDraftsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('status', '==', 'Draft')
+        );
+    }, [firestore]);
+    const { data: allDrafts, loading: draftsLoading } = useCollection<ApprovalRequest>(allDraftsQuery);
+
+    const userDrafts = useMemo(() => {
+        if (!user || !allDrafts) return [];
+        let draftsForUser: ApprovalRequest[];
+        if (role === 'Manager' && userDepartment) {
+            draftsForUser = allDrafts.filter(draft => draft.department === userDepartment);
+        } else if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
+            draftsForUser = allDrafts;
+        } else {
+            draftsForUser = allDrafts.filter(draft => draft.submittedById === user.uid);
+        }
+        return draftsForUser
+            .filter(draft => draft.id !== editingRequestId)
+            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
+    }, [user, allDrafts, editingRequestId, role, userDepartment]);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
@@ -96,6 +144,17 @@ export default function ProcurementQuickSubmitPage() {
     const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
     const { data: appMetadata, loading: metadataLoading } = useDoc<AppMetadata>(appMetadataRef);
 
+    const previousSubmissionsQuery = useMemo(() => {
+        if (!firestore || !selectedDepartmentId) return null;
+        return query(
+            collection(firestore, 'procurementRequests'),
+            where('departmentId', '==', selectedDepartmentId),
+            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']),
+            orderBy('updatedAt', 'desc')
+        );
+    }, [firestore, selectedDepartmentId]);
+    const { data: previousSubmissions, loading: previousSubmissionsLoading } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+
     const associatedCompanies = useMemo(() => {
         if (!selectedDepartmentId || !departments || !companies) return [];
         const dept = departments.find(d => d.id === selectedDepartmentId);
@@ -109,10 +168,18 @@ export default function ProcurementQuickSubmitPage() {
     }, [editingRequestId, periodRequests]);
 
     const canApproveOrReject = useMemo(() => {
-        if (!role || !['Executive', 'Administrator'].includes(role)) return false;
+        if (role !== 'Executive' && role !== 'Administrator') return false;
         if (!activeRequest) return false;
         return ['Pending Manager Approval', 'Pending Executive', 'Queries Raised'].includes(activeRequest.status);
     }, [role, activeRequest]);
+
+    const departmentCategories = useMemo(() => {
+        const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
+        const categoriesFromCurrentItems = draftItems.map(item => item.category).filter(Boolean);
+        const combined = new Set([...categoriesFromBudget, ...categoriesFromCurrentItems, ...procurementCategories]);
+        if (!combined.has('Uncategorized')) combined.add('Uncategorized');
+        return Array.from(combined).sort();
+    }, [budgetItems, draftItems]);
 
     const initialParamsProcessed = useRef(false);
     useEffect(() => {
@@ -131,30 +198,21 @@ export default function ProcurementQuickSubmitPage() {
 
     const departmentsForUser = useMemo(() => {
         if (!departments) return [];
-        if (['Administrator', 'Procurement Officer'].includes(role || '')) return departments;
-        if (role === 'Executive') {
-            if (!reportingDepartments || reportingDepartments.length === 0) return departments;
-            return departments.filter(d => reportingDepartments.includes(d.id));
-        }
-        if (['Manager', 'Requester'].includes(role || '')) {
-            return departments.filter(d => d.name === userDepartment);
-        }
+        if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) return departments;
+        if (role === 'Executive') return departments.filter(d => d.id && reportingDepartments.includes(d.id));
+        if (role === 'Manager' || role === 'Requester') return departments.filter(d => d.name === userDepartment);
         return [];
     }, [departments, role, userDepartment, reportingDepartments]);
 
     useEffect(() => {
         if (deptsLoading || !departmentsForUser || initialParamsProcessed.current) return;
-        if (departmentsForUser.length > 0 && !selectedDepartmentId) {
-            setSelectedDepartmentId(departmentsForUser[0].id);
-        }
+        if (departmentsForUser.length > 0 && !selectedDepartmentId) setSelectedDepartmentId(departmentsForUser[0].id);
     }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
 
     const baseGeneratedPeriods = useMemo(() => {
         const periods = [];
         const now = new Date();
-        for (let i = 0; i < 18; i++) {
-            periods.push(format(addMonths(now, i), "MMMM yyyy"));
-        }
+        for (let i = 0; i < 18; i++) periods.push(format(addMonths(now, i), "MMMM yyyy"));
         return periods;
     }, []);
 
@@ -175,10 +233,8 @@ export default function ProcurementQuickSubmitPage() {
     useEffect(() => {
         if (initialParamsProcessed.current) return;
         if (openPeriods.length > 0) {
-            if (!openPeriods.includes(selectedPeriod)) {
-                setSelectedPeriod(openPeriods[0]);
-            }
-        } else if (selectedPeriod !== '') {
+            if (!openPeriods.includes(selectedPeriod)) setSelectedPeriod(openPeriods[0]);
+        } else {
              setSelectedPeriod('');
         }
     }, [openPeriods, selectedPeriod]);
@@ -188,9 +244,7 @@ export default function ProcurementQuickSubmitPage() {
             if (!selectedPeriod) setDraftItems([]);
             return;
         }
-
-        const existingRequest = periodRequests?.find(req => req.status !== 'Archived');
-
+        const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
         const mapRecurringToSubmissionItem = (item: RecurringItem): ApprovalItem => ({
             id: item.id,
             type: "Recurring",
@@ -204,40 +258,31 @@ export default function ProcurementQuickSubmitPage() {
             receivedQty: 0,
             fulfillmentComments: [],
         });
-
         if (existingRequest) {
             const savedItems = existingRequest.items;
             setEditingRequestId(existingRequest.id);
             setSelectedCompanyId(existingRequest.companyId || '');
-
             const savedItemDescriptions = new Set(savedItems.map(i => i.description));
-            const newRecurringItems = recurringItems
-                ?.filter(masterItem => masterItem.active && !savedItemDescriptions.has(masterItem.name))
-                .map(mapRecurringToSubmissionItem) || [];
-
+            const newRecurringItems = recurringItems?.filter(masterItem => masterItem.active && !savedItemDescriptions.has(masterItem.name)).map(mapRecurringToSubmissionItem) || [];
             setDraftItems([...savedItems, ...newRecurringItems]);
         } else {
             setEditingRequestId(null);
             setSelectedCompanyId('');
-            const initialItems = recurringItems
-                ?.filter(item => item.active)
-                .map(mapRecurringToSubmissionItem) || [];
+            const initialItems = recurringItems?.filter(item => item.active).map(mapRecurringToSubmissionItem) || [];
             setDraftItems(initialItems);
         }
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
-
     const isLockedByWorkflow = useMemo(() => {
         if (!selectedDepartmentId || !selectedPeriod) return false;
-        const request = periodRequests?.find(req => req.status !== 'Archived');
-        if (!request) return false;
-        const { status } = request;
+        const periodStatusInfo = periodRequests?.find(req => !['Archived'].includes(req.status));
+        if (!periodStatusInfo) return false;
+        const { status } = periodStatusInfo;
         if (['Completed', 'Approved', 'In Fulfillment'].includes(status)) return true;
         if (role === 'Requester' && status === 'Pending Manager Approval') return true;
         return false;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, role]);
-
     const isLocked = isLockedByWorkflow || !selectedPeriod;
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
@@ -251,9 +296,9 @@ export default function ProcurementQuickSubmitPage() {
         try {
             await addDoc(collection(firestore, 'auditLogs'), {
                 userId: user.uid,
-                userName: `${profile?.displayName || user.email} (${role})`,
+                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
                 action: 'request.edit_request',
-                details: `User requested edit: "${editRequestReason}"`,
+                details: `User requested to edit locked submission with reason: "${editRequestReason}"`,
                 entity: { type: 'procurementRequest', id: editingRequestId },
                 timestamp: serverTimestamp()
             });
@@ -270,24 +315,23 @@ export default function ProcurementQuickSubmitPage() {
             toast({ variant: "destructive", title: "Cannot save" });
             return;
         }
-        
         const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
         if (associatedCompanies.length > 0 && !selectedCompanyId && !isDraft) {
             toast({ variant: "destructive", title: "Company Required" });
             return;
         }
-
         setLastAction(isDraft ? 'draft' : 'submit');
         setSaveStatus('saving');
-        
         const department = departments?.find(d => d.id === selectedDepartmentId);
-        const isSubmitterTheDeptManager = user.uid === department?.managerId;
-        const actorString = `${profile?.displayName || user.email} (${role})`;
+        if (!department) {
+            setSaveStatus('idle');
+            return;
+        }
+        const isSubmitterTheDeptManager = user.uid === department.managerId;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        
         let newStatus: ApprovalRequest['status'];
         const departmentWorkflow = department?.workflow;
-
         let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({ stage: stage.name, actor: String(stage.role) || 'System', date: null, status: 'waiting' as const }))
             : [
@@ -296,59 +340,44 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
                 { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
             ];
-
         if (timeline.length > 0) {
             timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
         }
-
         if (isDraft) {
             newStatus = 'Draft';
         } else {
             newStatus = (role === 'Administrator' || isSubmitterTheDeptManager) ? 'Pending Executive' : 'Pending Manager Approval';
             if (newStatus === 'Pending Manager Approval') {
-                const mgrIdx = timeline.findIndex(s => s.stage === 'Manager Review');
-                if (mgrIdx > -1) timeline[mgrIdx].status = 'pending';
-            } else {
-                const mgrIdx = timeline.findIndex(s => s.stage === 'Manager Review');
-                if (mgrIdx > -1) timeline[mgrIdx] = { ...timeline[mgrIdx], status: 'completed' as const, actor: 'System (Skipped)', date: currentDate };
-                const execIdx = timeline.findIndex(s => s.stage === 'Executive Approval');
-                if (execIdx > -1) timeline[execIdx].status = 'pending';
+                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) timeline[managerReviewIndex].status = 'pending';
+            } else if (newStatus === 'Pending Executive') {
+                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
+                if (managerReviewIndex > -1) timeline[managerReviewIndex] = { ...timeline[managerReviewIndex], status: 'completed' as const, actor: 'System (Skipped)', date: currentDate };
+                const execIndex = timeline.findIndex(s => s.stage === 'Executive Approval');
+                if (execIndex > -1) timeline[execIndex].status = 'pending';
             }
         }
-
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
-
         const baseRequestData: Partial<ApprovalRequest> = {
-            department: departmentName,
-            departmentId: selectedDepartmentId,
-            companyId: selectedCompanyId,
-            companyName: selectedCompany?.name || '',
-            period: selectedPeriod,
-            total: submissionTotal,
-            status: newStatus,
-            isEmergency: false,
-            submittedBy: actorString,
-            submittedById: user.uid,
-            timeline: timeline,
-            comments: editingRequestId ? periodRequests?.find(r => r.id === editingRequestId)?.comments || [] : [],
-            items: draftItems,
-            updatedAt: serverTimestamp() as any,
+            department: departmentName, departmentId: selectedDepartmentId, companyId: selectedCompanyId,
+            companyName: selectedCompany?.name || '', period: selectedPeriod, total: submissionTotal,
+            status: newStatus, submittedBy: actorString, submittedById: user.uid, timeline: timeline,
+            items: draftItems, updatedAt: serverTimestamp() as any,
         };
-
         try {
             let docId: string;
             if (editingRequestId) {
-                const docRef = doc(firestore, 'procurementRequests', editingRequestId);
-                await updateDoc(docRef, baseRequestData);
+                await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), baseRequestData);
                 docId = editingRequestId;
             } else {
                 const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() as any });
                 docId = docRef.id;
             }
-            if (!editingRequestId) setEditingRequestId(docId);
+            if (!editingRequestId && docId) setEditingRequestId(docId);
             setSaveStatus('saved');
             toast({ title: isDraft ? "Draft Saved" : "Request Submitted" });
             setTimeout(() => { setSaveStatus('idle'); setLastAction(null); }, 3000);
+            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorString, action: isDraft ? 'request.draft_save' : 'request.submit', details: `${isDraft ? 'Saved draft' : 'Submitted request'} for ${selectedPeriod}.`, entity: { type: 'procurementRequest', id: docId }, timestamp: serverTimestamp() });
         } catch (error: any) {
             setSaveStatus('idle');
             setLastAction(null);
@@ -361,29 +390,24 @@ export default function ProcurementQuickSubmitPage() {
         setIsSaving(true);
         let newStatus: ApprovalRequest['status'] = activeRequest.status;
         let newTimeline = [...activeRequest.timeline];
-        const actorName = `${profile.displayName || user.email} (${role})`;
+        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        
-        if (['Pending Executive', 'Pending Manager Approval', 'Queries Raised'].includes(activeRequest.status)) {
+        if (role === 'Executive' || role === 'Administrator') {
             newStatus = 'Approved';
-            const mgrIdx = newTimeline.findIndex(s => s.stage === 'Manager Review');
-            const execIdx = newTimeline.findIndex(s => s.stage === 'Executive Approval');
-            if (mgrIdx > -1 && newTimeline[mgrIdx].status !== 'completed') {
-                newTimeline[mgrIdx] = { ...newTimeline[mgrIdx], status: 'completed', date: currentDate, actor: actorName };
-            }
-            if (execIdx > -1) {
-                newTimeline[execIdx] = { ...newTimeline[execIdx], status: 'completed', date: currentDate, actor: actorName };
-            }
-            const procIdx = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
-            if (procIdx > -1) newTimeline[procIdx].status = 'pending';
+            const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
+            const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
+            if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
+            if (execApprovalIndex > -1) newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName };
+            const procIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
+            if (procIndex > -1) newTimeline[procIndex].status = 'pending';
         }
-
         try {
             await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: newStatus, timeline: newTimeline });
             toast({ title: "Request Approved" });
-            setIsSaving(false);
+            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorName, action: 'request.approve', details: `Approved request ${activeRequest.id}`, entity: { type: 'procurementRequest', id: editingRequestId }, timestamp: serverTimestamp() });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Approval Failed", description: error.message });
+        } finally {
             setIsSaving(false);
         }
     };
@@ -391,27 +415,46 @@ export default function ProcurementQuickSubmitPage() {
     const handleConfirmReject = async () => {
         if (!activeRequest || !editingRequestId || !user || !firestore || !profile) return;
         if (!rejectionReason.trim()) {
-            toast({ variant: "destructive", title: "Reason Required" });
+            toast({ variant: "destructive", title: "Rejection Reason Required" });
             return;
         }
         setIsSaving(true);
-        const newStatus: ApprovalRequest['status'] = 'Rejected';
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        const actorString = `${profile?.displayName || user.email} (${role})`;
+        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         let newTimeline = [...activeRequest.timeline];
-        const curIdx = newTimeline.findIndex(step => step.status === 'pending');
-        if (curIdx !== -1) newTimeline[curIdx] = { ...newTimeline[curIdx], status: 'rejected', actor: actorString, date: currentDate };
+        const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
+        if (currentStepIndex !== -1) newTimeline[currentStepIndex] = { ...newTimeline[currentStepIndex], status: 'rejected', actor: actorString, date: currentDate };
         const commentData = { actor: actorString, actorId: user.uid, text: `REJECTED: ${rejectionReason}`, timestamp: new Date().toLocaleString("en-GB") };
-
         try {
-            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: newStatus, timeline: newTimeline, comments: arrayUnion(commentData) });
+            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Rejected', timeline: newTimeline, comments: arrayUnion(commentData) });
             toast({ title: "Request Rejected" });
-            setIsRejectDialogOpen(false);
+            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: actorString, action: 'request.reject', details: `Rejected request ${activeRequest.id}`, entity: { type: 'procurementRequest', id: editingRequestId }, timestamp: serverTimestamp() });
             setRejectionReason('');
+            setIsRejectDialogOpen(false);
         } catch(error: any) {
-            toast({ variant: "destructive", title: "Reject Failed", description: error.message });
+            toast({ variant: "destructive", title: "Reject Failed" });
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleDeleteDraft = async () => {
+        if (!deletingRequestId || !user || !firestore || !profile) return;
+        const draftToArchive = userDrafts?.find(req => req.id === deletingRequestId);
+        if (!draftToArchive) return;
+        try {
+            await updateDoc(doc(firestore, 'procurementRequests', deletingRequestId), { status: 'Archived', updatedAt: serverTimestamp() as any });
+            toast({ title: 'Draft Archived' });
+            await addDoc(collection(firestore, 'auditLogs'), { userId: user.uid, userName: `${profile?.displayName || user.email}`, action: 'request.draft_archive', details: `Archived draft for ${draftToArchive.period}`, entity: { type: 'procurementRequest', id: deletingRequestId }, timestamp: serverTimestamp() });
+            if (editingRequestId === deletingRequestId) {
+                setEditingRequestId(null);
+                setDraftItems([]);
+            }
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Archive Failed' });
+        } finally {
+            setDeletingRequestId(null);
+            setIsDeleteDialogOpen(false);
         }
     };
 
@@ -423,37 +466,42 @@ export default function ProcurementQuickSubmitPage() {
         }
         const actorString = `${profile?.displayName || user.email} (${role})`;
         try {
-            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { 
-                status: 'Archived', 
-                updatedAt: serverTimestamp() as any,
-                comments: arrayUnion({ actor: actorString, actorId: user.uid, text: `ARCHIVED: ${archiveReason}`, timestamp: new Date().toLocaleString("en-GB") })
-            });
+            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() as any, comments: arrayUnion({ actor: actorString, actorId: user.uid, text: `ARCHIVED: ${archiveReason}`, timestamp: new Date().toLocaleString("en-GB") }) });
             toast({ title: 'Draft Archived' });
             setEditingRequestId(null);
             setDraftItems([]);
-            setIsArchiveCurrentDialogOpen(false);
-            setArchiveReason('');
         } catch (error: any) {
-             toast({ variant: 'destructive', title: 'Archive Failed', description: error.message });
+             toast({ variant: 'destructive', title: 'Archive Failed' });
+        } finally {
+            setArchiveReason('');
+            setIsArchiveCurrentDialogOpen(false);
         }
     };
 
+    const handleLoadPrevious = () => {
+        if (!previousSubmissionToLoad || !previousSubmissions || !user || !profile) return;
+        const submissionToLoad = previousSubmissions.find(s => s.id === previousSubmissionToLoad);
+        if (!submissionToLoad) return;
+        const newItems = submissionToLoad.items.map((item, index) => ({ ...item, id: Date.now() + index, type: 'One-Off' as const, expenseType: item.expenseType || 'Operational', addedById: user.uid, addedByName: `${profile?.displayName || user.email}`, fulfillmentStatus: 'Pending' as const, receivedQty: 0, fulfillmentComments: [] }));
+        setDraftItems(newItems);
+        setEditingRequestId(null);
+        toast({ title: 'Submission Loaded' });
+        setIsLoadConfirmDialogOpen(false);
+        setPreviousSubmissionToLoad(null);
+    };
+
     const handleNotifyManager = async () => {
-        if (!user || !profile || !firestore || !selectedDepartmentId || !departments) {
-            toast({ variant: "destructive", title: "Cannot notify" });
-            return;
-        }
+        if (!user || !profile || !firestore || !selectedDepartmentId || !departments) return;
         setIsNotifying(true);
         try {
             const department = departments.find(d => d.id === selectedDepartmentId);
-            if (!department?.managerId) throw new Error("No manager assigned.");
-            const managerSnap = await getDoc(doc(firestore, 'users', department.managerId));
-            const manager = managerSnap.data() as any;
-            if (!manager?.email) throw new Error("Manager email not found.");
-            
+            if (!department || !department.managerId) throw new Error("No manager assigned.");
+            const managerDoc = await getDoc(doc(firestore, 'users', department.managerId));
+            if (!managerDoc.exists()) throw new Error("Manager not found.");
+            const manager = managerDoc.data() as any;
             const link = `${window.location.origin}/dashboard/procurement?deptId=${selectedDepartmentId}&period=${encodeURIComponent(selectedPeriod)}`;
             const emailHtml = submissionReadyForReviewTemplate({ department: department.name, period: selectedPeriod, requesterName: profile.displayName || user.email || '' }, link);
-            await fetch('/api/send-email', { method: 'POST', body: JSON.stringify({ to: manager.email, subject: `Procurement Ready for Review: ${department.name}`, html: emailHtml }) });
+            await fetch('/api/send-email', { method: 'POST', body: JSON.stringify({ to: manager.email, subject: `Review Ready: ${department.name}`, html: emailHtml }) });
             toast({ title: 'Manager Notified' });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Notification Failed", description: error.message });
@@ -484,7 +532,7 @@ export default function ProcurementQuickSubmitPage() {
                     <CardDescription>Consolidated view for managing procurement requests.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 items-end gap-4">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
                         <div className="grid items-center gap-1.5">
                             <Label htmlFor="department">Department</Label>
                             <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
@@ -495,7 +543,7 @@ export default function ProcurementQuickSubmitPage() {
                         <div className="grid items-center gap-1.5">
                            <Label htmlFor="company">Company</Label>
                             <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}>
-                                <SelectTrigger id="company"><SelectValue placeholder={associatedCompanies.length === 0 ? "No companies linked" : "Select company..."} /></SelectTrigger>
+                                <SelectTrigger id="company"><SelectValue placeholder="Select company..." /></SelectTrigger>
                                 <SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
@@ -506,9 +554,35 @@ export default function ProcurementQuickSubmitPage() {
                                 <SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
+                        <div className="grid items-center gap-1.5">
+                            <Label htmlFor="load-prev">Load Previous</Label>
+                             <Select onValueChange={val => { setPreviousSubmissionToLoad(val); setIsLoadConfirmDialogOpen(true); }} value={previousSubmissionToLoad || ""} disabled={isLocked}>
+                                <SelectTrigger id="load-prev"><SelectValue placeholder="Load past..." /></SelectTrigger>
+                                <SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
+
+            {userDrafts.length > 0 && (
+                <Card>
+                    <CardHeader><CardTitle>Other Drafts</CardTitle></CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableBody>
+                                {userDrafts.map(draft => (
+                                    <TableRow key={draft.id}>
+                                        <TableCell>{draft.department} - {draft.period}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
+                                        <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => { setSelectedDepartmentId(draft.departmentId); setSelectedPeriod(draft.period); }}>Resume</Button></TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
 
             <Card>
                 <Collapsible>
@@ -530,7 +604,7 @@ export default function ProcurementQuickSubmitPage() {
                     </CardHeader>
                     <CardContent>
                         <TabsContent value="submission">
-                            <SubmissionClient user={user as any} profile={profile} userRole={role as any} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
+                            <SubmissionClient user={user} profile={profile} userRole={role} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
                         </TabsContent>
                         <TabsContent value="summary">
                             <div className="space-y-8">
@@ -602,6 +676,13 @@ export default function ProcurementQuickSubmitPage() {
                     <DialogFooter><Button variant="destructive" onClick={handleArchiveCurrentDraft}>Archive</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleLoadPrevious}>Load</AlertDialogAction></AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
