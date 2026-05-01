@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, orderBy } from "firebase/firestore";
-import type { ApprovalRequest } from "@/lib/approvals-mock-data";
+import type { ApprovalRequest } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -77,7 +77,10 @@ export default function ProcurementHistoryPage() {
         return [...requests].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
     }, [requests]);
 
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const departmentsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'departments');
+    }, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const filteredRequests = useMemo(() => {

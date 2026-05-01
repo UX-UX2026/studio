@@ -70,14 +70,21 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+        let app: FirebaseApp;
+        if (!getApps().length) {
+          app = initializeApp(firebaseConfig);
+        } else {
+          app = getApp();
+        }
+
         const auth = getAuth(app);
         
         let firestore: Firestore;
         try {
-          // Robust initialization: try to get existing instance first to avoid "different options" error
+          // Attempt to get existing instance first
           firestore = getFirestore(app);
         } catch (e) {
+          // If not initialized, initialize with custom settings
           firestore = initializeFirestore(app, {
             localCache: persistentLocalCache({
               tabManager: persistentMultipleTabManager()

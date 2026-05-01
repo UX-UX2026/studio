@@ -71,10 +71,16 @@ export default function ProcurementQuickSubmitPage() {
 
     const lastLoadedKey = useRef<string>('');
 
-    const departmentsQuery = useMemo(() => collection(firestore, 'departments'), [firestore]);
+    const departmentsQuery = useMemo(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'departments');
+    }, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    const companiesQuery = useMemo(() => collection(firestore, 'companies'), [firestore]);
+    const companiesQuery = useMemo(() => {
+        if (!firestore) return null;
+        return collection(firestore, 'companies');
+    }, [firestore]);
     const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
     
     const allDraftsQuery = useMemo(() => {
@@ -120,7 +126,10 @@ export default function ProcurementQuickSubmitPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
     
-    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const appMetadataRef = useMemo(() => {
+        if (!firestore) return null;
+        return doc(firestore, 'app', 'metadata');
+    }, [firestore]);
     const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
 
     const previousSubmissionsQuery = useMemo(() => {
@@ -202,7 +211,7 @@ export default function ProcurementQuickSubmitPage() {
         const allKnownPeriods = new Set(baseGeneratedPeriods);
         Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
         const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-        periods.sort((a, b) => new Date(a).getTime() - new Date(a).getTime());
+        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
         setOpenPeriods(periods);
     }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
 
