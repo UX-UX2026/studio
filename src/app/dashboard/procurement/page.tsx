@@ -58,14 +58,11 @@ export default function ProcurementQuickSubmitPage() {
 
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
     const [editRequestReason, setEditRequestReason] = useState('');
-
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
     const [rejectionReason, setRejectionReason] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-
     const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
     const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
-
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [archiveReason, setArchiveReason] = useState('');
 
@@ -262,7 +259,6 @@ export default function ProcurementQuickSubmitPage() {
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
     const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
-    
     const isLockedByWorkflow = useMemo(() => {
         if (!selectedDepartmentId || !selectedPeriod) return false;
         const periodStatusInfo = periodRequests?.find(req => !['Archived'].includes(req.status));
@@ -272,7 +268,6 @@ export default function ProcurementQuickSubmitPage() {
         if (role === 'Requester' && status === 'Pending Manager Approval') return true;
         return false;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, role]);
-    
     const isLocked = isLockedByWorkflow || !selectedPeriod;
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
@@ -313,17 +308,13 @@ export default function ProcurementQuickSubmitPage() {
         setLastAction(isDraft ? 'draft' : 'submit');
         setSaveStatus('saving');
         const department = departments?.find(d => d.id === selectedDepartmentId);
-        if (!department) {
-            setSaveStatus('idle');
-            return;
-        }
+        if (!department) { setSaveStatus('idle'); return; }
         const isSubmitterTheDeptManager = user.uid === department.managerId;
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         
         let newStatus: ApprovalRequest['status'];
         const departmentWorkflow = department?.workflow;
-        
         let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
             ? departmentWorkflow.map((stage) => ({ stage: stage.name, actor: String(stage.role) || 'System', date: null, status: 'waiting' as const }))
             : [
@@ -332,10 +323,7 @@ export default function ProcurementQuickSubmitPage() {
                 { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
                 { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
             ];
-        
-        if (timeline.length > 0) {
-            timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
-        }
+        if (timeline.length > 0) timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
 
         if (isDraft) {
             newStatus = 'Draft';
@@ -351,7 +339,6 @@ export default function ProcurementQuickSubmitPage() {
                 if (execIndex > -1) timeline[execIndex].status = 'pending';
             }
         }
-        
         const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
         const baseRequestData: Partial<ApprovalRequest> = {
             department: departmentName, departmentId: selectedDepartmentId, companyId: selectedCompanyId,
@@ -359,17 +346,13 @@ export default function ProcurementQuickSubmitPage() {
             status: newStatus, submittedBy: actorString, submittedById: user.uid, timeline: timeline,
             items: draftItems, updatedAt: serverTimestamp() as any,
         };
-        
         try {
-            let docId: string;
             if (editingRequestId) {
                 await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), baseRequestData);
-                docId = editingRequestId;
             } else {
                 const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() as any });
-                docId = docRef.id;
+                setEditingRequestId(docRef.id);
             }
-            if (!editingRequestId && docId) setEditingRequestId(docId);
             setSaveStatus('saved');
             toast({ title: isDraft ? "Draft Saved" : "Request Submitted" });
             setTimeout(() => { setSaveStatus('idle'); setLastAction(null); }, 3000);
@@ -401,17 +384,12 @@ export default function ProcurementQuickSubmitPage() {
             toast({ title: "Request Approved" });
         } catch (error: any) {
             toast({ variant: "destructive", title: "Approval Failed", description: error.message });
-        } finally {
-            setIsSaving(false);
-        }
+        } finally { setIsSaving(false); }
     };
 
     const handleConfirmReject = async () => {
         if (!activeRequest || !editingRequestId || !user || !firestore || !profile) return;
-        if (!rejectionReason.trim()) {
-            toast({ variant: "destructive", title: "Rejection Reason Required" });
-            return;
-        }
+        if (!rejectionReason.trim()) { toast({ variant: "destructive", title: "Rejection Reason Required" }); return; }
         setIsSaving(true);
         const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
@@ -424,31 +402,21 @@ export default function ProcurementQuickSubmitPage() {
             toast({ title: "Request Rejected" });
             setRejectionReason('');
             setIsRejectDialogOpen(false);
-        } catch(error: any) {
-            toast({ variant: "destructive", title: "Reject Failed" });
-        } finally {
-            setIsSaving(false);
-        }
+        } catch(error: any) { toast({ variant: "destructive", title: "Reject Failed" }); }
+        finally { setIsSaving(false); }
     };
 
     const handleArchiveCurrentDraft = async () => {
         if (!editingRequestId || !user || !firestore || !profile) return;
-        if (!archiveReason.trim()) {
-            toast({ variant: 'destructive', title: 'Reason Required' });
-            return;
-        }
+        if (!archiveReason.trim()) { toast({ variant: 'destructive', title: 'Reason Required' }); return; }
         const actorString = `${profile?.displayName || user.email} (${role})`;
         try {
             await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() as any, comments: arrayUnion({ actor: actorString, actorId: user.uid, text: `ARCHIVED: ${archiveReason}`, timestamp: new Date().toLocaleString("en-GB") }) });
             toast({ title: 'Draft Archived' });
             setEditingRequestId(null);
             setDraftItems([]);
-        } catch (error: any) {
-             toast({ variant: 'destructive', title: 'Archive Failed' });
-        } finally {
-            setArchiveReason('');
-            setIsArchiveCurrentDialogOpen(false);
-        }
+        } catch (error: any) { toast({ variant: 'destructive', title: 'Archive Failed' }); }
+        finally { setArchiveReason(''); setIsArchiveCurrentDialogOpen(false); }
     };
 
     const handleLoadPrevious = () => {
@@ -476,11 +444,8 @@ export default function ProcurementQuickSubmitPage() {
             const emailHtml = submissionReadyForReviewTemplate({ department: department.name, period: selectedPeriod, requesterName: profile.displayName || user.email || '' }, link);
             await fetch('/api/send-email', { method: 'POST', body: JSON.stringify({ to: manager.email, subject: `Review Ready: ${department.name}`, html: emailHtml }) });
             toast({ title: 'Manager Notified' });
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "Notification Failed", description: error.message });
-        } finally {
-            setIsNotifying(false);
-        }
+        } catch (error: any) { toast({ variant: "destructive", title: "Notification Failed", description: error.message }); }
+        finally { setIsNotifying(false); }
     };
 
     const opProg = useMemo(() => {
@@ -537,7 +502,6 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardContent>
             </Card>
-
             {userDrafts.length > 0 && (
                 <Card>
                     <CardHeader><CardTitle>Other Drafts</CardTitle></CardHeader>
@@ -556,7 +520,6 @@ export default function ProcurementQuickSubmitPage() {
                     </CardContent>
                 </Card>
             )}
-
             <Card>
                 <Collapsible>
                     <CollapsibleTrigger className="w-full p-5 flex flex-row items-center justify-between cursor-pointer rounded-t-lg hover:bg-muted/50">
@@ -566,7 +529,6 @@ export default function ProcurementQuickSubmitPage() {
                     <CollapsibleContent><CardContent className="border-t pt-5"><RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} /></CardContent></CollapsibleContent>
                 </Collapsible>
             </Card>
-
             <Card>
                 <Tabs defaultValue="submission" className="w-full">
                     <CardHeader>
@@ -580,22 +542,20 @@ export default function ProcurementQuickSubmitPage() {
                             <SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
                         </TabsContent>
                         <TabsContent value="summary">
-                            <div className="space-y-8">
-                                <div className="space-y-4">
-                                    <div className="p-4 border rounded-lg bg-muted/50">
-                                        <div className="flex justify-between items-center">
-                                            <div><h3 className="font-semibold text-lg">Operational Budget Impact</h3></div>
-                                            <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement)}</p></div>
-                                        </div>
-                                        <Progress value={opProg} className="mt-4" />
+                            <div className="space-y-4">
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                    <div className="flex justify-between items-center">
+                                        <div><h3 className="font-semibold text-lg">Operational Budget Impact</h3></div>
+                                        <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement)}</p></div>
                                     </div>
-                                    <div className="p-4 border rounded-lg bg-muted/50">
-                                        <div className="flex justify-between items-center">
-                                            <div><h3 className="font-semibold text-lg">Capital Budget Impact</h3></div>
-                                            <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(capitalSummary.totals.procurement)}</p></div>
-                                        </div>
-                                        <Progress value={capProg} className="mt-4" />
+                                    <Progress value={opProg} className="mt-4" />
+                                </div>
+                                <div className="p-4 border rounded-lg bg-muted/50">
+                                    <div className="flex justify-between items-center">
+                                        <div><h3 className="font-semibold text-lg">Capital Budget Impact</h3></div>
+                                        <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(capitalSummary.totals.procurement)}</p></div>
                                     </div>
+                                    <Progress value={capProg} className="mt-4" />
                                 </div>
                             </div>
                         </TabsContent>
@@ -625,37 +585,10 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardFooter>
             </Card>
-
-            <Dialog open={isRequestEditDialogOpen} onOpenChange={setIsRequestEditDialogOpen}>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Request Edit</DialogTitle></DialogHeader>
-                    <Textarea placeholder="Reason for edit..." value={editRequestReason} onChange={e => setEditRequestReason(e.target.value)} />
-                    <DialogFooter><Button onClick={handleRequestEdit}>Send Request</Button></DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Reject Request</DialogTitle></DialogHeader>
-                    <Textarea placeholder="Reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} />
-                    <DialogFooter><Button variant="destructive" onClick={handleConfirmReject} disabled={isSaving}>Confirm Rejection</Button></DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
-                <DialogContent>
-                    <DialogHeader><DialogTitle>Archive Draft</DialogTitle></DialogHeader>
-                    <Textarea placeholder="Reason..." value={archiveReason} onChange={e => setArchiveReason(e.target.value)} />
-                    <DialogFooter><Button variant="destructive" onClick={handleArchiveCurrentDraft}>Archive</Button></DialogFooter>
-                </DialogContent>
-            </Dialog>
-
-            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}>
-                <AlertDialogContent>
-                    <AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleLoadPrevious}>Load</AlertDialogAction></AlertDialogFooter>
-                </AlertDialogContent>
-            </AlertDialog>
+            <Dialog open={isRequestEditDialogOpen} onOpenChange={setIsRequestEditDialogOpen}><DialogContent><DialogHeader><DialogTitle>Request Edit</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={editRequestReason} onChange={e => setEditRequestReason(e.target.value)} /><DialogFooter><Button onClick={handleRequestEdit}>Send Request</Button></DialogFooter></DialogContent></Dialog>
+            <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}><DialogContent><DialogHeader><DialogTitle>Reject Request</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={handleConfirmReject} disabled={isSaving}>Confirm Rejection</Button></DialogFooter></DialogContent></Dialog>
+            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}><DialogContent><DialogHeader><DialogTitle>Archive Draft</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={archiveReason} onChange={e => setArchiveReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={handleArchiveCurrentDraft}>Archive</Button></DialogFooter></DialogContent></Dialog>
+            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleLoadPrevious}>Load</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
         </div>
     );
 }

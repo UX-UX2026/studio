@@ -80,16 +80,23 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const auth = getAuth(app);
         
         let firestore: Firestore;
-        try {
-          // Attempt to get existing instance first
-          firestore = getFirestore(app);
-        } catch (e) {
-          // If not initialized, initialize with custom settings
-          firestore = initializeFirestore(app, {
-            localCache: persistentLocalCache({
-              tabManager: persistentMultipleTabManager()
-            })
-          });
+        // Check if firestore is already initialized to avoid "different options" error
+        if (getApps().length > 0) {
+            try {
+                firestore = getFirestore(app);
+            } catch (e) {
+                firestore = initializeFirestore(app, {
+                    localCache: persistentLocalCache({
+                        tabManager: persistentMultipleTabManager()
+                    })
+                });
+            }
+        } else {
+            firestore = initializeFirestore(app, {
+                localCache: persistentLocalCache({
+                    tabManager: persistentMultipleTabManager()
+                })
+            });
         }
         
         setFirebaseServices({ app, auth, firestore });
