@@ -92,7 +92,11 @@ export default function ProcurementQuickSubmitPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
 
-    const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned', [selectedDepartmentId, departments]);
+    // FIX: Defined departmentName which was missing in previous build
+    const departmentName = useMemo(() => {
+        if (!departments || !selectedDepartmentId) return 'Unassigned';
+        return departments.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned';
+    }, [selectedDepartmentId, departments]);
 
     const departmentCategories = useMemo(() => {
         const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
@@ -138,7 +142,7 @@ export default function ProcurementQuickSubmitPage() {
         const settings = dept?.periodSettings || {};
         const allKnown = new Set(basePeriods);
         Object.keys(settings).forEach(p => allKnown.add(p));
-        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(a).getTime());
+        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
         setOpenPeriods(filtered);
     }, [selectedDepartmentId, departments, basePeriods]);
 
@@ -146,8 +150,22 @@ export default function ProcurementQuickSubmitPage() {
         if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) return;
         const currentKey = `${selectedDepartmentId}-${selectedPeriod}`;
         if (lastLoadedKey.current === currentKey) return;
+        
         const existing = periodRequests?.find(req => !['Archived'].includes(req.status));
-        const mapRec = (item: RecurringItem): ApprovalItem => ({ id: item.id, type: "Recurring", expenseType: item.expenseType || 'Operational', description: item.name, brand: item.name.split(" ")[0] || '', qty: 1, category: item.category, unitPrice: item.amount, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] });
+        const mapRec = (item: RecurringItem): ApprovalItem => ({ 
+            id: item.id, 
+            type: "Recurring", 
+            expenseType: item.expenseType || 'Operational', 
+            description: item.name, 
+            brand: item.name.split(" ")[0] || '', 
+            qty: 1, 
+            category: item.category, 
+            unitPrice: item.amount, 
+            fulfillmentStatus: 'Pending', 
+            receivedQty: 0, 
+            fulfillmentComments: [] 
+        });
+
         if (existing) {
             setEditingRequestId(existing.id);
             setSelectedCompanyId(existing.companyId || '');
@@ -181,15 +199,37 @@ export default function ProcurementQuickSubmitPage() {
         const actor = `${profile.displayName || user.email} (${role})`;
         const date = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
         let status: ApprovalRequest['status'] = isDraft ? 'Draft' : 'Pending Manager Approval';
-        const timeline: ApprovalRequest['timeline'] = [{ stage: 'Request Submission', actor, date, status: 'completed' as const }, { stage: 'Manager Review', actor: 'Manager', date: null, status: isDraft ? 'waiting' : 'pending' as const }];
-        const base: Partial<ApprovalRequest> = { department: department.name, departmentId: selectedDepartmentId, companyId: selectedCompanyId, period: selectedPeriod, total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), status, submittedBy: actor, submittedById: user.uid, timeline, items: draftItems, updatedAt: serverTimestamp() as any };
+        const timeline: ApprovalRequest['timeline'] = [
+            { stage: 'Request Submission', actor, date, status: 'completed' as const }, 
+            { stage: 'Manager Review', actor: 'Manager', date: null, status: isDraft ? 'waiting' : 'pending' as const }
+        ];
+        const base: Partial<ApprovalRequest> = { 
+            department: department.name, 
+            departmentId: selectedDepartmentId, 
+            companyId: selectedCompanyId, 
+            period: selectedPeriod, 
+            total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), 
+            status, 
+            submittedBy: actor, 
+            submittedById: user.uid, 
+            timeline, 
+            items: draftItems, 
+            updatedAt: serverTimestamp() as any 
+        };
         try {
-            if (editingRequestId) { await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), base); }
-            else { const ref = await addDoc(collection(firestore, 'procurementRequests'), { ...base, createdAt: serverTimestamp() as any }); setEditingRequestId(ref.id); }
+            if (editingRequestId) { 
+                await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), base); 
+            } else { 
+                const ref = await addDoc(collection(firestore, 'procurementRequests'), { ...base, createdAt: serverTimestamp() as any }); 
+                setEditingRequestId(ref.id); 
+            }
             setSaveStatus('saved');
             toast({ title: isDraft ? "Draft Saved" : "Submitted" });
             setTimeout(() => setSaveStatus('idle'), 3000);
-        } catch (e: any) { setSaveStatus('idle'); toast({ variant: 'destructive', title: 'Save Failed', description: e.message }); }
+        } catch (e: any) { 
+            setSaveStatus('idle'); 
+            toast({ variant: 'destructive', title: 'Save Failed', description: e.message }); 
+        }
     };
 
     if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) return <div className="flex h-screen items-center justify-center"><Loader className="animate-spin" /></div>;

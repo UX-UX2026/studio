@@ -8,7 +8,6 @@ import {
   persistentLocalCache, 
   persistentMultipleTabManager,
   getFirestore,
-  terminate
 } from 'firebase/firestore';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
@@ -76,15 +75,15 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       
       let db: Firestore;
       try {
-        // Attempt to initialize with specific settings
+        // Try to get existing Firestore instance first
+        db = getFirestore(firebaseApp);
+      } catch (e) {
+        // If not initialized, initialize it with persistent cache
         db = initializeFirestore(firebaseApp, {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager()
           })
         });
-      } catch (e: any) {
-        // If already initialized, get the existing instance
-        db = getFirestore(firebaseApp);
       }
       
       setApp(firebaseApp);
