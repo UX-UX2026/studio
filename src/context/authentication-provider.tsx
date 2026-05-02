@@ -74,11 +74,10 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       const firebaseAuth = getAuth(firebaseApp);
       
       let db: Firestore;
+      // Use a singleton pattern to avoid "already initialized with different options" error
       try {
-        // Safe check for already initialized firestore instance
         db = getFirestore(firebaseApp);
       } catch (e) {
-        // Initialize if it doesn't exist
         db = initializeFirestore(firebaseApp, {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager()

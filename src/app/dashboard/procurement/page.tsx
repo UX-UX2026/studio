@@ -90,7 +90,7 @@ export default function ProcurementQuickSubmitPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
 
-    // DEFINITIVE: departmentName scoped correctly for the component
+    // This definition is crucial for fixing the "Cannot find name departmentName" error
     const departmentName = useMemo(() => {
         if (!departments || !selectedDepartmentId) return 'Unassigned';
         return departments.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned';
@@ -225,7 +225,13 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
 
-    if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) return <div className="flex h-screen items-center justify-center"><Loader className="animate-spin" /></div>;
+    if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <Loader className="animate-spin" />
+            </div>
+        );
+    }
 
     const opProg = operationalSummary.totals.forecast > 0 ? (operationalSummary.totals.procurement / operationalSummary.totals.forecast) * 100 : 0;
     const capProg = capitalSummary.totals.forecast > 0 ? (capitalSummary.totals.procurement / capitalSummary.totals.forecast) * 100 : 0;
