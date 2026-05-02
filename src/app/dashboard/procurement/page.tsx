@@ -13,7 +13,6 @@ import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, A
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { cn } from "@/lib/utils";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { useToast } from "@/hooks/use-toast";
 import { logErrorToFirestore } from "@/lib/error-logger";
@@ -123,12 +122,6 @@ export default function ProcurementQuickSubmitPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
     
-    const appMetadataRef = useMemo(() => {
-        if (!firestore) return null;
-        return doc(firestore, 'app', 'metadata');
-    }, [firestore]);
-    const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
-
     const previousSubmissionsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
         return query(
