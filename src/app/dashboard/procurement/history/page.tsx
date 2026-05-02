@@ -42,7 +42,6 @@ type Department = {
     name: string;
 };
 
-
 export default function ProcurementHistoryPage() {
     const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
@@ -53,12 +52,7 @@ export default function ProcurementHistoryPage() {
 
     const historyQuery = useMemo(() => {
         if (!firestore || !profile) return null;
-        
-        let q = query(
-            collection(firestore, 'procurementRequests'), 
-            where('status', 'not-in', ['Draft'])
-        );
-
+        let q = query(collection(firestore, 'procurementRequests'), where('status', 'not-in', ['Draft']));
         if (role === 'Manager' || role === 'Requester') {
             if (!userDepartmentId) return null;
             q = query(q, where('departmentId', '==', userDepartmentId));
@@ -77,21 +71,14 @@ export default function ProcurementHistoryPage() {
         return [...requests].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
     }, [requests]);
 
-    const departmentsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'departments');
-    }, [firestore]);
+    const departmentsQuery = useMemo(() => firestore ? collection(firestore, 'departments') : null, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const filteredRequests = useMemo(() => {
         if (!sortedRequests) return [];
         let filtered = sortedRequests;
-        if (departmentFilter !== 'all') {
-            filtered = filtered.filter(req => req.departmentId === departmentFilter);
-        }
-        if (periodFilter !== 'all') {
-            filtered = filtered.filter(req => req.period === periodFilter);
-        }
+        if (departmentFilter !== 'all') filtered = filtered.filter(req => req.departmentId === departmentFilter);
+        if (periodFilter !== 'all') filtered = filtered.filter(req => req.period === periodFilter);
         return filtered;
     }, [sortedRequests, departmentFilter, periodFilter]);
 
@@ -102,97 +89,29 @@ export default function ProcurementHistoryPage() {
 
     const visibleDepartments = useMemo(() => {
         if (!departments) return [];
-        if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) {
-            return departments;
-        }
-        if (role === 'Executive') {
-            return departments.filter(d => reportingDepartments.includes(d.id));
-        }
-        if (role === 'Manager' || role === 'Requester') {
-            return departments.filter(d => d.id === userDepartmentId);
-        }
+        if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) return departments;
+        if (role === 'Executive') return departments.filter(d => reportingDepartments.includes(d.id));
+        if (role === 'Manager' || role === 'Requester') return departments.filter(d => d.id === userDepartmentId);
         return [];
     }, [departments, role, reportingDepartments, userDepartmentId]);
     
-    const loading = userLoading || requestsLoading || deptsLoading;
-    
-    if (loading) {
-        return (
-            <div className="flex h-[calc(100vh-4rem)] items-center justify-center">
-                <Loader className="h-8 w-8 animate-spin" />
-            </div>
-        );
-    }
+    if (userLoading || requestsLoading || deptsLoading) return <div className="flex h-screen items-center justify-center"><Loader className="animate-spin" /></div>;
     
     return (
         <Card>
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2"><History />All Submissions</CardTitle>
-                <CardDescription>
-                    Review all open and closed procurement requests.
-                </CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle className="flex items-center gap-2"><History />All Submissions</CardTitle><CardDescription>Review all open and closed procurement requests.</CardDescription></CardHeader>
             <CardContent>
                 <div className="flex items-center gap-4 p-4 mb-6 border rounded-lg bg-muted/50">
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="dept-filter">Department</Label>
-                        <Select value={departmentFilter} onValueChange={setDepartmentFilter}>
-                            <SelectTrigger id="dept-filter" className="w-[200px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Departments</SelectItem>
-                                {visibleDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="period-filter">Period</Label>
-                        <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                            <SelectTrigger id="period-filter" className="w-[200px]">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availablePeriods.map(p => <SelectItem key={p} value={p}>{p === 'all' ? 'All Periods' : p}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                    <div className="grid gap-1.5"><Label>Department</Label><Select value={departmentFilter} onValueChange={setDepartmentFilter}><SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">All Departments</SelectItem>{visibleDepartments.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
+                    <div className="grid gap-1.5"><Label>Period</Label><Select value={periodFilter} onValueChange={setPeriodFilter}><SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger><SelectContent>{availablePeriods.map(p => <SelectItem key={p} value={p}>{p === 'all' ? 'All Periods' : p}</SelectItem>)}</SelectContent></Select></div>
                 </div>
                 <div className="overflow-auto border rounded-lg">
                     <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Request ID</TableHead>
-                                <TableHead>Department</TableHead>
-                                <TableHead>Period</TableHead>
-                                <TableHead>Status</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
+                        <TableHeader><TableRow><TableHead>Request ID</TableHead><TableHead>Department</TableHead><TableHead>Period</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                         <TableBody>
                             {filteredRequests.length > 0 ? filteredRequests.map(req => (
-                                <TableRow key={req.id}>
-                                    <TableCell className="font-medium">{req.id}</TableCell>
-                                    <TableCell>{req.department}</TableCell>
-                                    <TableCell>{req.period}</TableCell>
-                                    <TableCell>
-                                        {getStatusBadge(req.status)}
-                                    </TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell>
-                                    <TableCell className="text-right">
-                                        <Button asChild variant="outline" size="sm">
-                                            <Link href={`/dashboard/approvals?id=${req.id}`}>View Details</Link>
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            )) : (
-                                <TableRow>
-                                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                                        No records found for the selected filters.
-                                    </TableCell>
-                                </TableRow>
-                            )}
+                                <TableRow key={req.id}><TableCell className="font-medium">{req.id}</TableCell><TableCell>{req.department}</TableCell><TableCell>{req.period}</TableCell><TableCell>{getStatusBadge(req.status)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell><TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={`/dashboard/approvals?id=${req.id}`}>View Details</Link></Button></TableCell></TableRow>
+                            )) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No records found.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
                 </div>

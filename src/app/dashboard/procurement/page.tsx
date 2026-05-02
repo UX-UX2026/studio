@@ -7,9 +7,9 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
-import { useFirestore, useCollection, useDoc } from "@/firebase";
+import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy, getDoc, arrayUnion } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, AppMetadata, ApprovalItem } from "@/types";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -38,7 +38,7 @@ const formatCurrency = (amount: number) => {
 };
 
 export default function ProcurementQuickSubmitPage() {
-    const { user, profile, role, department: userDepartment, departmentId: userDepartmentId, reportingDepartments, loading: userLoading } = useUser();
+    const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
@@ -47,14 +47,12 @@ export default function ProcurementQuickSubmitPage() {
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
     const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
-    
     const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
     const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
     const [isNotifying, setIsNotifying] = useState(false);
-
     const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
     const [editRequestReason, setEditRequestReason] = useState('');
     const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
@@ -67,22 +65,13 @@ export default function ProcurementQuickSubmitPage() {
 
     const lastLoadedKey = useRef<string>('');
 
-    const departmentsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'departments');
-    }, [firestore]);
+    const departmentsQuery = useMemo(() => firestore ? collection(firestore, 'departments') : null, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    const companiesQuery = useMemo(() => {
-        if (!firestore) return null;
-        return collection(firestore, 'companies');
-    }, [firestore]);
+    const companiesQuery = useMemo(() => firestore ? collection(firestore, 'companies') : null, [firestore]);
     const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
     
-    const allDraftsQuery = useMemo(() => {
-        if (!firestore) return null;
-        return query(collection(firestore, 'procurementRequests'), where('status', '==', 'Draft'));
-    }, [firestore]);
+    const allDraftsQuery = useMemo(() => firestore ? query(collection(firestore, 'procurementRequests'), where('status', '==', 'Draft')) : null, [firestore]);
     const { data: allDrafts } = useCollection<ApprovalRequest>(allDraftsQuery);
 
     const userDrafts = useMemo(() => {
@@ -102,11 +91,7 @@ export default function ProcurementQuickSubmitPage() {
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
-        return query(
-            collection(firestore, 'procurementRequests'),
-            where('departmentId', '==', selectedDepartmentId),
-            where('period', '==', selectedPeriod)
-        );
+        return query(collection(firestore, 'procurementRequests'), where('departmentId', '==', selectedDepartmentId), where('period', '==', selectedPeriod));
     }, [firestore, selectedDepartmentId, selectedPeriod]);
     const { data: periodRequests, loading: periodRequestsLoading } = useCollection<ApprovalRequest>(periodRequestsQuery);
 
@@ -124,12 +109,7 @@ export default function ProcurementQuickSubmitPage() {
     
     const previousSubmissionsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId) return null;
-        return query(
-            collection(firestore, 'procurementRequests'),
-            where('departmentId', '==', selectedDepartmentId),
-            where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']),
-            orderBy('updatedAt', 'desc')
-        );
+        return query(collection(firestore, 'procurementRequests'), where('departmentId', '==', selectedDepartmentId), where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']), orderBy('updatedAt', 'desc'));
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
 
@@ -140,10 +120,7 @@ export default function ProcurementQuickSubmitPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
     
-    const activeRequest = useMemo(() => {
-        if (!editingRequestId || !periodRequests) return null;
-        return periodRequests.find(req => req.id === editingRequestId);
-    }, [editingRequestId, periodRequests]);
+    const activeRequest = useMemo(() => editingRequestId && periodRequests ? periodRequests.find(req => req.id === editingRequestId) : null, [editingRequestId, periodRequests]);
 
     const canApproveOrReject = useMemo(() => {
         if (role !== 'Executive' && role !== 'Administrator') return false;
@@ -163,11 +140,9 @@ export default function ProcurementQuickSubmitPage() {
         if (deptsLoading || !departments) return;
         const deptId = searchParams.get('deptId');
         const period = searchParams.get('period');
-        if (deptId && period) {
-            if (departments.some(d => d.id === deptId)) {
-                setSelectedDepartmentId(deptId);
-                setSelectedPeriod(period);
-            }
+        if (deptId && period && departments.some(d => d.id === deptId)) {
+            setSelectedDepartmentId(deptId);
+            setSelectedPeriod(period);
         }
     }, [searchParams, departments, deptsLoading]);
 
@@ -184,404 +159,131 @@ export default function ProcurementQuickSubmitPage() {
         if (departmentsForUser.length > 0 && !selectedDepartmentId) setSelectedDepartmentId(departmentsForUser[0].id);
     }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
 
-    const baseGeneratedPeriods = useMemo(() => {
-        const periods = [];
+    const basePeriods = useMemo(() => {
+        const p = [];
         const now = new Date();
-        for (let i = 0; i < 18; i++) periods.push(format(addMonths(now, i), "MMMM yyyy"));
-        return periods;
+        for (let i = 0; i < 18; i++) p.push(format(addMonths(now, i), "MMMM yyyy"));
+        return p;
     }, []);
 
     useEffect(() => {
-        if (!selectedDepartmentId || !departments) {
-            setOpenPeriods([]);
-            return;
-        }
+        if (!selectedDepartmentId || !departments) { setOpenPeriods([]); return; }
         const dept = departments.find(d => d.id === selectedDepartmentId);
-        const periodSettings = dept?.periodSettings || {};
-        const allKnownPeriods = new Set(baseGeneratedPeriods);
-        Object.keys(periodSettings).forEach(p => allKnownPeriods.add(p));
-        const periods = Array.from(allKnownPeriods).filter(period => periodSettings[period]?.status === 'Open');
-        periods.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-        setOpenPeriods(periods);
-    }, [selectedDepartmentId, departments, baseGeneratedPeriods]);
+        const settings = dept?.periodSettings || {};
+        const allKnown = new Set(basePeriods);
+        Object.keys(settings).forEach(p => allKnown.add(p));
+        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        setOpenPeriods(filtered);
+    }, [selectedDepartmentId, departments, basePeriods]);
+
+    useEffect(() => { if (openPeriods.length > 0 && !selectedPeriod) setSelectedPeriod(openPeriods[0]); }, [openPeriods, selectedPeriod]);
 
     useEffect(() => {
-        if (openPeriods.length > 0 && !selectedPeriod) {
-            setSelectedPeriod(openPeriods[0]);
-        }
-    }, [openPeriods, selectedPeriod]);
-
-    useEffect(() => {
-        if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) {
-            if (!selectedPeriod) setDraftItems([]);
-            return;
-        }
-
+        if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) return;
         const currentKey = `${selectedDepartmentId}-${selectedPeriod}`;
         if (lastLoadedKey.current === currentKey) return;
-
-        const existingRequest = periodRequests?.find(req => !['Archived'].includes(req.status));
-        const mapRecurringToSubmissionItem = (item: RecurringItem): ApprovalItem => ({
-            id: item.id,
-            type: "Recurring",
-            expenseType: item.expenseType || 'Operational',
-            description: item.name,
-            brand: item.name.split(" ")[0] || '',
-            qty: 1,
-            category: item.category,
-            unitPrice: item.amount,
-            fulfillmentStatus: 'Pending',
-            receivedQty: 0,
-            fulfillmentComments: [],
-        });
-
-        if (existingRequest) {
-            const savedItems = existingRequest.items;
-            setEditingRequestId(existingRequest.id);
-            setSelectedCompanyId(existingRequest.companyId || '');
-            const savedItemDescriptions = new Set(savedItems.map(i => i.description));
-            const newRecurringItems = recurringItems?.filter(masterItem => masterItem.active && !savedItemDescriptions.has(masterItem.name)).map(mapRecurringToSubmissionItem) || [];
-            setDraftItems([...savedItems, ...newRecurringItems]);
+        const existing = periodRequests?.find(req => !['Archived'].includes(req.status));
+        const mapRec = (item: RecurringItem): ApprovalItem => ({ id: item.id, type: "Recurring", expenseType: item.expenseType || 'Operational', description: item.name, brand: item.name.split(" ")[0] || '', qty: 1, category: item.category, unitPrice: item.amount, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] });
+        if (existing) {
+            setEditingRequestId(existing.id);
+            setSelectedCompanyId(existing.companyId || '');
+            const existingDescs = new Set(existing.items.map(i => i.description));
+            const newRecs = recurringItems?.filter(i => i.active && !existingDescs.has(i.name)).map(mapRec) || [];
+            setDraftItems([...existing.items, ...newRecs]);
         } else {
             setEditingRequestId(null);
             setSelectedCompanyId('');
-            const initialItems = recurringItems?.filter(item => item.active).map(mapRecurringToSubmissionItem) || [];
-            setDraftItems(initialItems);
+            setDraftItems(recurringItems?.filter(i => i.active).map(mapRec) || []);
         }
         lastLoadedKey.current = currentKey;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, periodRequestsLoading, recurringItems, recurringLoading]);
 
-    const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || '', [selectedDepartmentId, departments]);
-    const isLockedByWorkflow = useMemo(() => {
-        if (!selectedDepartmentId || !selectedPeriod) return false;
-        const periodStatusInfo = periodRequests?.find(req => !['Archived'].includes(req.status));
-        if (!periodStatusInfo) return false;
-        const { status } = periodStatusInfo;
-        if (['Completed', 'Approved', 'In Fulfillment'].includes(status)) return true;
-        if (role === 'Requester' && status === 'Pending Manager Approval') return true;
+    const isLocked = useMemo(() => {
+        if (!selectedDepartmentId || !selectedPeriod) return true;
+        const existing = periodRequests?.find(req => !['Archived'].includes(req.status));
+        if (!existing) return false;
+        if (['Completed', 'Approved', 'In Fulfillment'].includes(existing.status)) return true;
+        if (role === 'Requester' && existing.status === 'Pending Manager Approval') return true;
         return false;
     }, [selectedDepartmentId, selectedPeriod, periodRequests, role]);
-    const isLocked = isLockedByWorkflow || !selectedPeriod;
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
-    const handleRequestEdit = async () => {
-        if (!user || !firestore || !editingRequestId) return;
-        if (!editRequestReason.trim()) {
-            toast({ variant: "destructive", title: "Reason Required" });
-            return;
-        }
-        try {
-            await addDoc(collection(firestore, 'auditLogs'), {
-                userId: user.uid,
-                userName: `${profile?.displayName || user.email} (${role || 'N/A'})`,
-                action: 'request.edit_request',
-                details: `User requested to edit locked submission with reason: "${editRequestReason}"`,
-                entity: { type: 'procurementRequest', id: editingRequestId },
-                timestamp: serverTimestamp()
-            });
-            toast({ title: "Edit Request Sent" });
-            setIsRequestEditDialogOpen(false);
-            setEditRequestReason('');
-        } catch (error: any) {
-            toast({ variant: 'destructive', title: 'Request Failed', description: error.message });
-        }
-    };
-
     const handleSaveRequest = async (isDraft: boolean) => {
-        if (!user || !profile || !departmentName || !selectedDepartmentId || !firestore) {
-            toast({ variant: "destructive", title: "Cannot save" });
-            return;
-        }
+        if (!user || !profile || !selectedDepartmentId || !firestore) return;
         const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
-        if (associatedCompanies.length > 0 && !selectedCompanyId && !isDraft) {
-            toast({ variant: "destructive", title: "Company Required" });
-            return;
-        }
+        if (associatedCompanies.length > 0 && !selectedCompanyId && !isDraft) { toast({ variant: "destructive", title: "Company Required" }); return; }
         setLastAction(isDraft ? 'draft' : 'submit');
         setSaveStatus('saving');
         const department = departments?.find(d => d.id === selectedDepartmentId);
         if (!department) { setSaveStatus('idle'); return; }
-        const isSubmitterTheDeptManager = user.uid === department.managerId;
-        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
-        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        
-        let newStatus: ApprovalRequest['status'];
-        const departmentWorkflow = department?.workflow;
-        let timeline: ApprovalRequest['timeline'] = departmentWorkflow && departmentWorkflow.length > 0
-            ? departmentWorkflow.map((stage) => ({ stage: stage.name, actor: String(stage.role) || 'System', date: null, status: 'waiting' as const }))
-            : [
-                { stage: "Request Submission", actor: "Requester", date: null, status: 'waiting' as const },
-                { stage: "Manager Review", actor: "Manager", date: null, status: 'waiting' as const },
-                { stage: "Executive Approval", actor: "Executive", date: null, status: 'waiting' as const },
-                { stage: "Procurement Processing", actor: "Procurement", date: null, status: 'waiting' as const },
-            ];
-        if (timeline.length > 0) timeline[0] = { ...timeline[0], actor: actorString, date: currentDate, status: 'completed' as const };
-
-        if (isDraft) {
-            newStatus = 'Draft';
-        } else {
-            newStatus = (role === 'Administrator' || isSubmitterTheDeptManager) ? 'Pending Executive' : 'Pending Manager Approval';
-            if (newStatus === 'Pending Manager Approval') {
-                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
-                if (managerReviewIndex > -1) timeline[managerReviewIndex].status = 'pending';
-            } else if (newStatus === 'Pending Executive') {
-                const managerReviewIndex = timeline.findIndex(s => s.stage === 'Manager Review');
-                if (managerReviewIndex > -1) timeline[managerReviewIndex] = { ...timeline[managerReviewIndex], status: 'completed' as const, actor: 'System (Skipped)', date: currentDate };
-                const execIndex = timeline.findIndex(s => s.stage === 'Executive Approval');
-                if (execIndex > -1) timeline[execIndex].status = 'pending';
-            }
+        const isManager = user.uid === department.managerId;
+        const actor = `${profile.displayName || user.email} (${role})`;
+        const date = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
+        let status: ApprovalRequest['status'] = isDraft ? 'Draft' : ((role === 'Administrator' || isManager) ? 'Pending Executive' : 'Pending Manager Approval');
+        const timeline: ApprovalRequest['timeline'] = (department.workflow || initialWorkflow).map(s => ({ stage: s.name, actor: String(s.role), date: null, status: 'waiting' as const }));
+        if (timeline.length > 0) timeline[0] = { ...timeline[0], actor, date, status: 'completed' as const };
+        if (!isDraft) {
+            const mIdx = timeline.findIndex(s => s.stage === 'Manager Review');
+            const eIdx = timeline.findIndex(s => s.stage === 'Executive Approval');
+            if (status === 'Pending Manager Approval' && mIdx > -1) timeline[mIdx].status = 'pending';
+            if (status === 'Pending Executive' && eIdx > -1) { if (mIdx > -1) timeline[mIdx] = { ...timeline[mIdx], status: 'completed', actor: 'System', date }; timeline[eIdx].status = 'pending'; }
         }
-        const submissionTotal = draftItems.reduce((acc, item) => acc + item.qty * item.unitPrice, 0);
-        const baseRequestData: Partial<ApprovalRequest> = {
-            department: departmentName, departmentId: selectedDepartmentId, companyId: selectedCompanyId,
-            companyName: selectedCompany?.name || '', period: selectedPeriod, total: submissionTotal,
-            status: newStatus, submittedBy: actorString, submittedById: user.uid, timeline: timeline,
-            items: draftItems, updatedAt: serverTimestamp() as any,
-        };
+        const base: Partial<ApprovalRequest> = { department: department.name, departmentId: selectedDepartmentId, companyId: selectedCompanyId, companyName: selectedCompany?.name || '', period: selectedPeriod, total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), status, submittedBy: actor, submittedById: user.uid, timeline, items: draftItems, updatedAt: serverTimestamp() as any };
         try {
-            if (editingRequestId) {
-                await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), baseRequestData);
-            } else {
-                const docRef = await addDoc(collection(firestore, 'procurementRequests'), { ...baseRequestData, createdAt: serverTimestamp() as any });
-                setEditingRequestId(docRef.id);
-            }
+            if (editingRequestId) { await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), base); }
+            else { const ref = await addDoc(collection(firestore, 'procurementRequests'), { ...base, createdAt: serverTimestamp() as any }); setEditingRequestId(ref.id); }
             setSaveStatus('saved');
-            toast({ title: isDraft ? "Draft Saved" : "Request Submitted" });
+            toast({ title: isDraft ? "Draft Saved" : "Submitted" });
             setTimeout(() => { setSaveStatus('idle'); setLastAction(null); }, 3000);
-        } catch (error: any) {
-            setSaveStatus('idle');
-            setLastAction(null);
-            toast({ variant: 'destructive', title: 'Save Failed', description: error.message });
-        }
+        } catch (e: any) { setSaveStatus('idle'); toast({ variant: 'destructive', title: 'Save Failed', description: e.message }); }
     };
 
-    const handleApprove = async () => {
-        if (!activeRequest || !editingRequestId || !user || !firestore || !profile) return;
-        setIsSaving(true);
-        let newStatus: ApprovalRequest['status'] = activeRequest.status;
-        let newTimeline = [...activeRequest.timeline];
-        const actorName = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
-        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        if (role === 'Executive' || role === 'Administrator') {
-            newStatus = 'Approved';
-            const managerReviewIndex = newTimeline.findIndex(s => s.stage === 'Manager Review');
-            const execApprovalIndex = newTimeline.findIndex(s => s.stage === 'Executive Approval');
-            if (managerReviewIndex > -1 && newTimeline[managerReviewIndex].status !== 'completed') newTimeline[managerReviewIndex] = { ...newTimeline[managerReviewIndex], status: 'completed', date: currentDate, actor: actorName };
-            if (execApprovalIndex > -1) newTimeline[execApprovalIndex] = { ...newTimeline[execApprovalIndex], status: 'completed', date: currentDate, actor: actorName };
-            const procIndex = newTimeline.findIndex(s => s.stage === 'Procurement Processing');
-            if (procIndex > -1) newTimeline[procIndex].status = 'pending';
-        }
-        try {
-            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: newStatus, timeline: newTimeline });
-            toast({ title: "Request Approved" });
-        } catch (error: any) {
-            toast({ variant: "destructive", title: "Approval Failed", description: error.message });
-        } finally { setIsSaving(false); }
-    };
+    const opProg = useMemo(() => { const { procurement, forecast } = operationalSummary.totals; return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100); }, [operationalSummary]);
+    const capProg = useMemo(() => { const { procurement, forecast } = capitalSummary.totals; return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100); }, [capitalSummary]);
 
-    const handleConfirmReject = async () => {
-        if (!activeRequest || !editingRequestId || !user || !firestore || !profile) return;
-        if (!rejectionReason.trim()) { toast({ variant: "destructive", title: "Rejection Reason Required" }); return; }
-        setIsSaving(true);
-        const currentDate = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        const actorString = `${profile?.displayName || user.email || 'User'} (${role || 'N/A'})`;
-        let newTimeline = [...activeRequest.timeline];
-        const currentStepIndex = newTimeline.findIndex(step => step.status === 'pending');
-        if (currentStepIndex !== -1) newTimeline[currentStepIndex] = { ...newTimeline[currentStepIndex], status: 'rejected', actor: actorString, date: currentDate };
-        const commentData = { actor: actorString, actorId: user.uid, text: `REJECTED: ${rejectionReason}`, timestamp: new Date().toLocaleString("en-GB") };
-        try {
-            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Rejected', timeline: newTimeline, comments: arrayUnion(commentData) });
-            toast({ title: "Request Rejected" });
-            setRejectionReason('');
-            setIsRejectDialogOpen(false);
-        } catch(error: any) { toast({ variant: "destructive", title: "Reject Failed" }); }
-        finally { setIsSaving(false); }
-    };
-
-    const handleArchiveCurrentDraft = async () => {
-        if (!editingRequestId || !user || !firestore || !profile) return;
-        if (!archiveReason.trim()) { toast({ variant: 'destructive', title: 'Reason Required' }); return; }
-        const actorString = `${profile?.displayName || user.email} (${role})`;
-        try {
-            await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() as any, comments: arrayUnion({ actor: actorString, actorId: user.uid, text: `ARCHIVED: ${archiveReason}`, timestamp: new Date().toLocaleString("en-GB") }) });
-            toast({ title: 'Draft Archived' });
-            setEditingRequestId(null);
-            setDraftItems([]);
-        } catch (error: any) { toast({ variant: 'destructive', title: 'Archive Failed' }); }
-        finally { setArchiveReason(''); setIsArchiveCurrentDialogOpen(false); }
-    };
-
-    const handleLoadPrevious = () => {
-        if (!previousSubmissionToLoad || !previousSubmissions || !user || !profile) return;
-        const submissionToLoad = previousSubmissions.find(s => s.id === previousSubmissionToLoad);
-        if (!submissionToLoad) return;
-        const newItems = submissionToLoad.items.map((item, index) => ({ ...item, id: Date.now() + index, type: 'One-Off' as const, expenseType: item.expenseType || 'Operational', addedById: user.uid, addedByName: `${profile?.displayName || user.email}`, fulfillmentStatus: 'Pending' as const, receivedQty: 0, fulfillmentComments: [] }));
-        setDraftItems(newItems);
-        setEditingRequestId(null);
-        toast({ title: 'Submission Loaded' });
-        setIsLoadConfirmDialogOpen(false);
-        setPreviousSubmissionToLoad(null);
-    };
-
-    const handleNotifyManager = async () => {
-        if (!user || !profile || !firestore || !selectedDepartmentId || !departments) return;
-        setIsNotifying(true);
-        try {
-            const department = departments.find(d => d.id === selectedDepartmentId);
-            if (!department || !department.managerId) throw new Error("No manager assigned.");
-            const managerDoc = await getDoc(doc(firestore, 'users', department.managerId));
-            if (!managerDoc.exists()) throw new Error("Manager not found.");
-            const manager = managerDoc.data() as any;
-            const link = `${window.location.origin}/dashboard/procurement?deptId=${selectedDepartmentId}&period=${encodeURIComponent(selectedPeriod)}`;
-            const emailHtml = submissionReadyForReviewTemplate({ department: department.name, period: selectedPeriod, requesterName: profile.displayName || user.email || '' }, link);
-            await fetch('/api/send-email', { method: 'POST', body: JSON.stringify({ to: manager.email, subject: `Review Ready: ${department.name}`, html: emailHtml }) });
-            toast({ title: 'Manager Notified' });
-        } catch (error: any) { toast({ variant: "destructive", title: "Notification Failed", description: error.message }); }
-        finally { setIsNotifying(false); }
-    };
-
-    const opProg = useMemo(() => {
-        const { procurement, forecast } = operationalSummary.totals;
-        return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100);
-    }, [operationalSummary]);
-
-    const capProg = useMemo(() => {
-        const { procurement, forecast } = capitalSummary.totals;
-        return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100);
-    }, [capitalSummary]);
-
-    if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) {
-        return <div className="flex h-[calc(100vh-4rem)] items-center justify-center"><Loader className="h-8 w-8 animate-spin" /></div>;
-    }
+    if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) return <div className="flex h-screen items-center justify-center"><Loader className="animate-spin" /></div>;
 
     return (
         <div className="space-y-6">
             <Card>
-                <CardHeader>
-                    <CardTitle>Procurement Quick Submit</CardTitle>
-                    <CardDescription>Consolidated view for managing procurement requests.</CardDescription>
-                </CardHeader>
+                <CardHeader><CardTitle>Procurement Quick Submit</CardTitle><CardDescription>Consolidated view for managing procurement requests.</CardDescription></CardHeader>
                 <CardContent>
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
-                        <div className="grid items-center gap-1.5">
-                            <Label htmlFor="department">Department</Label>
-                            <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
-                                <SelectTrigger id="department"><SelectValue placeholder="Select department" /></SelectTrigger>
-                                <SelectContent>{departmentsForUser.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid items-center gap-1.5">
-                           <Label htmlFor="company">Company</Label>
-                            <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}>
-                                <SelectTrigger id="company"><SelectValue placeholder={associatedCompanies.length === 0 ? "No companies linked" : "Select company..."} /></SelectTrigger>
-                                <SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid items-center gap-1.5">
-                            <Label htmlFor="period">Period</Label>
-                             <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}>
-                                <SelectTrigger id="period"><SelectValue placeholder="Select period..." /></SelectTrigger>
-                                <SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid items-center gap-1.5">
-                            <Label htmlFor="load-prev">Load Previous</Label>
-                             <Select onValueChange={val => { setPreviousSubmissionToLoad(val); setIsLoadConfirmDialogOpen(true); }} value={previousSubmissionToLoad || ""} disabled={isLocked}>
-                                <SelectTrigger id="load-prev"><SelectValue placeholder="Load past..." /></SelectTrigger>
-                                <SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent>
-                            </Select>
-                        </div>
+                        <div className="grid gap-1.5"><Label>Department</Label><Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{departmentsForUser.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="grid gap-1.5"><Label>Company</Label><Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="grid gap-1.5"><Label>Period</Label><Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
+                        <div className="grid gap-1.5"><Label>History</Label><Select onValueChange={v => { setPreviousSubmissionToLoad(v); setIsLoadConfirmDialogOpen(true); }} disabled={isLocked}><SelectTrigger><SelectValue placeholder="Load Past" /></SelectTrigger><SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent></Select></div>
                     </div>
                 </CardContent>
             </Card>
-            {userDrafts.length > 0 && (
-                <Card>
-                    <CardHeader><CardTitle>Other Drafts</CardTitle></CardHeader>
-                    <CardContent>
-                        <Table>
-                            <TableBody>
-                                {userDrafts.map(draft => (
-                                    <TableRow key={draft.id}>
-                                        <TableCell>{draft.department} - {draft.period}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
-                                        <TableCell className="text-right"><Button variant="outline" size="sm" onClick={() => { setSelectedDepartmentId(draft.departmentId); setSelectedPeriod(draft.period); }}>Resume</Button></TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </CardContent>
-                </Card>
-            )}
             <Card>
-                <Collapsible>
-                    <CollapsibleTrigger className="w-full p-5 flex flex-row items-center justify-between cursor-pointer rounded-t-lg hover:bg-muted/50">
-                        <div><CardTitle className="flex items-center gap-2 text-primary"><History className="h-6 w-6" />Monthly Recurring Master List</CardTitle></div>
-                        <ChevronDown className="h-5 w-5 transition-transform data-[state=open]:rotate-180" />
-                    </CollapsibleTrigger>
-                    <CollapsibleContent><CardContent className="border-t pt-5"><RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} /></CardContent></CollapsibleContent>
-                </Collapsible>
+                <Collapsible><CollapsibleTrigger className="w-full p-5 flex items-center justify-between rounded-t-lg hover:bg-muted/50"><div><CardTitle className="flex items-center gap-2"><History />Monthly Recurring List</CardTitle></div><ChevronDown /></CollapsibleTrigger><CollapsibleContent className="border-t p-5"><RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} /></CollapsibleContent></Collapsible>
             </Card>
             <Card>
-                <Tabs defaultValue="submission" className="w-full">
-                    <CardHeader>
-                        <div className="flex justify-between items-start">
-                            <div><CardTitle>Period Submission</CardTitle></div>
-                            <TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Budget Summary</TabsTrigger></TabsList>
-                        </div>
-                    </CardHeader>
+                <Tabs defaultValue="submission">
+                    <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Submission Items</CardTitle><TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Summary</TabsTrigger></TabsList></CardHeader>
                     <CardContent>
-                        <TabsContent value="submission">
-                            <SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} />
-                        </TabsContent>
-                        <TabsContent value="summary">
-                            <div className="space-y-4">
-                                <div className="p-4 border rounded-lg bg-muted/50">
-                                    <div className="flex justify-between items-center">
-                                        <div><h3 className="font-semibold text-lg">Operational Budget Impact</h3></div>
-                                        <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(operationalSummary.totals.procurement)}</p></div>
-                                    </div>
-                                    <Progress value={opProg} className="mt-4" />
-                                </div>
-                                <div className="p-4 border rounded-lg bg-muted/50">
-                                    <div className="flex justify-between items-center">
-                                        <div><h3 className="font-semibold text-lg">Capital Budget Impact</h3></div>
-                                        <div className="text-right"><p className="text-2xl font-bold">{formatCurrency(capitalSummary.totals.procurement)}</p></div>
-                                    </div>
-                                    <Progress value={capProg} className="mt-4" />
-                                </div>
-                            </div>
+                        <TabsContent value="submission"><SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} /></TabsContent>
+                        <TabsContent value="summary" className="space-y-4">
+                            <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Operational Impact</div><div className="font-bold">{formatCurrency(operationalSummary.totals.procurement)}</div></div><Progress value={opProg} className="mt-2" /></div>
+                            <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Capital Impact</div><div className="font-bold">{formatCurrency(capitalSummary.totals.procurement)}</div></div><Progress value={capProg} className="mt-2" /></div>
                         </TabsContent>
                     </CardContent>
                 </Tabs>
                 <CardFooter className="flex justify-between items-center border-t pt-6">
-                    <div className="flex-1">{isLocked && <div className="flex items-center gap-3 text-yellow-800"><Globe className="h-5 w-5"/><p className="text-sm font-medium">Submission is locked.</p></div>}</div>
+                    <div>{isLocked && <div className="text-yellow-800 text-sm font-medium">Submission is locked.</div>}</div>
                     <div className="flex gap-3">
-                        {canApproveOrReject ? (
-                            <>
-                                <Button variant="destructive" onClick={() => setIsRejectDialogOpen(true)} disabled={isSaving}><X className="mr-2 h-4 w-4" />Reject</Button>
-                                <Button onClick={handleApprove} disabled={isSaving}><Check className="mr-2 h-4 w-4" />Approve</Button>
-                            </>
-                        ) : isLockedByWorkflow ? (
-                            <Button onClick={() => setIsRequestEditDialogOpen(true)}>Request Edit</Button>
-                        ) : (
-                            <>
-                                <Button variant="destructive" onClick={() => setIsArchiveCurrentDialogOpen(true)} disabled={!editingRequestId || isLocked}><Trash2 className="h-4 w-4 mr-2" />Delete Draft</Button>
-                                <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>{saveStatus === 'saving' && lastAction === 'draft' ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : null}Save Draft</Button>
-                                {role === 'Requester' ? (
-                                    <Button onClick={handleNotifyManager} disabled={isLocked || isNotifying}><Bell className="mr-2 h-4 w-4" />Notify Manager</Button>
-                                ) : (
-                                    <Button onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>Submit For Approval</Button>
-                                )}
-                            </>
-                        )}
+                        <Button variant="destructive" onClick={() => setIsArchiveCurrentDialogOpen(true)} disabled={!editingRequestId || isLocked}><Trash2 className="mr-2 h-4 w-4" />Archive</Button>
+                        <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>{saveStatus === 'saving' && <Loader className="mr-2 h-4 w-4 animate-spin"/>}Save Draft</Button>
+                        <Button onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>Submit For Approval</Button>
                     </div>
                 </CardFooter>
             </Card>
-            <Dialog open={isRequestEditDialogOpen} onOpenChange={setIsRequestEditDialogOpen}><DialogContent><DialogHeader><DialogTitle>Request Edit</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={editRequestReason} onChange={e => setEditRequestReason(e.target.value)} /><DialogFooter><Button onClick={handleRequestEdit}>Send Request</Button></DialogFooter></DialogContent></Dialog>
-            <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}><DialogContent><DialogHeader><DialogTitle>Reject Request</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={rejectionReason} onChange={e => setRejectionReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={handleConfirmReject} disabled={isSaving}>Confirm Rejection</Button></DialogFooter></DialogContent></Dialog>
-            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}><DialogContent><DialogHeader><DialogTitle>Archive Draft</DialogTitle></DialogHeader><Textarea placeholder="Reason..." value={archiveReason} onChange={e => setArchiveReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={handleArchiveCurrentDraft}>Archive</Button></DialogFooter></DialogContent></Dialog>
-            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleLoadPrevious}>Load</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}><DialogContent><DialogHeader><DialogTitle>Archive Draft?</DialogTitle></DialogHeader><Textarea placeholder="Reason" value={archiveReason} onChange={e => setArchiveReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={async () => { if (!editingRequestId) return; await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() }); setEditingRequestId(null); setDraftItems([]); setIsArchiveCurrentDialogOpen(false); }}>Confirm Archive</Button></DialogFooter></DialogContent></Dialog>
+            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { const sub = previousSubmissions?.find(s => s.id === previousSubmissionToLoad); if (sub) setDraftItems(sub.items.map(i => ({ ...i, id: Date.now() + Math.random(), receivedQty: 0, fulfillmentStatus: 'Pending' }))); setIsLoadConfirmDialogOpen(false); }}>Load</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
         </div>
     );
 }
+
+const initialWorkflow = [{ name: 'Request Submission', role: 'Requester' }, { name: 'Manager Review', role: 'Manager' }, { name: 'Executive Approval', role: 'Executive' }, { name: 'Procurement Processing', role: 'Procurement Officer' }];

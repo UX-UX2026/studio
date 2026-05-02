@@ -80,9 +80,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
         const auth = getAuth(app);
         
         let firestore: Firestore;
-        // Check if firestore is already initialized to avoid "different options" error
         if (getApps().length > 0) {
             try {
+                // Safely get existing instance or fallback to initialization
                 firestore = getFirestore(app);
             } catch (e) {
                 firestore = initializeFirestore(app, {
