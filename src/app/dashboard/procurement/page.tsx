@@ -4,18 +4,16 @@ import { useUser } from "@/firebase/auth/use-user";
 import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
-import { Loader, AlertTriangle, Globe, Trash2, History, Check, ChevronDown, Bell, X } from "lucide-react";
+import { Loader, Trash2, History, ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy, getDoc, arrayUnion } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy } from "firebase/firestore";
 import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { useToast } from "@/hooks/use-toast";
-import { logErrorToFirestore } from "@/lib/error-logger";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
@@ -24,7 +22,6 @@ import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { RecurringClient } from "@/components/app/recurring-client";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { submissionReadyForReviewTemplate } from "@/lib/email-templates";
 import { procurementCategories } from "@/lib/procurement-categories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
@@ -50,18 +47,11 @@ export default function ProcurementQuickSubmitPage() {
     const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-    const [lastAction, setLastAction] = useState<'draft' | 'submit' | null>(null);
     const [openPeriods, setOpenPeriods] = useState<string[]>([]);
-    const [isNotifying, setIsNotifying] = useState(false);
-    const [isRequestEditDialogOpen, setIsRequestEditDialogOpen] = useState(false);
-    const [editRequestReason, setEditRequestReason] = useState('');
-    const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
-    const [rejectionReason, setRejectionReason] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
+    const [archiveReason, setArchiveReason] = useState('');
+    const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
     const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
-    const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
-    const [archiveReason, setArchiveReason] = useState('');
 
     const lastLoadedKey = useRef<string>('');
 
@@ -69,25 +59,7 @@ export default function ProcurementQuickSubmitPage() {
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const companiesQuery = useMemo(() => firestore ? collection(firestore, 'companies') : null, [firestore]);
-    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
-    
-    const allDraftsQuery = useMemo(() => firestore ? query(collection(firestore, 'procurementRequests'), where('status', '==', 'Draft')) : null, [firestore]);
-    const { data: allDrafts } = useCollection<ApprovalRequest>(allDraftsQuery);
-
-    const userDrafts = useMemo(() => {
-        if (!user || !allDrafts) return [];
-        let draftsForUser: ApprovalRequest[];
-        if (role === 'Manager' && userDepartment) {
-            draftsForUser = allDrafts.filter(draft => draft.department === userDepartment);
-        } else if (role === 'Administrator' || role === 'Executive' || role === 'Procurement Officer') {
-            draftsForUser = allDrafts;
-        } else {
-            draftsForUser = allDrafts.filter(draft => draft.submittedById === user.uid);
-        }
-        return draftsForUser
-            .filter(draft => draft.id !== editingRequestId)
-            .sort((a, b) => (b.updatedAt?.seconds ?? 0) - (a.updatedAt?.seconds ?? 0));
-    }, [user, allDrafts, editingRequestId, role, userDepartment]);
+    const { data: companies } = useCollection<Company>(companiesQuery);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
@@ -119,14 +91,8 @@ export default function ProcurementQuickSubmitPage() {
         if (!dept || !dept.companyIds) return [];
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
-    
-    const activeRequest = useMemo(() => editingRequestId && periodRequests ? periodRequests.find(req => req.id === editingRequestId) : null, [editingRequestId, periodRequests]);
 
-    const canApproveOrReject = useMemo(() => {
-        if (role !== 'Executive' && role !== 'Administrator') return false;
-        if (!activeRequest) return false;
-        return ['Pending Manager Approval', 'Pending Executive', 'Queries Raised'].includes(activeRequest.status);
-    }, [role, activeRequest]);
+    const departmentName = useMemo(() => departments?.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned', [selectedDepartmentId, departments]);
 
     const departmentCategories = useMemo(() => {
         const categoriesFromBudget = budgetItems?.map(item => item.category).filter(Boolean) || [];
@@ -172,11 +138,9 @@ export default function ProcurementQuickSubmitPage() {
         const settings = dept?.periodSettings || {};
         const allKnown = new Set(basePeriods);
         Object.keys(settings).forEach(p => allKnown.add(p));
-        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(a).getTime());
         setOpenPeriods(filtered);
     }, [selectedDepartmentId, departments, basePeriods]);
-
-    useEffect(() => { if (openPeriods.length > 0 && !selectedPeriod) setSelectedPeriod(openPeriods[0]); }, [openPeriods, selectedPeriod]);
 
     useEffect(() => {
         if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) return;
@@ -211,38 +175,27 @@ export default function ProcurementQuickSubmitPage() {
 
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !profile || !selectedDepartmentId || !firestore) return;
-        const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
-        if (associatedCompanies.length > 0 && !selectedCompanyId && !isDraft) { toast({ variant: "destructive", title: "Company Required" }); return; }
-        setLastAction(isDraft ? 'draft' : 'submit');
-        setSaveStatus('saving');
         const department = departments?.find(d => d.id === selectedDepartmentId);
-        if (!department) { setSaveStatus('idle'); return; }
-        const isManager = user.uid === department.managerId;
+        if (!department) return;
+        setSaveStatus('saving');
         const actor = `${profile.displayName || user.email} (${role})`;
         const date = new Date().toLocaleDateString("en-GB", { day: '2-digit', month: 'short', year: 'numeric' });
-        let status: ApprovalRequest['status'] = isDraft ? 'Draft' : ((role === 'Administrator' || isManager) ? 'Pending Executive' : 'Pending Manager Approval');
-        const timeline: ApprovalRequest['timeline'] = (department.workflow || initialWorkflow).map(s => ({ stage: s.name, actor: String(s.role), date: null, status: 'waiting' as const }));
-        if (timeline.length > 0) timeline[0] = { ...timeline[0], actor, date, status: 'completed' as const };
-        if (!isDraft) {
-            const mIdx = timeline.findIndex(s => s.stage === 'Manager Review');
-            const eIdx = timeline.findIndex(s => s.stage === 'Executive Approval');
-            if (status === 'Pending Manager Approval' && mIdx > -1) timeline[mIdx].status = 'pending';
-            if (status === 'Pending Executive' && eIdx > -1) { if (mIdx > -1) timeline[mIdx] = { ...timeline[mIdx], status: 'completed', actor: 'System', date }; timeline[eIdx].status = 'pending'; }
-        }
-        const base: Partial<ApprovalRequest> = { department: department.name, departmentId: selectedDepartmentId, companyId: selectedCompanyId, companyName: selectedCompany?.name || '', period: selectedPeriod, total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), status, submittedBy: actor, submittedById: user.uid, timeline, items: draftItems, updatedAt: serverTimestamp() as any };
+        let status: ApprovalRequest['status'] = isDraft ? 'Draft' : 'Pending Manager Approval';
+        const timeline: ApprovalRequest['timeline'] = [{ stage: 'Request Submission', actor, date, status: 'completed' as const }, { stage: 'Manager Review', actor: 'Manager', date: null, status: isDraft ? 'waiting' : 'pending' as const }];
+        const base: Partial<ApprovalRequest> = { department: department.name, departmentId: selectedDepartmentId, companyId: selectedCompanyId, period: selectedPeriod, total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), status, submittedBy: actor, submittedById: user.uid, timeline, items: draftItems, updatedAt: serverTimestamp() as any };
         try {
             if (editingRequestId) { await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), base); }
             else { const ref = await addDoc(collection(firestore, 'procurementRequests'), { ...base, createdAt: serverTimestamp() as any }); setEditingRequestId(ref.id); }
             setSaveStatus('saved');
             toast({ title: isDraft ? "Draft Saved" : "Submitted" });
-            setTimeout(() => { setSaveStatus('idle'); setLastAction(null); }, 3000);
+            setTimeout(() => setSaveStatus('idle'), 3000);
         } catch (e: any) { setSaveStatus('idle'); toast({ variant: 'destructive', title: 'Save Failed', description: e.message }); }
     };
 
-    const opProg = useMemo(() => { const { procurement, forecast } = operationalSummary.totals; return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100); }, [operationalSummary]);
-    const capProg = useMemo(() => { const { procurement, forecast } = capitalSummary.totals; return forecast <= 0 ? (procurement > 0 ? 100 : 0) : Math.min(Math.round((procurement / forecast) * 100), 100); }, [capitalSummary]);
-
     if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) return <div className="flex h-screen items-center justify-center"><Loader className="animate-spin" /></div>;
+
+    const opProg = operationalSummary.totals.forecast > 0 ? (operationalSummary.totals.procurement / operationalSummary.totals.forecast) * 100 : 0;
+    const capProg = capitalSummary.totals.forecast > 0 ? (capitalSummary.totals.procurement / capitalSummary.totals.forecast) * 100 : 0;
 
     return (
         <div className="space-y-6">
@@ -264,7 +217,21 @@ export default function ProcurementQuickSubmitPage() {
                 <Tabs defaultValue="submission">
                     <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Submission Items</CardTitle><TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Summary</TabsTrigger></TabsList></CardHeader>
                     <CardContent>
-                        <TabsContent value="submission"><SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} /></TabsContent>
+                        <TabsContent value="submission">
+                            <SubmissionClient 
+                                user={user!} 
+                                profile={profile} 
+                                userRole={role!} 
+                                items={draftItems} 
+                                setItems={setDraftItems} 
+                                isLocked={isLocked} 
+                                recurringItems={recurringItems} 
+                                recurringLoading={recurringLoading} 
+                                departmentId={selectedDepartmentId} 
+                                departmentName={departmentName} 
+                                budgetItems={budgetItems} 
+                            />
+                        </TabsContent>
                         <TabsContent value="summary" className="space-y-4">
                             <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Operational Impact</div><div className="font-bold">{formatCurrency(operationalSummary.totals.procurement)}</div></div><Progress value={opProg} className="mt-2" /></div>
                             <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Capital Impact</div><div className="font-bold">{formatCurrency(capitalSummary.totals.procurement)}</div></div><Progress value={capProg} className="mt-2" /></div>
@@ -285,5 +252,3 @@ export default function ProcurementQuickSubmitPage() {
         </div>
     );
 }
-
-const initialWorkflow = [{ name: 'Request Submission', role: 'Requester' }, { name: 'Manager Review', role: 'Manager' }, { name: 'Executive Approval', role: 'Executive' }, { name: 'Procurement Processing', role: 'Procurement Officer' }];

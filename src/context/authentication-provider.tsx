@@ -1,15 +1,15 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, onAuthStateChanged } from 'firebase/auth';
+import { User, onAuthStateChanged, getAuth, type Auth } from 'firebase/auth';
 import { 
   type Firestore, 
   initializeFirestore, 
   persistentLocalCache, 
   persistentMultipleTabManager,
-  getFirestore
+  getFirestore,
+  terminate
 } from 'firebase/firestore';
-import { type Auth, getAuth } from 'firebase/auth';
 import { type FirebaseApp, initializeApp, getApp, getApps } from 'firebase/app';
 import { usePathname, useRouter } from 'next/navigation';
 import { Loader, AlertTriangle } from 'lucide-react';
@@ -35,12 +35,6 @@ export interface UserProfile {
     companyIds?: string[];
 }
 
-interface FirebaseServices {
-  app: FirebaseApp;
-  auth: Auth;
-  firestore: Firestore;
-}
-
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
@@ -52,7 +46,9 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthenticationProvider({ children }: { children: ReactNode }) {
-  const [firebaseServices, setFirebaseServices] = useState<FirebaseServices | null>(null);
+  const [app, setApp] = useState<FirebaseApp | null>(null);
+  const [auth, setAuth] = useState<Auth | null>(null);
+  const [firestore, setFirestore] = useState<Firestore | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [initError, setInitError] = useState<string | null>(null);
@@ -61,70 +57,55 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const initialize = async () => {
-      try {
-        const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
-        if (!isConfigValid) {
-          setInitError("Firebase configuration is missing. Please update your environment variables.");
-          setIsLoading(false);
-          return;
-        }
-
-        let app: FirebaseApp;
-        if (!getApps().length) {
-          app = initializeApp(firebaseConfig);
-        } else {
-          app = getApp();
-        }
-
-        const auth = getAuth(app);
-        
-        let firestore: Firestore;
-        if (getApps().length > 0) {
-            try {
-                // Safely get existing instance or fallback to initialization
-                firestore = getFirestore(app);
-            } catch (e) {
-                firestore = initializeFirestore(app, {
-                    localCache: persistentLocalCache({
-                        tabManager: persistentMultipleTabManager()
-                    })
-                });
-            }
-        } else {
-            firestore = initializeFirestore(app, {
-                localCache: persistentLocalCache({
-                    tabManager: persistentMultipleTabManager()
-                })
-            });
-        }
-        
-        setFirebaseServices({ app, auth, firestore });
-      } catch (err) {
-        console.error("Firebase Initialization Error", err);
-        setInitError((err as Error).message || "An unknown error occurred during Firebase setup.");
+    try {
+      const isConfigValid = firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("YOUR_");
+      if (!isConfigValid) {
+        setInitError("Firebase configuration is missing. Please update your environment variables.");
         setIsLoading(false);
+        return;
       }
-    };
 
-    initialize();
+      let firebaseApp: FirebaseApp;
+      if (!getApps().length) {
+        firebaseApp = initializeApp(firebaseConfig);
+      } else {
+        firebaseApp = getApp();
+      }
+
+      const firebaseAuth = getAuth(firebaseApp);
+      
+      let db: Firestore;
+      try {
+        // Attempt to initialize with specific settings
+        db = initializeFirestore(firebaseApp, {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager()
+          })
+        });
+      } catch (e: any) {
+        // If already initialized, get the existing instance
+        db = getFirestore(firebaseApp);
+      }
+      
+      setApp(firebaseApp);
+      setAuth(firebaseAuth);
+      setFirestore(db);
+
+      const unsubscribe = onAuthStateChanged(firebaseAuth, (authUser) => {
+        setUser(authUser);
+        setIsLoading(false);
+      });
+
+      return () => unsubscribe();
+    } catch (err: any) {
+      console.error("Firebase Initialization Error", err);
+      setInitError(err.message || "An unknown error occurred during Firebase setup.");
+      setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    if (!firebaseServices) return;
-    
-    const { auth } = firebaseServices;
-
-    const unsubscribe = onAuthStateChanged(auth, (authUser) => {
-      setUser(authUser);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [firebaseServices]);
-
-  useEffect(() => {
-    if (isLoading) return; 
+    if (isLoading || initError) return; 
 
     const isAuthPage = pathname === '/login';
 
@@ -132,7 +113,7 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       if (isAuthPage || pathname === '/') {
         router.replace('/dashboard');
       }
-    } else if (!initError) { 
+    } else { 
       if (!isAuthPage) {
         router.replace('/login');
       }
@@ -163,9 +144,9 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider value={{
       user,
       isLoading,
-      app: firebaseServices?.app || null,
-      auth: firebaseServices?.auth || null,
-      firestore: firebaseServices?.firestore || null,
+      app,
+      auth,
+      firestore,
     }}>
       {children}
     </AuthContext.Provider>
