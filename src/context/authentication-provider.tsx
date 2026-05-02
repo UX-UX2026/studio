@@ -75,10 +75,10 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       
       let db: Firestore;
       try {
-        // Try to get existing Firestore instance first
+        // Safe check for already initialized firestore instance
         db = getFirestore(firebaseApp);
       } catch (e) {
-        // If not initialized, initialize it with persistent cache
+        // Initialize if it doesn't exist
         db = initializeFirestore(firebaseApp, {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager()

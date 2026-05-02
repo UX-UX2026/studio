@@ -1,7 +1,6 @@
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
-import type { UserProfile } from '@/context/authentication-provider';
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { Loader, Trash2, History, ChevronDown } from "lucide-react";
@@ -47,7 +46,6 @@ export default function ProcurementQuickSubmitPage() {
     const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-    const [openPeriods, setOpenPeriods] = useState<string[]>([]);
     const [archiveReason, setArchiveReason] = useState('');
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
@@ -92,7 +90,7 @@ export default function ProcurementQuickSubmitPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
 
-    // FIX: Defined departmentName which was missing in previous build
+    // DEFINITIVE: departmentName scoped correctly for the component
     const departmentName = useMemo(() => {
         if (!departments || !selectedDepartmentId) return 'Unassigned';
         return departments.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned';
@@ -129,22 +127,17 @@ export default function ProcurementQuickSubmitPage() {
         if (departmentsForUser.length > 0 && !selectedDepartmentId) setSelectedDepartmentId(departmentsForUser[0].id);
     }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
 
-    const basePeriods = useMemo(() => {
+    const openPeriods = useMemo(() => {
+        if (!selectedDepartmentId || !departments) return [];
+        const dept = departments.find(d => d.id === selectedDepartmentId);
+        const settings = dept?.periodSettings || {};
         const p = [];
         const now = new Date();
         for (let i = 0; i < 18; i++) p.push(format(addMonths(now, i), "MMMM yyyy"));
-        return p;
-    }, []);
-
-    useEffect(() => {
-        if (!selectedDepartmentId || !departments) { setOpenPeriods([]); return; }
-        const dept = departments.find(d => d.id === selectedDepartmentId);
-        const settings = dept?.periodSettings || {};
-        const allKnown = new Set(basePeriods);
-        Object.keys(settings).forEach(p => allKnown.add(p));
-        const filtered = Array.from(allKnown).filter(p => settings[p]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
-        setOpenPeriods(filtered);
-    }, [selectedDepartmentId, departments, basePeriods]);
+        const allKnown = new Set(p);
+        Object.keys(settings).forEach(pKey => allKnown.add(pKey));
+        return Array.from(allKnown).filter(pKey => settings[pKey]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+    }, [selectedDepartmentId, departments]);
 
     useEffect(() => {
         if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) return;
@@ -257,21 +250,7 @@ export default function ProcurementQuickSubmitPage() {
                 <Tabs defaultValue="submission">
                     <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Submission Items</CardTitle><TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Summary</TabsTrigger></TabsList></CardHeader>
                     <CardContent>
-                        <TabsContent value="submission">
-                            <SubmissionClient 
-                                user={user!} 
-                                profile={profile} 
-                                userRole={role!} 
-                                items={draftItems} 
-                                setItems={setDraftItems} 
-                                isLocked={isLocked} 
-                                recurringItems={recurringItems} 
-                                recurringLoading={recurringLoading} 
-                                departmentId={selectedDepartmentId} 
-                                departmentName={departmentName} 
-                                budgetItems={budgetItems} 
-                            />
-                        </TabsContent>
+                        <TabsContent value="submission"><SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} /></TabsContent>
                         <TabsContent value="summary" className="space-y-4">
                             <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Operational Impact</div><div className="font-bold">{formatCurrency(operationalSummary.totals.procurement)}</div></div><Progress value={opProg} className="mt-2" /></div>
                             <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Capital Impact</div><div className="font-bold">{formatCurrency(capitalSummary.totals.procurement)}</div></div><Progress value={capProg} className="mt-2" /></div>

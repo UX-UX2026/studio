@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, orderBy } from "firebase/firestore";
-import type { ApprovalRequest } from "@/types";
+import type { ApprovalRequest, Department } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -37,11 +37,6 @@ const getStatusBadge = (status: string) => {
     }
 }
 
-type Department = {
-    id: string;
-    name: string;
-};
-
 export default function ProcurementHistoryPage() {
     const { user, profile, loading: userLoading, role, departmentId: userDepartmentId, reportingDepartments } = useUser();
     const router = useRouter();
@@ -52,40 +47,37 @@ export default function ProcurementHistoryPage() {
 
     const historyQuery = useMemo(() => {
         if (!firestore || !profile) return null;
-        let q = query(collection(firestore, 'procurementRequests'), where('status', 'not-in', ['Draft']));
-        if (role === 'Manager' || role === 'Requester') {
-            if (!userDepartmentId) return null;
-            q = query(q, where('departmentId', '==', userDepartmentId));
-        } else if (role === 'Executive') {
+        return query(collection(firestore, 'procurementRequests'), where('status', 'not-in', ['Draft']));
+    }, [firestore, profile]);
+
+    const { data: allRequests, loading: requestsLoading } = useCollection<ApprovalRequest>(historyQuery);
+
+    const filteredByRole = useMemo(() => {
+        if (!allRequests || !role) return [];
+        if (role === 'Administrator' || role === 'Procurement Officer' || role === 'Procurement Assistant') return allRequests;
+        if (role === 'Executive') {
             if (reportingDepartments && reportingDepartments.length > 0) {
-                q = query(q, where('departmentId', 'in', reportingDepartments));
+                return allRequests.filter(req => reportingDepartments.includes(req.departmentId));
             }
+            return allRequests;
         }
-        return q;
-    }, [firestore, profile, role, userDepartmentId, reportingDepartments]);
-
-    const { data: requests, loading: requestsLoading } = useCollection<ApprovalRequest>(historyQuery);
-
-    const sortedRequests = useMemo(() => {
-        if (!requests) return [];
-        return [...requests].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
-    }, [requests]);
+        return allRequests.filter(req => req.departmentId === userDepartmentId);
+    }, [allRequests, role, userDepartmentId, reportingDepartments]);
 
     const departmentsQuery = useMemo(() => firestore ? collection(firestore, 'departments') : null, [firestore]);
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
-    const filteredRequests = useMemo(() => {
-        if (!sortedRequests) return [];
-        let filtered = sortedRequests;
+    const finalFiltered = useMemo(() => {
+        let filtered = filteredByRole;
         if (departmentFilter !== 'all') filtered = filtered.filter(req => req.departmentId === departmentFilter);
         if (periodFilter !== 'all') filtered = filtered.filter(req => req.period === periodFilter);
-        return filtered;
-    }, [sortedRequests, departmentFilter, periodFilter]);
+        return [...filtered].sort((a, b) => (b.updatedAt?.seconds || 0) - (a.updatedAt?.seconds || 0));
+    }, [filteredByRole, departmentFilter, periodFilter]);
 
     const availablePeriods = useMemo(() => {
-        if (!requests) return [];
-        return ['all', ...Array.from(new Set(requests.map(r => r.period)))];
-    }, [requests]);
+        if (!filteredByRole) return [];
+        return ['all', ...Array.from(new Set(filteredByRole.map(r => r.period)))];
+    }, [filteredByRole]);
 
     const visibleDepartments = useMemo(() => {
         if (!departments) return [];
@@ -109,8 +101,8 @@ export default function ProcurementHistoryPage() {
                     <Table>
                         <TableHeader><TableRow><TableHead>Request ID</TableHead><TableHead>Department</TableHead><TableHead>Period</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Total</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
                         <TableBody>
-                            {filteredRequests.length > 0 ? filteredRequests.map(req => (
-                                <TableRow key={req.id}><TableCell className="font-medium">{req.id}</TableCell><TableCell>{req.department}</TableCell><TableCell>{req.period}</TableCell><TableCell>{getStatusBadge(req.status)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell><TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={`/dashboard/approvals?id=${req.id}`}>View Details</Link></Button></TableCell></TableRow>
+                            {finalFiltered.length > 0 ? finalFiltered.map(req => (
+                                <TableRow key={req.id}><TableCell className="font-medium">{req.id.substring(0,8)}...</TableCell><TableCell>{req.department}</TableCell><TableCell>{req.period}</TableCell><TableCell>{getStatusBadge(req.status)}</TableCell><TableCell className="text-right font-mono">{formatCurrency(req.total)}</TableCell><TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={`/dashboard/approvals?id=${req.id}`}>View Details</Link></Button></TableCell></TableRow>
                             )) : <TableRow><TableCell colSpan={6} className="h-24 text-center text-muted-foreground">No records found.</TableCell></TableRow>}
                         </TableBody>
                     </Table>
