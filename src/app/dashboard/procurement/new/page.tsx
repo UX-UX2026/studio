@@ -2,13 +2,14 @@
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Loader, Trash2, History, ChevronDown, Check, Save, FilePlus, Info, AlertCircle } from "lucide-react";
+import { useEffect, useMemo, useState, useRef, Fragment } from "react";
+import { Loader, History, Check, Save, FilePlus, Info, AlertCircle, ChevronRight, AlertTriangle } from "lucide-react";
 import { useFirestore, useCollection } from "@/firebase";
-import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy } from "firebase/firestore";
+import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { SubmissionClient } from "@/components/app/submission-client";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +43,10 @@ export default function EnhancedProcurementPage() {
     const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+    // Summary drill-down state
+    const [openCategory, setOpenCategory] = useState<string | null>(null);
+    const [openCapitalCategory, setOpenCapitalCategory] = useState<string | null>(null);
 
     const lastLoadedKey = useRef<string>('');
 
@@ -273,36 +278,193 @@ export default function EnhancedProcurementPage() {
                     </Card>
 
                     <Card className="shadow-sm">
-                        <CardHeader className="border-b bg-muted/30">
-                            <div className="flex justify-between items-center">
-                                <div>
-                                    <CardTitle className="text-lg flex items-center gap-2">
-                                        <FilePlus className="h-5 w-5 text-primary" /> 2. Line Items
-                                    </CardTitle>
-                                    <CardDescription>Add, edit or import items for this submission.</CardDescription>
+                        <Tabs defaultValue="submission" className="w-full">
+                            <CardHeader className="border-b bg-muted/30 pb-0">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div>
+                                        <CardTitle className="text-lg flex items-center gap-2">
+                                            <FilePlus className="h-5 w-5 text-primary" /> 2. Items & Budget Impact
+                                        </CardTitle>
+                                        <CardDescription>Review items and their specific impact on each budget line.</CardDescription>
+                                    </div>
+                                    <TabsList>
+                                        <TabsTrigger value="submission">Line Items</TabsTrigger>
+                                        <TabsTrigger value="summary">Budget Impact</TabsTrigger>
+                                    </TabsList>
                                 </div>
-                                {isLocked && <Badge variant="outline" className="bg-yellow-50 text-yellow-800 border-yellow-200 gap-1"><Loader className="h-3 w-3 animate-spin"/> Locked</Badge>}
-                            </div>
-                        </CardHeader>
-                        <CardContent className="p-0">
-                            <div className="p-6">
-                                <SubmissionClient 
-                                    user={user!} 
-                                    profile={profile} 
-                                    userRole={role!} 
-                                    items={draftItems} 
-                                    setItems={setDraftItems} 
-                                    isLocked={isLocked} 
-                                    recurringItems={recurringItems} 
-                                    recurringLoading={recurringLoading} 
-                                    departmentId={selectedDepartmentId} 
-                                    departmentName={departmentName} 
-                                    budgetItems={budgetItems} 
-                                />
-                            </div>
-                        </CardContent>
+                            </CardHeader>
+                            <CardContent className="p-0">
+                                <TabsContent value="submission" className="m-0 p-6">
+                                    <SubmissionClient 
+                                        user={user!} 
+                                        profile={profile} 
+                                        userRole={role!} 
+                                        items={draftItems} 
+                                        setItems={setDraftItems} 
+                                        isLocked={isLocked} 
+                                        recurringItems={recurringItems} 
+                                        recurringLoading={recurringLoading} 
+                                        departmentId={selectedDepartmentId} 
+                                        departmentName={departmentName} 
+                                        budgetItems={budgetItems} 
+                                    />
+                                </TabsContent>
+                                <TabsContent value="summary" className="m-0 p-6 space-y-8">
+                                    <div className="space-y-4">
+                                        <h3 className="text-lg font-bold flex items-center gap-2">
+                                            Operational Budget Breakdown
+                                            {operationalSummary.totals.variance > 0 && <AlertTriangle className="h-4 w-4 text-red-500" />}
+                                        </h3>
+                                        <div className="overflow-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted hover:bg-muted">
+                                                        <TableHead className="font-bold">Category</TableHead>
+                                                        <TableHead className="text-right font-bold">Request</TableHead>
+                                                        <TableHead className="text-right font-bold">Forecast</TableHead>
+                                                        <TableHead className="text-right font-bold">Variance</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {operationalSummary.lines.map((line) => (
+                                                        <Fragment key={line.category}>
+                                                            <TableRow 
+                                                                className={cn("cursor-pointer", line.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                                                onClick={() => setOpenCategory(openCategory === line.category ? null : line.category)}
+                                                            >
+                                                                <TableCell className="font-medium flex items-center gap-2">
+                                                                    <ChevronRight className={cn("h-4 w-4 transition-transform", openCategory === line.category && "rotate-90")} />
+                                                                    {line.category}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-mono">{formatCurrency(line.procurementTotal)}</TableCell>
+                                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(line.forecastTotal)}</TableCell>
+                                                                <TableCell className={cn("text-right font-mono font-bold", line.isOverBudget ? "text-red-600" : "text-green-600")}>
+                                                                    {formatCurrency(line.variance)}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                            {openCategory === line.category && (
+                                                                <TableRow className="bg-muted/30">
+                                                                    <TableCell colSpan={4} className="p-4">
+                                                                        <div className="rounded-md border bg-background overflow-hidden">
+                                                                            <Table>
+                                                                                <TableHeader>
+                                                                                    <TableRow className="text-[10px] uppercase tracking-wider bg-muted/20">
+                                                                                        <TableHead>Item Description</TableHead>
+                                                                                        <TableHead className="text-center">Qty</TableHead>
+                                                                                        <TableHead className="text-right">Price</TableHead>
+                                                                                        <TableHead className="text-right">Total</TableHead>
+                                                                                    </TableRow>
+                                                                                </TableHeader>
+                                                                                <TableBody>
+                                                                                    {line.items.map(subItem => (
+                                                                                        <TableRow key={subItem.id} className="text-xs">
+                                                                                            <TableCell>{subItem.description}</TableCell>
+                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                            <TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )}
+                                                        </Fragment>
+                                                    ))}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow className="bg-muted/50 font-bold">
+                                                        <TableCell>Operational Subtotal</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(operationalSummary.totals.procurement)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(operationalSummary.totals.forecast)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(operationalSummary.totals.variance)}</TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-4 pt-4 border-t">
+                                        <h3 className="text-lg font-bold">Capital Budget Breakdown</h3>
+                                        <div className="overflow-auto rounded-lg border">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-muted hover:bg-muted">
+                                                        <TableHead className="font-bold">Category</TableHead>
+                                                        <TableHead className="text-right font-bold">Request</TableHead>
+                                                        <TableHead className="text-right font-bold">Forecast</TableHead>
+                                                        <TableHead className="text-right font-bold">Variance</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {capitalSummary.lines.length > 0 ? capitalSummary.lines.map((line) => (
+                                                        <Fragment key={line.category}>
+                                                            <TableRow 
+                                                                className={cn("cursor-pointer", line.isOverBudget && "bg-red-50 dark:bg-red-900/20")}
+                                                                onClick={() => setOpenCapitalCategory(openCapitalCategory === line.category ? null : line.category)}
+                                                            >
+                                                                <TableCell className="font-medium flex items-center gap-2">
+                                                                    <ChevronRight className={cn("h-4 w-4 transition-transform", openCapitalCategory === line.category && "rotate-90")} />
+                                                                    {line.category}
+                                                                </TableCell>
+                                                                <TableCell className="text-right font-mono">{formatCurrency(line.procurementTotal)}</TableCell>
+                                                                <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(line.forecastTotal)}</TableCell>
+                                                                <TableCell className={cn("text-right font-mono font-bold", line.isOverBudget ? "text-red-600" : "text-green-600")}>
+                                                                    {formatCurrency(line.variance)}
+                                                                </TableCell>
+                                                            </TableRow>
+                                                            {openCapitalCategory === line.category && (
+                                                                <TableRow className="bg-muted/30">
+                                                                    <TableCell colSpan={4} className="p-4">
+                                                                        <div className="rounded-md border bg-background overflow-hidden">
+                                                                            <Table>
+                                                                                <TableHeader>
+                                                                                    <TableRow className="text-[10px] uppercase tracking-wider bg-muted/20">
+                                                                                        <TableHead>Item Description</TableHead>
+                                                                                        <TableHead className="text-center">Qty</TableHead>
+                                                                                        <TableHead className="text-right">Price</TableHead>
+                                                                                        <TableHead className="text-right">Total</TableHead>
+                                                                                    </TableRow>
+                                                                                </TableHeader>
+                                                                                <TableBody>
+                                                                                    {line.items.map(subItem => (
+                                                                                        <TableRow key={subItem.id} className="text-xs">
+                                                                                            <TableCell>{subItem.description}</TableCell>
+                                                                                            <TableCell className="text-center">{subItem.qty}</TableCell>
+                                                                                            <TableCell className="text-right">{formatCurrency(subItem.unitPrice)}</TableCell>
+                                                                                            <TableCell className="text-right font-bold">{formatCurrency(subItem.unitPrice * subItem.qty)}</TableCell>
+                                                                                        </TableRow>
+                                                                                    ))}
+                                                                                </TableBody>
+                                                                            </Table>
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            )}
+                                                        </Fragment>
+                                                    )) : (
+                                                        <TableRow>
+                                                            <TableCell colSpan={4} className="h-24 text-center text-muted-foreground italic">No capital items in this submission.</TableCell>
+                                                        </TableRow>
+                                                    )}
+                                                </TableBody>
+                                                <TableFooter>
+                                                    <TableRow className="bg-muted/50 font-bold">
+                                                        <TableCell>Capital Subtotal</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(capitalSummary.totals.procurement)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(capitalSummary.totals.forecast)}</TableCell>
+                                                        <TableCell className="text-right">{formatCurrency(capitalSummary.totals.variance)}</TableCell>
+                                                    </TableRow>
+                                                </TableFooter>
+                                            </Table>
+                                        </div>
+                                    </div>
+                                </TabsContent>
+                            </CardContent>
+                        </Tabs>
                         <CardFooter className="bg-muted/30 border-t py-4 justify-between">
-                            <p className="text-sm text-muted-foreground italic">Tip: Use the "Add Recurring" button below the tables to load monthly items.</p>
+                            <p className="text-sm text-muted-foreground italic">Tip: Use the "Budget Impact" tab to see category-specific drill-downs.</p>
                             <Button variant="ghost" size="sm" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked} className="gap-2">
                                 {saveStatus === 'saving' ? <Loader className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4" />}
                                 Save Progress
