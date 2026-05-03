@@ -136,6 +136,13 @@ export type SecuritySettings = {
     inactivityTimeoutMinutes?: number;
 };
 
+export type BudgetRules = {
+    overSpendAllowedPercentage?: number;
+    overSpendAllowedAmount?: number;
+    underSpendAlertPercentage?: number;
+    underSpendAlertAmount?: number;
+};
+
 export type OdooConfig = {
     url?: string;
     db?: string;
@@ -173,6 +180,7 @@ export type AppMetadata = {
         lastSent?: { seconds: number, nanoseconds: number };
     };
     securitySettings?: SecuritySettings;
+    budgetRules?: BudgetRules;
     odooConfig?: OdooConfig;
     quickbooksConfig?: QuickBooksConfig;
     xeroConfig?: XeroConfig;

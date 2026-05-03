@@ -1,13 +1,14 @@
+
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState, useRef } from "react";
-import { Loader, Trash2, History, ChevronDown } from "lucide-react";
+import { useEffect, useMemo, useState, useRef, Fragment } from "react";
+import { Loader, Trash2, History, ChevronDown, Upload, Download, FileSpreadsheet, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useFirestore, useCollection } from "@/firebase";
+import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy } from "firebase/firestore";
-import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem } from "@/types";
+import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem, AppMetadata } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { procurementCategories } from "@/lib/procurement-categories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -40,6 +42,7 @@ export default function ProcurementQuickSubmitPage() {
     const firestore = useFirestore();
     const { toast } = useToast();
     const searchParams = useSearchParams();
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -83,6 +86,9 @@ export default function ProcurementQuickSubmitPage() {
         return query(collection(firestore, 'procurementRequests'), where('departmentId', '==', selectedDepartmentId), where('status', 'in', ['Completed', 'Approved', 'In Fulfillment']), orderBy('updatedAt', 'desc'));
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
+
+    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
 
     const associatedCompanies = useMemo(() => {
         if (!selectedDepartmentId || !departments || !companies) return [];
@@ -136,7 +142,7 @@ export default function ProcurementQuickSubmitPage() {
         for (let i = 0; i < 18; i++) p.push(format(addMonths(now, i), "MMMM yyyy"));
         const allKnown = new Set(p);
         Object.keys(settings).forEach(pKey => allKnown.add(pKey));
-        return Array.from(allKnown).filter(pKey => settings[pKey]?.status === 'Open').sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+        return Array.from(allKnown).filter(pKey => settings[pKey]?.status === 'Open' || !settings[pKey]).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
     }, [selectedDepartmentId, departments]);
 
     useEffect(() => {
@@ -184,6 +190,29 @@ export default function ProcurementQuickSubmitPage() {
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
+    // Rule detection logic
+    const categoryIssues = useMemo(() => {
+        if (!appMetadata?.budgetRules) return [];
+        const { overSpendAllowedPercentage, overSpendAllowedAmount, underSpendAlertPercentage, underSpendAlertAmount } = appMetadata.budgetRules;
+        const allLines = [...operationalSummary.lines, ...capitalSummary.lines];
+
+        return allLines.map(line => {
+            const overagePct = line.forecastTotal > 0 ? (line.procurementTotal - line.forecastTotal) / line.forecastTotal * 100 : 0;
+            const overageAmt = line.procurementTotal - line.forecastTotal;
+
+            const underagePct = line.forecastTotal > 0 ? (line.forecastTotal - line.procurementTotal) / line.forecastTotal * 100 : 0;
+            const underageAmt = line.forecastTotal - line.procurementTotal;
+
+            if (overageAmt > 0 && (overagePct > overSpendAllowedPercentage! || overageAmt > overSpendAllowedAmount!)) {
+                return { category: line.category, type: 'critical', message: `Budget Exceeded: ${line.category} is over by ${formatCurrency(overageAmt)} (${overagePct.toFixed(1)}%)` };
+            }
+            if (underageAmt > 0 && (underagePct > underSpendAlertPercentage! || underageAmt > underSpendAlertAmount!)) {
+                return { category: line.category, type: 'warning', message: `Under Budget Alert: ${line.category} is under by ${formatCurrency(underageAmt)} (${underagePct.toFixed(1)}%)` };
+            }
+            return null;
+        }).filter(Boolean);
+    }, [operationalSummary, capitalSummary, appMetadata]);
+
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !profile || !selectedDepartmentId || !firestore) return;
         const department = departments?.find(d => d.id === selectedDepartmentId);
@@ -200,6 +229,7 @@ export default function ProcurementQuickSubmitPage() {
             department: department.name, 
             departmentId: selectedDepartmentId, 
             companyId: selectedCompanyId, 
+            companyName: companies?.find(c => c.id === selectedCompanyId)?.name || '',
             period: selectedPeriod, 
             total: draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0), 
             status, 
@@ -225,6 +255,66 @@ export default function ProcurementQuickSubmitPage() {
         }
     };
 
+    const downloadTemplate = () => {
+        const headers = ["type", "expenseType", "description", "brand", "qty", "category", "unitPrice", "comments"];
+        const sampleData = [
+            ["One-Off", "Operational", "Sample Laptop", "Dell", "1", "IT Hardware", "15000", "Replacement for staff"],
+            ["One-Off", "Capital", "Office AC Unit", "Samsung", "2", "Hardware Purchase", "8500", "New wing install"]
+        ];
+        
+        const csvContent = [headers.join(","), ...sampleData.map(row => row.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        link.setAttribute("href", url);
+        link.setAttribute("download", "procurement_template.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+                if (jsonData.length === 0) throw new Error("File is empty.");
+
+                const importedItems: ApprovalItem[] = jsonData.map((row, index) => ({
+                    id: Date.now() + index,
+                    type: (row.type as any) || "One-Off",
+                    expenseType: (row.expenseType as any) || "Operational",
+                    description: String(row.description || ""),
+                    brand: String(row.brand || ""),
+                    qty: parseInt(row.qty) || 1,
+                    category: String(row.category || "Uncategorized"),
+                    unitPrice: parseFloat(row.unitPrice) || 0,
+                    fulfillmentStatus: 'Pending',
+                    receivedQty: 0,
+                    fulfillmentComments: [],
+                    comments: String(row.comments || ""),
+                    addedById: user!.uid,
+                    addedByName: profile?.displayName || user!.email || "Imported User"
+                }));
+
+                setDraftItems(prev => [...prev, ...importedItems]);
+                toast({ title: "Import Successful", description: `Added ${importedItems.length} items to your draft.` });
+            } catch (err: any) {
+                toast({ variant: 'destructive', title: 'Import Failed', description: err.message });
+            } finally {
+                if (event.target) event.target.value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
     if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
@@ -238,8 +328,23 @@ export default function ProcurementQuickSubmitPage() {
 
     return (
         <div className="space-y-6">
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleImportFile} />
+            
             <Card>
-                <CardHeader><CardTitle>Procurement Quick Submit</CardTitle><CardDescription>Consolidated view for managing procurement requests.</CardDescription></CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <div>
+                        <CardTitle>Procurement Quick Submit</CardTitle>
+                        <CardDescription>Manage your department's requests with powerful import tools.</CardDescription>
+                    </div>
+                    <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
+                            <Download className="h-4 w-4" /> Template
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-2">
+                            <Upload className="h-4 w-4" /> Import Sheet
+                        </Button>
+                    </div>
+                </CardHeader>
                 <CardContent>
                     <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
                         <div className="grid gap-1.5"><Label>Department</Label><Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{departmentsForUser.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
@@ -249,9 +354,24 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {categoryIssues.length > 0 && (
+                <div className="space-y-2">
+                    {categoryIssues.map((issue, idx) => (
+                        <div key={idx} className={cn("p-4 rounded-lg flex items-center gap-3 border", 
+                            issue?.type === 'critical' ? "bg-red-50 border-red-200 text-red-800" : "bg-amber-50 border-amber-200 text-amber-800"
+                        )}>
+                            {issue?.type === 'critical' ? <AlertCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
+                            <span className="text-sm font-semibold">{issue?.message}</span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <Card>
                 <Collapsible><CollapsibleTrigger className="w-full p-5 flex items-center justify-between rounded-t-lg hover:bg-muted/50"><div><CardTitle className="flex items-center gap-2"><History />Monthly Recurring List</CardTitle></div><ChevronDown /></CollapsibleTrigger><CollapsibleContent className="border-t p-5"><RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} /></CollapsibleContent></Collapsible>
             </Card>
+
             <Card>
                 <Tabs defaultValue="submission">
                     <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Submission Items</CardTitle><TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Summary</TabsTrigger></TabsList></CardHeader>
@@ -272,6 +392,7 @@ export default function ProcurementQuickSubmitPage() {
                     </div>
                 </CardFooter>
             </Card>
+            
             <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}><DialogContent><DialogHeader><DialogTitle>Archive Draft?</DialogTitle></DialogHeader><Textarea placeholder="Reason" value={archiveReason} onChange={e => setArchiveReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={async () => { if (!editingRequestId) return; await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() }); setEditingRequestId(null); setDraftItems([]); setIsArchiveCurrentDialogOpen(false); }}>Confirm Archive</Button></DialogFooter></DialogContent></Dialog>
             <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { const sub = previousSubmissions?.find(s => s.id === previousSubmissionToLoad); if (sub) setDraftItems(sub.items.map(i => ({ ...i, id: Date.now() + Math.random(), receivedQty: 0, fulfillmentStatus: 'Pending' }))); setIsLoadConfirmDialogOpen(false); }}>Load</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
         </div>
