@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useFirestore, useDoc } from "@/firebase";
 import { doc, setDoc, serverTimestamp, addDoc, collection } from "firebase/firestore";
@@ -27,8 +28,10 @@ export default function ProcurementRulesPage() {
 
     const [limitSubmissions, setLimitSubmissions] = useState(false);
     const [budgetRules, setBudgetRules] = useState<BudgetRules>({
+        overSpendType: 'percentage',
         overSpendAllowedPercentage: 0,
         overSpendAllowedAmount: 0,
+        underSpendType: 'percentage',
         underSpendAlertPercentage: 0,
         underSpendAlertAmount: 0
     });
@@ -50,8 +53,12 @@ export default function ProcurementRulesPage() {
         }
     }, [user, role, userLoading, router]);
 
-    const handleRuleChange = (field: keyof BudgetRules, value: string) => {
+    const handleRuleValueChange = (field: keyof BudgetRules, value: string) => {
         setBudgetRules(prev => ({ ...prev, [field]: parseFloat(value) || 0 }));
+    };
+
+    const handleTypeChange = (field: 'overSpendType' | 'underSpendType', value: 'percentage' | 'amount') => {
+        setBudgetRules(prev => ({ ...prev, [field]: value }));
     };
 
     const handleSaveChanges = async () => {
@@ -147,61 +154,93 @@ export default function ProcurementRulesPage() {
                 </CardHeader>
                 <CardContent className="space-y-8">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                            <h3 className="font-semibold flex items-center gap-2 text-red-600">
+                        <div className="space-y-6">
+                            <h3 className="font-semibold flex items-center gap-2 text-red-600 border-b pb-2">
                                 <AlertTriangle className="h-4 w-4" />
-                                Over-spend Thresholds
+                                Over-spend Rules
                             </h3>
-                            <div className="grid gap-4">
+                            <div className="grid gap-6">
                                 <div className="space-y-2">
-                                    <Label>Allowed Percentage (%)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={budgetRules.overSpendAllowedPercentage} 
-                                        onChange={(e) => handleRuleChange('overSpendAllowedPercentage', e.target.value)}
-                                        placeholder="e.g. 5"
-                                    />
-                                    <p className="text-xs text-muted-foreground text-red-400">Flag as issue if spend > budget + X%</p>
+                                    <Label>Threshold Type</Label>
+                                    <Select value={budgetRules.overSpendType} onValueChange={(v) => handleTypeChange('overSpendType', v as any)}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percentage">Percentage Based (%)</SelectItem>
+                                            <SelectItem value="amount">Value Based (ZAR)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Allowed Amount (ZAR)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={budgetRules.overSpendAllowedAmount} 
-                                        onChange={(e) => handleRuleChange('overSpendAllowedAmount', e.target.value)}
-                                        placeholder="e.g. 1000"
-                                    />
-                                    <p className="text-xs text-muted-foreground text-red-400">Flag as issue if spend > budget + X amount</p>
-                                </div>
+                                
+                                {budgetRules.overSpendType === 'percentage' ? (
+                                    <div className="space-y-2">
+                                        <Label>Allowed Percentage (%)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={budgetRules.overSpendAllowedPercentage} 
+                                            onChange={(e) => handleRuleValueChange('overSpendAllowedPercentage', e.target.value)}
+                                            placeholder="e.g. 5"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Flag as issue if spend &gt; budget + {budgetRules.overSpendAllowedPercentage}%</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <Label>Allowed Over-spend Amount (ZAR)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={budgetRules.overSpendAllowedAmount} 
+                                            onChange={(e) => handleRuleValueChange('overSpendAllowedAmount', e.target.value)}
+                                            placeholder="e.g. 1000"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Flag as issue if spend &gt; budget + R{budgetRules.overSpendAllowedAmount}</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
-                        <div className="space-y-4">
-                            <h3 className="font-semibold flex items-center gap-2 text-amber-600">
+                        <div className="space-y-6">
+                            <h3 className="font-semibold flex items-center gap-2 text-amber-600 border-b pb-2">
                                 <AlertTriangle className="h-4 w-4" />
-                                Under-spend Alerts
+                                Under-spend Rules
                             </h3>
-                            <div className="grid gap-4">
+                            <div className="grid gap-6">
                                 <div className="space-y-2">
-                                    <Label>Alert Percentage (%)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={budgetRules.underSpendAlertPercentage} 
-                                        onChange={(e) => handleRuleChange('underSpendAlertPercentage', e.target.value)}
-                                        placeholder="e.g. 20"
-                                    />
-                                    <p className="text-xs text-muted-foreground text-amber-500">Flag as warning if spend &lt; budget - X%</p>
+                                    <Label>Threshold Type</Label>
+                                    <Select value={budgetRules.underSpendType} onValueChange={(v) => handleTypeChange('underSpendType', v as any)}>
+                                        <SelectTrigger>
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="percentage">Percentage Based (%)</SelectItem>
+                                            <SelectItem value="amount">Value Based (ZAR)</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label>Alert Amount (ZAR)</Label>
-                                    <Input 
-                                        type="number" 
-                                        value={budgetRules.underSpendAlertAmount} 
-                                        onChange={(e) => handleRuleChange('underSpendAlertAmount', e.target.value)}
-                                        placeholder="e.g. 5000"
-                                    />
-                                    <p className="text-xs text-muted-foreground text-amber-500">Flag as warning if spend &lt; budget - X amount</p>
-                                </div>
+
+                                {budgetRules.underSpendType === 'percentage' ? (
+                                    <div className="space-y-2">
+                                        <Label>Alert Percentage (%)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={budgetRules.underSpendAlertPercentage} 
+                                            onChange={(e) => handleRuleValueChange('underSpendAlertPercentage', e.target.value)}
+                                            placeholder="e.g. 20"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Flag as warning if spend &lt; budget - {budgetRules.underSpendAlertPercentage}%</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        <Label>Alert Under-spend Amount (ZAR)</Label>
+                                        <Input 
+                                            type="number" 
+                                            value={budgetRules.underSpendAlertAmount} 
+                                            onChange={(e) => handleRuleValueChange('underSpendAlertAmount', e.target.value)}
+                                            placeholder="e.g. 5000"
+                                        />
+                                        <p className="text-xs text-muted-foreground">Flag as warning if spend &lt; budget - R{budgetRules.underSpendAlertAmount}</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>

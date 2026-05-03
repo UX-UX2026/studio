@@ -137,8 +137,10 @@ export type SecuritySettings = {
 };
 
 export type BudgetRules = {
+    overSpendType?: 'percentage' | 'amount';
     overSpendAllowedPercentage?: number;
     overSpendAllowedAmount?: number;
+    underSpendType?: 'percentage' | 'amount';
     underSpendAlertPercentage?: number;
     underSpendAlertAmount?: number;
 };

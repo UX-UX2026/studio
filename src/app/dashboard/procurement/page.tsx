@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser } from "@/firebase/auth/use-user";
@@ -193,21 +192,38 @@ export default function ProcurementQuickSubmitPage() {
     // Rule detection logic
     const categoryIssues = useMemo(() => {
         if (!appMetadata?.budgetRules) return [];
-        const { overSpendAllowedPercentage, overSpendAllowedAmount, underSpendAlertPercentage, underSpendAlertAmount } = appMetadata.budgetRules;
+        const { 
+            overSpendType, overSpendAllowedPercentage, overSpendAllowedAmount, 
+            underSpendType, underSpendAlertPercentage, underSpendAlertAmount 
+        } = appMetadata.budgetRules;
+        
         const allLines = [...operationalSummary.lines, ...capitalSummary.lines];
 
         return allLines.map(line => {
-            const overagePct = line.forecastTotal > 0 ? (line.procurementTotal - line.forecastTotal) / line.forecastTotal * 100 : 0;
             const overageAmt = line.procurementTotal - line.forecastTotal;
+            const overagePct = line.forecastTotal > 0 ? (overageAmt / line.forecastTotal) * 100 : 0;
 
-            const underagePct = line.forecastTotal > 0 ? (line.forecastTotal - line.procurementTotal) / line.forecastTotal * 100 : 0;
             const underageAmt = line.forecastTotal - line.procurementTotal;
+            const underagePct = line.forecastTotal > 0 ? (underageAmt / line.forecastTotal) * 100 : 0;
 
-            if (overageAmt > 0 && (overagePct > overSpendAllowedPercentage! || overageAmt > overSpendAllowedAmount!)) {
-                return { category: line.category, type: 'critical', message: `Budget Exceeded: ${line.category} is over by ${formatCurrency(overageAmt)} (${overagePct.toFixed(1)}%)` };
+            if (overageAmt > 0) {
+                const isOver = overSpendType === 'percentage' 
+                    ? overagePct > (overSpendAllowedPercentage || 0)
+                    : overageAmt > (overSpendAllowedAmount || 0);
+
+                if (isOver) {
+                    return { category: line.category, type: 'critical', message: `Budget Exceeded: ${line.category} is over by ${formatCurrency(overageAmt)} (${overagePct.toFixed(1)}%)` };
+                }
             }
-            if (underageAmt > 0 && (underagePct > underSpendAlertPercentage! || underageAmt > underSpendAlertAmount!)) {
-                return { category: line.category, type: 'warning', message: `Under Budget Alert: ${line.category} is under by ${formatCurrency(underageAmt)} (${underagePct.toFixed(1)}%)` };
+
+            if (underageAmt > 0) {
+                const isUnder = underSpendType === 'percentage'
+                    ? underagePct > (underSpendAlertPercentage || 0)
+                    : underageAmt > (underSpendAlertAmount || 0);
+
+                if (isUnder) {
+                    return { category: line.category, type: 'warning', message: `Under Budget Alert: ${line.category} is under by ${formatCurrency(underageAmt)} (${underagePct.toFixed(1)}%)` };
+                }
             }
             return null;
         }).filter(Boolean);
