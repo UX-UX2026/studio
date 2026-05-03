@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Textarea } from "@/components/ui/textarea";
 import { procurementCategories } from "@/lib/procurement-categories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -90,7 +91,6 @@ export default function ProcurementQuickSubmitPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
 
-    // This definition is crucial for fixing the "Cannot find name departmentName" error
     const departmentName = useMemo(() => {
         if (!departments || !selectedDepartmentId) return 'Unassigned';
         return departments.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned';

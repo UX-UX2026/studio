@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { format, addMonths } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -69,7 +70,6 @@ export default function EnhancedProcurementPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: recurringItems, loading: recurringLoading } = useCollection<RecurringItem>(recurringItemsQuery);
 
-    // Explicitly define departmentName to avoid build scoping errors
     const departmentName = useMemo(() => {
         if (!departments || !selectedDepartmentId) return 'Unassigned';
         return departments.find(d => d.id === selectedDepartmentId)?.name || 'Unassigned';
@@ -82,7 +82,6 @@ export default function EnhancedProcurementPage() {
         return companies.filter(c => dept.companyIds!.includes(c.id));
     }, [selectedDepartmentId, departments, companies]);
 
-    // Handle deep links for drafts
     useEffect(() => {
         if (deptsLoading || !departments) return;
         const deptId = searchParams.get('deptId');
@@ -93,7 +92,6 @@ export default function EnhancedProcurementPage() {
         }
     }, [searchParams, departments, deptsLoading]);
 
-    // Define scoped departments
     const departmentsForUser = useMemo(() => {
         if (!departments) return [];
         if (role === 'Administrator' || role === 'Procurement Officer' || (role === 'Executive' && (!reportingDepartments || reportingDepartments.length === 0))) return departments;
@@ -107,7 +105,6 @@ export default function EnhancedProcurementPage() {
         if (departmentsForUser.length > 0 && !selectedDepartmentId) setSelectedDepartmentId(departmentsForUser[0].id);
     }, [deptsLoading, departmentsForUser, selectedDepartmentId]);
 
-    // Define selectable periods
     const openPeriods = useMemo(() => {
         if (!selectedDepartmentId || !departments) return [];
         const dept = departments.find(d => d.id === selectedDepartmentId);
@@ -120,7 +117,6 @@ export default function EnhancedProcurementPage() {
         return Array.from(allKnown).filter(pKey => settings[pKey]?.status === 'Open' || !settings[pKey]).sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
     }, [selectedDepartmentId, departments]);
 
-    // Load draft or recurring items
     useEffect(() => {
         if (periodRequestsLoading || recurringLoading || !selectedDepartmentId || !selectedPeriod) return;
         const currentKey = `${selectedDepartmentId}-${selectedPeriod}`;
@@ -240,9 +236,7 @@ export default function EnhancedProcurementPage() {
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-                {/* Main Entry Area */}
                 <div className="xl:col-span-3 space-y-8">
-                    {/* Header Configuration */}
                     <Card className="border-primary/20 shadow-sm overflow-hidden">
                         <div className="h-1 bg-primary w-full" />
                         <CardHeader className="pb-4">
@@ -278,7 +272,6 @@ export default function EnhancedProcurementPage() {
                         </CardContent>
                     </Card>
 
-                    {/* Item Entry Area */}
                     <Card className="shadow-sm">
                         <CardHeader className="border-b bg-muted/30">
                             <div className="flex justify-between items-center">
@@ -318,7 +311,6 @@ export default function EnhancedProcurementPage() {
                     </Card>
                 </div>
 
-                {/* Sidebar Summary Area */}
                 <div className="xl:col-span-1 space-y-6">
                     <Card className="sticky top-20 shadow-md border-primary/10">
                         <CardHeader className="pb-2 border-b">
@@ -326,7 +318,6 @@ export default function EnhancedProcurementPage() {
                             <CardDescription>Live totals for {selectedPeriod || 'selected period'}</CardDescription>
                         </CardHeader>
                         <CardContent className="pt-6 space-y-8">
-                            {/* Operational Summary */}
                             <div className="space-y-3">
                                 <div className="flex justify-between items-end">
                                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Operational</Label>
@@ -346,7 +337,6 @@ export default function EnhancedProcurementPage() {
                                 </div>
                             </div>
 
-                            {/* Capital Summary */}
                             <div className="space-y-3">
                                 <div className="flex justify-between items-end">
                                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Capital</Label>
@@ -366,7 +356,6 @@ export default function EnhancedProcurementPage() {
                                 </div>
                             </div>
 
-                            {/* Grand Total */}
                             <div className="pt-4 border-t">
                                 <div className="flex justify-between items-center">
                                     <Label className="text-sm font-bold uppercase">Grand Total</Label>
@@ -383,7 +372,6 @@ export default function EnhancedProcurementPage() {
                         </CardFooter>
                     </Card>
 
-                    {/* Alerts Area */}
                     {operationalSummary.totals.variance > 0 && (
                         <div className="p-4 bg-red-50 border border-red-200 rounded-lg flex gap-3 text-red-800">
                             <AlertCircle className="h-5 w-5 shrink-0" />
