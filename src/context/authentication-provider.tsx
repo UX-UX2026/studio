@@ -74,10 +74,18 @@ export function AuthenticationProvider({ children }: { children: ReactNode }) {
       const firebaseAuth = getAuth(firebaseApp);
       
       let db: Firestore;
-      // Use a singleton pattern to avoid "already initialized with different options" error
-      try {
-        db = getFirestore(firebaseApp);
-      } catch (e) {
+      // Definitive Singleton Pattern for Firestore to avoid "already initialized" errors on Vercel
+      if (getApps().length > 0) {
+        try {
+            db = getFirestore(firebaseApp);
+        } catch (e) {
+            db = initializeFirestore(firebaseApp, {
+                localCache: persistentLocalCache({
+                    tabManager: persistentMultipleTabManager()
+                })
+            });
+        }
+      } else {
         db = initializeFirestore(firebaseApp, {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager()

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { usePathname } from 'next/navigation';
@@ -32,6 +31,7 @@ import {
   ShieldCheck,
   Palette,
   BellRing,
+  PlusSquare,
 } from 'lucide-react';
 import {
   SidebarMenu,
@@ -59,6 +59,7 @@ const allLinks = [
     // A user must have at least one of these permissions to see the parent menu.
     permissions: ['procurement:submit', 'procurement:summary', 'procurement:recurring'],
     subLinks: [
+      { href: '/dashboard/procurement/new', label: 'Enhanced Submit', icon: PlusSquare, permission: 'procurement:submit', iconClass: "text-green-600" },
       { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit', iconClass: "text-blue-500" },
       { href: '/dashboard/procurement/emergency', label: 'Emergency Submit', icon: AlertTriangle, permission: 'procurement:submit', iconClass: "text-red-500" },
       { href: '/dashboard/procurement-summary', label: 'Summary', icon: FilePieChart, permission: 'procurement:summary', iconClass: "text-orange-500" },
