@@ -18,6 +18,15 @@ export type ApprovalItem = {
     addedByName?: string;
 };
 
+export type FulfillmentItem = ApprovalItem & {
+  procurementRequestId: string;
+  department: string;
+  item: string;
+  approvedOn: string;
+  submittedBy: string;
+  departmentId: string;
+};
+
 export type ApprovalRequest = {
     id: string;
     department: string;
