@@ -33,7 +33,7 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string; isTestData?: bo
         departmentId: 'dept-exec',
         status: 'Active',
         photoURL: `https://i.pravatar.cc/150?u=charlie.executive@example.com`,
-        reportingDepartments: ['dept-mktg', 'dept-sales'],
+        reportingDepartments: ['dept-mktg', 'dept-sales', 'dept-ops'],
         isTestData: true,
     },
     {
@@ -68,6 +68,28 @@ export const testUsers: (Omit<UserProfile, 'id'> & { id: string; isTestData?: bo
         status: 'Active',
         photoURL: `https://i.pravatar.cc/150?u=frank.manager@example.com`,
         isTestData: true,
+    },
+    {
+        id: 'user-george-manager',
+        displayName: 'George Manager (Ops)',
+        email: 'george.manager@example.com',
+        role: 'Manager',
+        department: 'Operations',
+        departmentId: 'dept-ops',
+        status: 'Active',
+        photoURL: `https://i.pravatar.cc/150?u=george.manager@example.com`,
+        isTestData: true,
+    },
+    {
+        id: 'user-hannah-requester',
+        displayName: 'Hannah Requester (Ops)',
+        email: 'hannah.requester@example.com',
+        role: 'Requester',
+        department: 'Operations',
+        departmentId: 'dept-ops',
+        status: 'Active',
+        photoURL: `https://i.pravatar.cc/150?u=hannah.requester@example.com`,
+        isTestData: true,
     }
 ];
 
@@ -92,12 +114,12 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
         ],
         isTestData: true,
     },
-    // 2. Manager submission, bypassing manager approval
+    // 2. High value Capital request, pending Executive
     {
         department: 'Marketing',
         departmentId: 'dept-mktg',
         period: 'August 2026',
-        total: 45000,
+        total: 125000,
         status: 'Pending Executive',
         submittedBy: 'Alice Manager',
         submittedById: 'user-alice-manager',
@@ -108,11 +130,11 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
         ],
         comments: [],
         items: [
-            { id: 201, type: 'One-Off', expenseType: 'Capital', description: 'New Video Camera for Content Team', category: 'Hardware Purchase', brand: 'Sony', qty: 1, unitPrice: 45000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
+            { id: 201, type: 'One-Off', expenseType: 'Capital', description: 'Video Production Studio Upgrade', category: 'Hardware Purchase', brand: 'Multiple', qty: 1, unitPrice: 125000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
         isTestData: true,
     },
-    // 3. Request with queries
+    // 3. Request with active queries
     {
         department: 'Sales',
         departmentId: 'dept-sales',
@@ -126,32 +148,32 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
             { stage: 'Manager Review', actor: 'Manager', date: null, status: 'pending' },
         ],
         comments: [
-            { actor: 'Frank Manager (Sales)', actorId: 'user-frank-manager', text: 'Is this conference essential for this quarter? Please provide justification.', timestamp: '16 Jul 2026' }
+            { actor: 'Frank Manager (Sales)', actorId: 'user-frank-manager', text: 'Please justify the need for 2 tickets. Is only one salesperson attending?', timestamp: '16 Jul 2026' }
         ],
         items: [
-            { id: 301, type: 'One-Off', expenseType: 'Operational', description: 'Tickets for Sales Conference', category: 'Staff Travel - SA', brand: 'SalesConf Inc.', qty: 2, unitPrice: 4000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
+            { id: 301, type: 'One-Off', expenseType: 'Operational', description: 'Regional Sales Summit Tickets', category: 'Staff Travel - SA', brand: 'EventsZA', qty: 2, unitPrice: 4000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
         isTestData: true,
     },
-    // 4. Rejected Request
+    // 4. Emergency Unplanned Request
     {
-        department: 'Marketing',
-        departmentId: 'dept-mktg',
-        period: 'June 2026',
-        total: 25000,
-        status: 'Rejected',
-        submittedBy: 'Bob Requester',
-        submittedById: 'user-bob-requester',
+        department: 'Operations',
+        departmentId: 'dept-ops',
+        period: 'July 2026',
+        total: 4500,
+        status: 'Approved',
+        isEmergency: true,
+        emergencyJustification: 'Critical server room air conditioning unit failure. Immediate repair required to prevent hardware damage.',
+        submittedBy: 'Hannah Requester (Ops)',
+        submittedById: 'user-hannah-requester',
         timeline: [
-            { stage: 'Request Submission', actor: 'Bob Requester', date: '10 Jun 2026', status: 'completed' },
-            { stage: 'Manager Review', actor: 'Alice Manager', date: '11 Jun 2026', status: 'completed' },
-            { stage: 'Executive Approval', actor: 'Charlie Executive', date: '12 Jun 2026', status: 'rejected' },
+            { stage: 'Request Submission', actor: 'Hannah Requester (Ops)', date: '18 Jul 2026', status: 'completed' },
+            { stage: 'Manager Review', actor: 'System (Emergency)', date: '18 Jul 2026', status: 'completed' },
+            { stage: 'Procurement Processing', actor: 'Procurement', date: null, status: 'pending' },
         ],
-        comments: [
-            { actor: 'Charlie Executive', actorId: 'user-charlie-executive', text: 'REJECTED: This software is not within our current strategic focus. Re-evaluate in the next financial year.', timestamp: '12 Jun 2026' }
-        ],
+        comments: [],
         items: [
-            { id: 401, type: 'One-Off', expenseType: 'Capital', description: 'Experimental Analytics Software License', category: 'Software Licenses', brand: 'DataDream', qty: 1, unitPrice: 25000, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
+            { id: 901, type: 'One-Off', expenseType: 'Operational', description: 'Emergency HVAC Repair - Server Room', category: 'Facilities Maintenance - SA', brand: 'Cool-It Services', qty: 1, unitPrice: 4500, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
         isTestData: true,
     },
@@ -176,12 +198,12 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
         ],
         isTestData: true,
     },
-    // 6. In Fulfillment
+    // 6. In Fulfillment - Detailed items
     {
         department: 'Marketing',
         departmentId: 'dept-mktg',
         period: 'July 2026',
-        total: 5000,
+        total: 15500,
         status: 'In Fulfillment',
         submittedBy: 'Bob Requester',
         submittedById: 'user-bob-requester',
@@ -194,7 +216,8 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
         ],
         comments: [],
         items: [
-            { id: 601, type: 'One-Off', expenseType: 'Operational', description: 'Branded merchandise for event', category: 'Marketing', brand: 'PromoCorp', qty: 500, unitPrice: 10, fulfillmentStatus: 'Sourcing', receivedQty: 0, fulfillmentComments: [] },
+            { id: 601, type: 'One-Off', expenseType: 'Operational', description: 'Branded Event Gazebos', category: 'Marketing', brand: 'PromoCorp', qty: 2, unitPrice: 5000, fulfillmentStatus: 'Sourcing', receivedQty: 0, fulfillmentComments: ['Waiting for quotes from 3 vendors'] },
+            { id: 602, type: 'One-Off', expenseType: 'Operational', description: 'Marketing Brochures (Pack of 500)', category: 'Marketing', brand: 'PrintMaster', qty: 1, unitPrice: 5500, fulfillmentStatus: 'Ordered', receivedQty: 0, fulfillmentComments: ['Proof approved, in production'] },
         ],
         isTestData: true,
     },
@@ -217,23 +240,23 @@ export const testProcurementRequests: (Omit<ApprovalRequest, 'id' | 'createdAt' 
         ],
         comments: [],
         items: [
-            { id: 701, type: 'One-Off', expenseType: 'Operational', description: 'Office Printer Ink', category: 'Office Supplies', brand: 'HP', qty: 5, unitPrice: 500, fulfillmentStatus: 'Completed', receivedQty: 5, fulfillmentComments: ['Ordered from Takealot, delivered promptly'] },
+            { id: 701, type: 'One-Off', expenseType: 'Operational', description: 'Office Printer Ink', category: 'Office Supplies', brand: 'HP', qty: 5, unitPrice: 500, fulfillmentStatus: 'Completed', receivedQty: 5, fulfillmentComments: ['Delivered to front desk'] },
         ],
         isTestData: true,
     },
-    // 8. Draft Request
+    // 8. Draft Request - To test Enhanced Submit Resume
     {
-        department: 'Marketing',
-        departmentId: 'dept-mktg',
-        period: 'September 2026',
-        total: 980,
+        department: 'Operations',
+        departmentId: 'dept-ops',
+        period: 'August 2026',
+        total: 9800,
         status: 'Draft',
-        submittedBy: 'Bob Requester',
-        submittedById: 'user-bob-requester',
+        submittedBy: 'Hannah Requester (Ops)',
+        submittedById: 'user-hannah-requester',
         timeline: [],
         comments: [],
         items: [
-            { id: 801, type: 'One-Off', expenseType: 'Operational', description: 'Graphic Design Software Subscription', category: 'Software Licenses', brand: 'Adobe', qty: 1, unitPrice: 980, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
+            { id: 801, type: 'One-Off', expenseType: 'Operational', description: 'Ergonomic Desk Chairs (x2)', category: 'Equipment - SA', brand: 'OfficeComfort', qty: 2, unitPrice: 4900, fulfillmentStatus: 'Pending', receivedQty: 0, fulfillmentComments: [] },
         ],
         isTestData: true,
     },
