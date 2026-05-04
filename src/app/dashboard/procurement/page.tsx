@@ -34,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { format, addMonths } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { RecurringClient } from "@/components/app/recurring-client";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { procurementCategories } from "@/lib/procurement-categories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -54,9 +54,9 @@ const formatCurrency = (amount: number) => {
 export default function ProcurementQuickSubmitPage() {
     const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const firestore = useFirestore();
     const { toast } = useToast();
-    const searchParams = useSearchParams();
     const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
