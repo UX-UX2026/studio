@@ -3,7 +3,7 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useRef, Fragment } from "react";
-import { Loader, History, Check, Save, FilePlus, Info, AlertCircle, ChevronRight, AlertTriangle } from "lucide-react";
+import { Loader, History, Check, Save, FilePlus, Info, AlertCircle, ChevronRight, AlertTriangle, FileUp, Download } from "lucide-react";
 import { useFirestore, useCollection } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc } from "firebase/firestore";
 import type { ApprovalRequest, RecurringItem, BudgetItem, Department, Company, ApprovalItem } from "@/types";
@@ -20,6 +20,7 @@ import { format, addMonths } from "date-fns";
 import { useBudgetSummary } from "@/hooks/use-budget-summary";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import * as XLSX from 'xlsx';
 
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-ZA", {
@@ -30,12 +31,13 @@ const formatCurrency = (amount: number) => {
     }).format(amount);
 };
 
-export default function EnhancedProcurementPage() {
+export default function ConsolidatedProcurementPage() {
     const { user, profile, role, department: userDepartment, reportingDepartments, loading: userLoading } = useUser();
     const router = useRouter();
     const firestore = useFirestore();
     const { toast } = useToast();
     const searchParams = useSearchParams();
+    const fileInputRef = useRef<HTMLInputElement>(null);
     
     const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>('');
     const [selectedPeriod, setSelectedPeriod] = useState<string>('');
@@ -43,6 +45,7 @@ export default function EnhancedProcurementPage() {
     const [draftItems, setDraftItems] = useState<ApprovalItem[]>([]);
     const [editingRequestId, setEditingRequestId] = useState<string | null>(null);
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
 
     // Summary drill-down state
     const [openCategory, setOpenCategory] = useState<string | null>(null);
@@ -55,7 +58,7 @@ export default function EnhancedProcurementPage() {
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const companiesQuery = useMemo(() => firestore ? collection(firestore, 'companies') : null, [firestore]);
-    const { data: companies } = useCollection<Company>(companiesQuery);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
@@ -167,6 +170,61 @@ export default function EnhancedProcurementPage() {
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
+    const downloadTemplate = () => {
+        const headers = ["type", "expenseType", "description", "brand", "qty", "category", "unitPrice", "comments"];
+        const sampleData = [
+            ["Recurring", "Operational", "Internet Subscription", "Telkom", "1", "Connectivity", "1500", "Monthly core fiber"],
+            ["One-Off", "Capital", "Office AC Unit", "Samsung", "2", "Hardware Purchase", "8500", "New wing install"]
+        ];
+        const csvContent = [headers.join(","), ...sampleData.map(row => row.join(","))].join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute("download", "procureease_unified_template.csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleImportFile = (event: React.ChangeEvent<HTMLInputElement> | FileList) => {
+        const files = 'target' in event ? event.target.files : event;
+        const file = files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                const data = e.target?.result;
+                const workbook = XLSX.read(data, { type: 'array' });
+                const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet);
+
+                const importedItems: ApprovalItem[] = jsonData.map((row, index) => ({
+                    id: Date.now() + index + Math.random(),
+                    type: String(row.type || '').toLowerCase().startsWith('rec') ? "Recurring" : "One-Off",
+                    expenseType: String(row.expenseType || '').toLowerCase().startsWith('cap') ? "Capital" : "Operational",
+                    description: String(row.description || ""),
+                    brand: String(row.brand || ""),
+                    qty: parseInt(row.qty) || 1,
+                    category: String(row.category || "Uncategorized"),
+                    unitPrice: parseFloat(row.unitPrice) || 0,
+                    fulfillmentStatus: 'Pending',
+                    receivedQty: 0,
+                    fulfillmentComments: [],
+                    comments: String(row.comments || ""),
+                    addedById: user!.uid,
+                    addedByName: profile?.displayName || user!.email || "Imported User"
+                }));
+
+                setDraftItems(prev => [...prev, ...importedItems]);
+                toast({ title: "Import Successful", description: `Added ${importedItems.length} items to your draft.` });
+            } catch (err: any) {
+                toast({ variant: 'destructive', title: 'Import Failed', description: err.message });
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    };
+
     const handleSaveRequest = async (isDraft: boolean) => {
         if (!user || !profile || !selectedDepartmentId || !firestore) return;
         const department = departments?.find(d => d.id === selectedDepartmentId);
@@ -225,10 +283,12 @@ export default function EnhancedProcurementPage() {
 
     return (
         <div className="space-y-8 max-w-7xl mx-auto pb-12">
+            <input type="file" ref={fileInputRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={(e) => handleImportFile(e)} />
+            
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold tracking-tight">Enhanced Procurement Submission</h1>
-                    <p className="text-muted-foreground mt-1">Manage your department's procurement request for the selected period.</p>
+                    <h1 className="text-3xl font-bold tracking-tight">Consolidated Procurement Submission</h1>
+                    <p className="text-muted-foreground mt-1">Submit your department's request by importing a sheet or adding items manually.</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <Button variant="outline" onClick={() => router.push('/dashboard/procurement/history')} className="gap-2">
@@ -242,13 +302,35 @@ export default function EnhancedProcurementPage() {
 
             <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
                 <div className="xl:col-span-3 space-y-8">
+                    <Card 
+                        className={cn(
+                            "relative border-2 border-dashed transition-all cursor-pointer group",
+                            isDraggingOver ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/50",
+                            isLocked && "opacity-50 cursor-not-allowed"
+                        )}
+                        onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+                        onDragLeave={() => setIsDraggingOver(false)}
+                        onDrop={(e) => { e.preventDefault(); setIsDraggingOver(false); !isLocked && handleImportFile(e.dataTransfer.files); }}
+                        onClick={() => !isLocked && fileInputRef.current?.click()}
+                    >
+                        <CardContent className="flex flex-col items-center justify-center p-8 text-center">
+                            <FileUp className="h-10 w-10 text-primary mb-3" />
+                            <h3 className="text-lg font-semibold">Bulk Import Items</h3>
+                            <p className="text-sm text-muted-foreground mb-4">Drag and drop your spreadsheet here, or click to browse.</p>
+                            <div className="flex gap-2">
+                                <Button variant="secondary" size="sm" onClick={(e) => { e.stopPropagation(); downloadTemplate(); }}>
+                                    <Download className="h-4 w-4 mr-2" /> Template
+                                </Button>
+                            </div>
+                        </CardContent>
+                    </Card>
+
                     <Card className="border-primary/20 shadow-sm overflow-hidden">
                         <div className="h-1 bg-primary w-full" />
                         <CardHeader className="pb-4">
                             <CardTitle className="text-lg flex items-center gap-2">
                                 <Info className="h-5 w-5 text-primary" /> 1. Submission Details
                             </CardTitle>
-                            <CardDescription>Select the department and period you are submitting for.</CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="grid md:grid-cols-3 gap-6">
@@ -285,7 +367,6 @@ export default function EnhancedProcurementPage() {
                                         <CardTitle className="text-lg flex items-center gap-2">
                                             <FilePlus className="h-5 w-5 text-primary" /> 2. Items & Budget Impact
                                         </CardTitle>
-                                        <CardDescription>Review items and their specific impact on each budget line.</CardDescription>
                                     </div>
                                     <TabsList>
                                         <TabsTrigger value="submission">Line Items</TabsTrigger>
@@ -464,7 +545,6 @@ export default function EnhancedProcurementPage() {
                             </CardContent>
                         </Tabs>
                         <CardFooter className="bg-muted/30 border-t py-4 justify-between">
-                            <p className="text-sm text-muted-foreground italic">Tip: Use the "Budget Impact" tab to see category-specific drill-downs.</p>
                             <Button variant="ghost" size="sm" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked} className="gap-2">
                                 {saveStatus === 'saving' ? <Loader className="h-4 w-4 animate-spin"/> : <Save className="h-4 w-4" />}
                                 Save Progress
@@ -492,9 +572,6 @@ export default function EnhancedProcurementPage() {
                                     <Progress value={opProg} className={cn("h-2", opProg > 100 ? "bg-red-100" : "")} />
                                     <div className="flex justify-between text-[10px]">
                                         <span className={cn("font-bold", opProg > 100 ? "text-red-500" : "text-primary")}>{Math.round(opProg)}% of budget</span>
-                                        <span className={cn("font-medium", (operationalSummary.totals.variance < 0) ? "text-green-600" : "text-red-600")}>
-                                            {operationalSummary.totals.variance > 0 ? `Over by ${formatCurrency(operationalSummary.totals.variance)}` : `Remaining: ${formatCurrency(Math.abs(operationalSummary.totals.variance))}`}
-                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -511,9 +588,6 @@ export default function EnhancedProcurementPage() {
                                     <Progress value={capProg} className={cn("h-2", capProg > 100 ? "bg-red-100" : "")} />
                                     <div className="flex justify-between text-[10px]">
                                         <span className={cn("font-bold", capProg > 100 ? "text-red-500" : "text-primary")}>{Math.round(capProg)}% of budget</span>
-                                        <span className={cn("font-medium", (capitalSummary.totals.variance < 0) ? "text-green-600" : "text-red-600")}>
-                                            {capitalSummary.totals.variance > 0 ? `Over by ${formatCurrency(capitalSummary.totals.variance)}` : `Remaining: ${formatCurrency(Math.abs(capitalSummary.totals.variance))}`}
-                                        </span>
                                     </div>
                                 </div>
                             </div>
@@ -530,7 +604,6 @@ export default function EnhancedProcurementPage() {
                                 {saveStatus === 'saving' && <Loader className="mr-2 h-4 w-4 animate-spin"/>}
                                 <Check className="mr-2 h-4 w-4" /> Confirm & Submit
                             </Button>
-                            <p className="text-[10px] text-center text-muted-foreground">Submit for Review by Manager</p>
                         </CardFooter>
                     </Card>
 
@@ -539,7 +612,7 @@ export default function EnhancedProcurementPage() {
                             <AlertCircle className="h-5 w-5 shrink-0" />
                             <div className="text-xs">
                                 <p className="font-bold">Over Budget Warning</p>
-                                <p className="mt-1 opacity-90">This submission exceeds your operational forecast. Please ensure you have added justifications in the item comments.</p>
+                                <p className="mt-1 opacity-90">This submission exceeds your operational forecast. Please ensure justifications are provided.</p>
                             </div>
                         </div>
                     )}

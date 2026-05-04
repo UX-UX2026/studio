@@ -49,18 +49,14 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from './ui/collap
 import { cn } from '@/lib/utils';
 import { useRoles } from '@/lib/roles-provider';
 
-// Define permissions required for each link.
 const allLinks = [
-  // A user must have the 'dashboard:view' permission to see the main dashboard.
   { href: '/dashboard', label: 'Overview', icon: LayoutGrid, permission: 'dashboard:view' },
   { 
     label: 'Procurement', 
     icon: FileText, 
-    // A user must have at least one of these permissions to see the parent menu.
     permissions: ['procurement:submit', 'procurement:summary', 'procurement:recurring'],
     subLinks: [
-      { href: '/dashboard/procurement/new', label: 'Enhanced Submit', icon: PlusSquare, permission: 'procurement:submit', iconClass: "text-green-600" },
-      { href: '/dashboard/procurement', label: 'Quick Submit', icon: Rocket, permission: 'procurement:submit', iconClass: "text-blue-500" },
+      { href: '/dashboard/procurement/new', label: 'New Submission', icon: PlusSquare, permission: 'procurement:submit', iconClass: "text-green-600" },
       { href: '/dashboard/procurement/emergency', label: 'Emergency Submit', icon: AlertTriangle, permission: 'procurement:submit', iconClass: "text-red-500" },
       { href: '/dashboard/procurement-summary', label: 'Summary', icon: FilePieChart, permission: 'procurement:summary', iconClass: "text-orange-500" },
       { href: '/dashboard/recurring', label: 'Recurring Items', icon: History, permission: 'procurement:recurring', iconClass: "text-purple-500" },
@@ -118,7 +114,6 @@ export function NavLinks({ role }: { role: UserRole }) {
 
   const hasPermission = (permission: string) => {
     if (role === 'Administrator') return true;
-    // Let's grant help:view to all logged in users.
     if (permission === 'help:view') return true;
     return userPermissions.includes(permission);
   };
@@ -132,7 +127,6 @@ export function NavLinks({ role }: { role: UserRole }) {
     <SidebarMenu>
       {allLinks.map((link) => {
         if (link.subLinks) {
-          // Check if user has permission to see the parent link
           if (!hasAnyPermission(link.permissions || [])) {
               return null;
           }
