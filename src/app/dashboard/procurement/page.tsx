@@ -3,7 +3,22 @@
 import { useUser } from "@/firebase/auth/use-user";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState, useRef, Fragment } from "react";
-import { Loader, Trash2, History, ChevronDown, Upload, Download, FileSpreadsheet, AlertTriangle, AlertCircle, Info } from "lucide-react";
+import { 
+    Loader, 
+    Trash2, 
+    History, 
+    ChevronDown, 
+    Upload, 
+    Download, 
+    FileSpreadsheet, 
+    AlertTriangle, 
+    AlertCircle, 
+    Info, 
+    Check, 
+    Save, 
+    FileUp, 
+    FileText 
+} from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { useFirestore, useCollection, useDoc } from "@/firebase";
 import { collection, query, where, addDoc, serverTimestamp, doc, updateDoc, orderBy } from "firebase/firestore";
@@ -53,6 +68,7 @@ export default function ProcurementQuickSubmitPage() {
     const [isArchiveCurrentDialogOpen, setIsArchiveCurrentDialogOpen] = useState(false);
     const [previousSubmissionToLoad, setPreviousSubmissionToLoad] = useState<string | null>(null);
     const [isLoadConfirmDialogOpen, setIsLoadConfirmDialogOpen] = useState(false);
+    const [isDraggingOver, setIsDraggingOver] = useState(false);
 
     const lastLoadedKey = useRef<string>('');
 
@@ -60,7 +76,7 @@ export default function ProcurementQuickSubmitPage() {
     const { data: departments, loading: deptsLoading } = useCollection<Department>(departmentsQuery);
 
     const companiesQuery = useMemo(() => firestore ? collection(firestore, 'companies') : null, [firestore]);
-    const { data: companies } = useCollection<Company>(companiesQuery);
+    const { data: companies, loading: companiesLoading } = useCollection<Company>(companiesQuery);
 
     const periodRequestsQuery = useMemo(() => {
         if (!firestore || !selectedDepartmentId || !selectedPeriod) return null;
@@ -86,7 +102,7 @@ export default function ProcurementQuickSubmitPage() {
     }, [firestore, selectedDepartmentId]);
     const { data: previousSubmissions } = useCollection<ApprovalRequest>(previousSubmissionsQuery);
 
-    const appMetadataRef = useMemo(() => doc(firestore, 'app', 'metadata'), [firestore]);
+    const appMetadataRef = useMemo(() => firestore ? doc(firestore, 'app', 'metadata') : null, [firestore]);
     const { data: appMetadata } = useDoc<AppMetadata>(appMetadataRef);
 
     const associatedCompanies = useMemo(() => {
@@ -189,7 +205,6 @@ export default function ProcurementQuickSubmitPage() {
 
     const { operationalSummary, capitalSummary } = useBudgetSummary(draftItems, selectedDepartmentId, selectedPeriod, budgetItems, departments);
 
-    // Rule detection logic
     const categoryIssues = useMemo(() => {
         if (!appMetadata?.budgetRules) return [];
         const { 
@@ -274,6 +289,8 @@ export default function ProcurementQuickSubmitPage() {
     const downloadTemplate = () => {
         const headers = ["type", "expenseType", "description", "brand", "qty", "category", "unitPrice", "comments"];
         const sampleData = [
+            ["Recurring", "Operational", "Internet Subscription", "Telkom", "1", "Connectivity", "1500", "Monthly core fiber"],
+            ["Recurring", "Operational", "Office Cleaning", "CleanCo", "1", "Facilities Maintenance - SA", "4500", "Weekly services"],
             ["One-Off", "Operational", "Sample Laptop", "Dell", "1", "IT Hardware", "15000", "Replacement for staff"],
             ["One-Off", "Capital", "Office AC Unit", "Samsung", "2", "Hardware Purchase", "8500", "New wing install"]
         ];
@@ -283,14 +300,21 @@ export default function ProcurementQuickSubmitPage() {
         const link = document.createElement("a");
         const url = URL.createObjectURL(blob);
         link.setAttribute("href", url);
-        link.setAttribute("download", "procurement_template.csv");
+        link.setAttribute("download", "procureease_import_template.csv");
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    const handleImportFile = (event: React.ChangeEvent<HTMLInputElement>) => {
-        const file = event.target.files?.[0];
+    const handleImportFile = (event: React.ChangeEvent<HTMLInputElement> | FileList) => {
+        let files: FileList | null = null;
+        if ('target' in event) {
+            files = event.target.files;
+        } else {
+            files = event;
+        }
+        
+        const file = files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
@@ -303,32 +327,44 @@ export default function ProcurementQuickSubmitPage() {
 
                 if (jsonData.length === 0) throw new Error("File is empty.");
 
-                const importedItems: ApprovalItem[] = jsonData.map((row, index) => ({
-                    id: Date.now() + index,
-                    type: (row.type as any) || "One-Off",
-                    expenseType: (row.expenseType as any) || "Operational",
-                    description: String(row.description || ""),
-                    brand: String(row.brand || ""),
-                    qty: parseInt(row.qty) || 1,
-                    category: String(row.category || "Uncategorized"),
-                    unitPrice: parseFloat(row.unitPrice) || 0,
-                    fulfillmentStatus: 'Pending',
-                    receivedQty: 0,
-                    fulfillmentComments: [],
-                    comments: String(row.comments || ""),
-                    addedById: user!.uid,
-                    addedByName: profile?.displayName || user!.email || "Imported User"
-                }));
+                const importedItems: ApprovalItem[] = jsonData.map((row, index) => {
+                    const type = (String(row.type || '').toLowerCase().startsWith('rec')) ? "Recurring" : "One-Off";
+                    const expenseType = (String(row.expenseType || '').toLowerCase().startsWith('cap')) ? "Capital" : "Operational";
+                    
+                    return {
+                        id: Date.now() + index + Math.random(),
+                        type,
+                        expenseType,
+                        description: String(row.description || ""),
+                        brand: String(row.brand || ""),
+                        qty: parseInt(row.qty) || 1,
+                        category: String(row.category || "Uncategorized"),
+                        unitPrice: parseFloat(row.unitPrice) || 0,
+                        fulfillmentStatus: 'Pending',
+                        receivedQty: 0,
+                        fulfillmentComments: [],
+                        comments: String(row.comments || ""),
+                        addedById: user!.uid,
+                        addedByName: profile?.displayName || user!.email || "Imported User"
+                    };
+                });
 
                 setDraftItems(prev => [...prev, ...importedItems]);
                 toast({ title: "Import Successful", description: `Added ${importedItems.length} items to your draft.` });
             } catch (err: any) {
                 toast({ variant: 'destructive', title: 'Import Failed', description: err.message });
             } finally {
-                if (event.target) event.target.value = '';
+                if ('target' in event && event.target) event.target.value = '';
             }
         };
         reader.readAsArrayBuffer(file);
+    };
+
+    const onDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDraggingOver(false);
+        if (isLocked) return;
+        handleImportFile(e.dataTransfer.files);
     };
 
     if (userLoading || deptsLoading || recurringLoading || periodRequestsLoading) {
@@ -343,74 +379,230 @@ export default function ProcurementQuickSubmitPage() {
     const capProg = capitalSummary.totals.forecast > 0 ? (capitalSummary.totals.procurement / capitalSummary.totals.forecast) * 100 : 0;
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 max-w-7xl mx-auto pb-20">
             <input type="file" ref={fileInputRef} className="hidden" accept=".csv, .xlsx, .xls" onChange={handleImportFile} />
             
-            <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                    <div>
-                        <CardTitle>Procurement Quick Submit</CardTitle>
-                        <CardDescription>Manage your department's requests with powerful import tools.</CardDescription>
-                    </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
-                            <Download className="h-4 w-4" /> Template
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} className="gap-2">
-                            <Upload className="h-4 w-4" /> Import Sheet
-                        </Button>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 items-end gap-4">
-                        <div className="grid gap-1.5"><Label>Department</Label><Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{departmentsForUser.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="grid gap-1.5"><Label>Company</Label><Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="grid gap-1.5"><Label>Period</Label><Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}><SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent></Select></div>
-                        <div className="grid gap-1.5"><Label>History</Label><Select onValueChange={v => { setPreviousSubmissionToLoad(v); setIsLoadConfirmDialogOpen(true); }} disabled={isLocked}><SelectTrigger><SelectValue placeholder="Load Past" /></SelectTrigger><SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent></Select></div>
-                    </div>
-                </CardContent>
-            </Card>
-
-            {categoryIssues.length > 0 && (
-                <div className="space-y-2">
-                    {categoryIssues.map((issue, idx) => (
-                        <div key={idx} className={cn("p-4 rounded-lg flex items-center gap-3 border", 
-                            issue?.type === 'critical' ? "bg-red-50 border-red-200 text-red-800" : "bg-amber-50 border-amber-200 text-amber-800"
-                        )}>
-                            {issue?.type === 'critical' ? <AlertCircle className="h-5 w-5" /> : <AlertTriangle className="h-5 w-5" />}
-                            <span className="text-sm font-semibold">{issue?.message}</span>
-                        </div>
-                    ))}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Quick Submit</h1>
+                    <p className="text-muted-foreground">Import items and submit your departmental request in seconds.</p>
                 </div>
-            )}
+                <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={downloadTemplate} className="gap-2">
+                        <Download className="h-4 w-4" /> Template
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => router.push('/dashboard/procurement/history')} className="gap-2">
+                        <History className="h-4 w-4" /> History
+                    </Button>
+                </div>
+            </div>
 
-            <Card>
-                <Collapsible><CollapsibleTrigger className="w-full p-5 flex items-center justify-between rounded-t-lg hover:bg-muted/50"><div><CardTitle className="flex items-center gap-2"><History />Monthly Recurring List</CardTitle></div><ChevronDown /></CollapsibleTrigger><CollapsibleContent className="border-t p-5"><RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} /></CollapsibleContent></Collapsible>
-            </Card>
+            <div className="grid lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                    <Card 
+                        className={cn(
+                            "relative border-2 border-dashed transition-all cursor-pointer group",
+                            isDraggingOver ? "border-primary bg-primary/5" : "border-muted-foreground/20 hover:border-primary/50",
+                            isLocked && "opacity-50 cursor-not-allowed"
+                        )}
+                        onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }}
+                        onDragLeave={() => setIsDraggingOver(false)}
+                        onDrop={onDrop}
+                        onClick={() => !isLocked && fileInputRef.current?.click()}
+                    >
+                        <CardContent className="flex flex-col items-center justify-center p-12 text-center">
+                            <div className="mb-4 rounded-full bg-primary/10 p-4 group-hover:scale-110 transition-transform">
+                                <FileUp className="h-10 w-10 text-primary" />
+                            </div>
+                            <h3 className="text-xl font-semibold">Import Submission Sheet</h3>
+                            <p className="text-muted-foreground mt-2 max-w-sm">
+                                Drag and drop your .csv or .xlsx file here to bulk-add One-Off and Recurring items.
+                            </p>
+                            {!isLocked && (
+                                <Button variant="secondary" className="mt-6">
+                                    Select File from Computer
+                                </Button>
+                            )}
+                        </CardContent>
+                    </Card>
 
-            <Card>
-                <Tabs defaultValue="submission">
-                    <CardHeader className="flex flex-row items-center justify-between"><CardTitle>Submission Items</CardTitle><TabsList><TabsTrigger value="submission">Items</TabsTrigger><TabsTrigger value="summary">Summary</TabsTrigger></TabsList></CardHeader>
-                    <CardContent>
-                        <TabsContent value="submission"><SubmissionClient user={user!} profile={profile} userRole={role!} items={draftItems} setItems={setDraftItems} isLocked={isLocked} recurringItems={recurringItems} recurringLoading={recurringLoading} departmentId={selectedDepartmentId} departmentName={departmentName} budgetItems={budgetItems} /></TabsContent>
-                        <TabsContent value="summary" className="space-y-4">
-                            <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Operational Impact</div><div className="font-bold">{formatCurrency(operationalSummary.totals.procurement)}</div></div><Progress value={opProg} className="mt-2" /></div>
-                            <div className="p-4 border rounded-lg bg-muted/50"><div className="flex justify-between"><div>Capital Impact</div><div className="font-bold">{formatCurrency(capitalSummary.totals.procurement)}</div></div><Progress value={capProg} className="mt-2" /></div>
-                        </TabsContent>
-                    </CardContent>
-                </Tabs>
-                <CardFooter className="flex justify-between items-center border-t pt-6">
-                    <div>{isLocked && <div className="text-yellow-800 text-sm font-medium">Submission is locked.</div>}</div>
-                    <div className="flex gap-3">
-                        <Button variant="destructive" onClick={() => setIsArchiveCurrentDialogOpen(true)} disabled={!editingRequestId || isLocked}><Trash2 className="mr-2 h-4 w-4" />Archive</Button>
-                        <Button variant="ghost" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>{saveStatus === 'saving' && <Loader className="mr-2 h-4 w-4 animate-spin"/>}Save Draft</Button>
-                        <Button onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>Submit For Approval</Button>
-                    </div>
-                </CardFooter>
-            </Card>
+                    {categoryIssues.length > 0 && (
+                        <div className="space-y-2">
+                            <h4 className="text-sm font-bold uppercase tracking-wider text-muted-foreground px-1">Budget Alerts</h4>
+                            {categoryIssues.map((issue, idx) => (
+                                <div key={idx} className={cn("p-4 rounded-lg flex items-center gap-3 border animate-in fade-in slide-in-from-top-2", 
+                                    issue?.type === 'critical' ? "bg-red-50 border-red-200 text-red-800" : "bg-amber-50 border-amber-200 text-amber-800"
+                                )}>
+                                    {issue?.type === 'critical' ? <AlertCircle className="h-5 w-5 shrink-0" /> : <AlertTriangle className="h-5 w-5 shrink-0" />}
+                                    <span className="text-sm font-semibold">{issue?.message}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    <Card>
+                        <CardHeader className="pb-4">
+                            <CardTitle className="text-lg flex items-center gap-2">
+                                <FileText className="h-5 w-5 text-primary" /> 
+                                Submission Workspace
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-0">
+                            <Tabs defaultValue="submission">
+                                <div className="px-6 border-b">
+                                    <TabsList className="bg-transparent border-0 h-12">
+                                        <TabsTrigger value="submission" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full">Line Items ({draftItems.length})</TabsTrigger>
+                                        <TabsTrigger value="recurring" className="data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none h-full">Master Recurring List</TabsTrigger>
+                                    </TabsList>
+                                </div>
+                                <TabsContent value="submission" className="m-0">
+                                    <div className="p-6">
+                                        <SubmissionClient 
+                                            user={user!} 
+                                            profile={profile} 
+                                            userRole={role!} 
+                                            items={draftItems} 
+                                            setItems={setDraftItems} 
+                                            isLocked={isLocked} 
+                                            recurringItems={recurringItems} 
+                                            recurringLoading={recurringLoading} 
+                                            departmentId={selectedDepartmentId} 
+                                            departmentName={departmentName} 
+                                            budgetItems={budgetItems} 
+                                        />
+                                    </div>
+                                </TabsContent>
+                                <TabsContent value="recurring" className="m-0">
+                                    <div className="p-6">
+                                        <div className="mb-4 p-4 bg-muted/50 rounded-lg text-sm text-muted-foreground flex gap-3">
+                                            <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                                            These items are defined in your department's master list and are automatically included in every new submission.
+                                        </div>
+                                        <RecurringClient items={recurringItems || []} view="list" categories={departmentCategories} />
+                                    </div>
+                                </TabsContent>
+                            </Tabs>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                <div className="space-y-6">
+                    <Card className="sticky top-20 shadow-lg border-primary/10 overflow-hidden">
+                        <div className="h-1.5 bg-primary w-full" />
+                        <CardHeader className="pb-2 bg-muted/20">
+                            <CardTitle>Submission Details</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pt-6 space-y-6">
+                            <div className="space-y-4">
+                                <div className="grid gap-1.5">
+                                    <Label>Department</Label>
+                                    <Select value={selectedDepartmentId} onValueChange={setSelectedDepartmentId}>
+                                        <SelectTrigger className="bg-background"><SelectValue placeholder="Select" /></SelectTrigger>
+                                        <SelectContent>{departmentsForUser.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-1.5">
+                                    <Label>Legal Entity / Company</Label>
+                                    <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId} disabled={isLocked || associatedCompanies.length === 0}>
+                                        <SelectTrigger className="bg-background"><SelectValue placeholder="Select" /></SelectTrigger>
+                                        <SelectContent>{associatedCompanies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-1.5">
+                                    <Label>Procurement Period</Label>
+                                    <Select value={selectedPeriod} onValueChange={setSelectedPeriod} disabled={!selectedDepartmentId}>
+                                        <SelectTrigger className="bg-background"><SelectValue placeholder="Select" /></SelectTrigger>
+                                        <SelectContent>{openPeriods.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="grid gap-1.5">
+                                    <Label>Quick Restore</Label>
+                                    <Select onValueChange={v => { setPreviousSubmissionToLoad(v); setIsLoadConfirmDialogOpen(true); }} disabled={isLocked}>
+                                        <SelectTrigger className="bg-background"><SelectValue placeholder="Restore Previous Items" /></SelectTrigger>
+                                        <SelectContent>{previousSubmissions?.map(s => <SelectItem key={s.id} value={s.id}>{s.period}</SelectItem>)}</SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+
+                            <Separator />
+
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-end">
+                                    <span className="text-sm font-semibold uppercase text-muted-foreground">Grand Total</span>
+                                    <span className="text-2xl font-black text-primary">{formatCurrency(draftItems.reduce((a, i) => a + i.qty * i.unitPrice, 0))}</span>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-xs font-bold">
+                                        <span>Operational Budget</span>
+                                        <span className={cn(opProg > 100 ? "text-red-600" : "text-green-600")}>{Math.round(opProg)}%</span>
+                                    </div>
+                                    <Progress value={opProg} className={cn("h-1.5", opProg > 100 ? "bg-red-100" : "")} />
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <div className="flex justify-between text-xs font-bold">
+                                        <span>Capital Budget</span>
+                                        <span className={cn(capProg > 100 ? "text-red-600" : "text-green-600")}>{Math.round(capProg)}%</span>
+                                    </div>
+                                    <Progress value={capProg} className={cn("h-1.5", capProg > 100 ? "bg-red-100" : "")} />
+                                </div>
+                            </div>
+                        </CardContent>
+                        <CardFooter className="bg-muted/30 flex flex-col gap-2 pt-6">
+                            <Button className="w-full shadow-md" size="lg" onClick={() => handleSaveRequest(false)} disabled={saveStatus === 'saving' || isLocked}>
+                                {saveStatus === 'saving' ? <Loader className="mr-2 h-4 w-4 animate-spin"/> : <Check className="mr-2 h-4 w-4" />}
+                                Submit For Approval
+                            </Button>
+                            <Button variant="ghost" className="w-full text-xs" onClick={() => handleSaveRequest(true)} disabled={saveStatus === 'saving' || isLocked}>
+                                {saveStatus === 'saving' ? "Saving..." : "Save Draft"}
+                            </Button>
+                            {isLocked && <p className="text-[10px] text-center text-amber-800 font-bold uppercase tracking-widest mt-2">Locked for Submission</p>}
+                        </CardFooter>
+                    </Card>
+                    
+                    {editingRequestId && (
+                        <Button variant="outline" className="w-full text-destructive border-destructive/20 hover:bg-destructive/5" onClick={() => setIsArchiveCurrentDialogOpen(true)} disabled={isLocked}>
+                            <Trash2 className="mr-2 h-4 w-4" /> Move to Recycle Bin
+                        </Button>
+                    )}
+                </div>
+            </div>
             
-            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}><DialogContent><DialogHeader><DialogTitle>Archive Draft?</DialogTitle></DialogHeader><Textarea placeholder="Reason" value={archiveReason} onChange={e => setArchiveReason(e.target.value)} /><DialogFooter><Button variant="destructive" onClick={async () => { if (!editingRequestId) return; await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() }); setEditingRequestId(null); setDraftItems([]); setIsArchiveCurrentDialogOpen(false); }}>Confirm Archive</Button></DialogFooter></DialogContent></Dialog>
-            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Load Items?</AlertDialogTitle><AlertDialogDescription>This replaces your current list.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => { const sub = previousSubmissions?.find(s => s.id === previousSubmissionToLoad); if (sub) setDraftItems(sub.items.map(i => ({ ...i, id: Date.now() + Math.random(), receivedQty: 0, fulfillmentStatus: 'Pending' }))); setIsLoadConfirmDialogOpen(false); }}>Load</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+            <Dialog open={isArchiveCurrentDialogOpen} onOpenChange={setIsArchiveCurrentDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Archive Draft?</DialogTitle>
+                        <DialogDescription>The submission will be moved to the recycle bin. You can restore it later if needed.</DialogDescription>
+                    </DialogHeader>
+                    <Textarea placeholder="Optional: Reason for archiving..." value={archiveReason} onChange={e => setArchiveReason(e.target.value)} rows={3} />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsArchiveCurrentDialogOpen(false)}>Cancel</Button>
+                        <Button variant="destructive" onClick={async () => { if (!editingRequestId) return; await updateDoc(doc(firestore, 'procurementRequests', editingRequestId), { status: 'Archived', updatedAt: serverTimestamp() }); setEditingRequestId(null); setDraftItems([]); setIsArchiveCurrentDialogOpen(false); }}>Confirm Archive</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            
+            <AlertDialog open={isLoadConfirmDialogOpen} onOpenChange={setIsLoadConfirmDialogOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Replace Current Items?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This will clear your current submission list and replace it with items from your {previousSubmissions?.find(s => s.id === previousSubmissionToLoad)?.period} submission. This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => { 
+                            const sub = previousSubmissions?.find(s => s.id === previousSubmissionToLoad); 
+                            if (sub) setDraftItems(sub.items.map(i => ({ ...i, id: Date.now() + Math.random(), receivedQty: 0, fulfillmentStatus: 'Pending', addedById: user!.uid, addedByName: profile?.displayName || user!.email || 'User' }))); 
+                            setIsLoadConfirmDialogOpen(false); 
+                        }}>
+                            Load Previous Items
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }
