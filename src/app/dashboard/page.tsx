@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
@@ -798,9 +797,9 @@ export default function DashboardPage() {
                           Begin a new procurement submission for any department.
                         </p>
                         <Button asChild className="w-full">
-                          <Link href="/dashboard/procurement">
+                          <Link href="/dashboard/procurement/new">
                             <Rocket className="mr-2 h-4 w-4" />
-                            Quick Submit
+                            New Submission
                           </Link>
                         </Button>
                       </CardContent>
@@ -1033,7 +1032,7 @@ export default function DashboardPage() {
                                 {userDrafts.map(draft => (
                                     <TableRow key={draft.id}>
                                         <TableCell>
-                                            <Link href={`/dashboard/procurement?deptId=${draft.departmentId}&period=${encodeURIComponent(draft.period)}`} className="hover:underline text-primary font-medium">{draft.period}</Link>
+                                            <Link href={`/dashboard/procurement/new?deptId=${draft.departmentId}&period=${encodeURIComponent(draft.period)}`} className="hover:underline text-primary font-medium">{draft.period}</Link>
                                             <div className="text-xs text-muted-foreground">{draft.department}</div>
                                         </TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(draft.total)}</TableCell>
