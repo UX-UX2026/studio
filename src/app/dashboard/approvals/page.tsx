@@ -74,13 +74,13 @@ const getStatusBadge = (status: string) => {
 const getFulfillmentStatusBadge = (status: string) => {
     switch (status) {
       case "Sourcing":
-        return <Badge variant="outline" className="text-yellow-500 border-yellow-500">{status}</Badge>;
+        return <Badge variant="outline" className="text-yellow-500 border-yellow-200 bg-yellow-50">{status}</Badge>;
       case "Quoted":
-        return <Badge variant="outline" className="text-blue-500 border-blue-500">{status}</Badge>;
+        return <Badge variant="outline" className="text-blue-500 border-blue-200 bg-blue-50">{status}</Badge>;
       case "Ordered":
-        return <Badge variant="outline" className="text-purple-500 border-purple-500">{status}</Badge>;
+        return <Badge variant="outline" className="text-purple-500 border-purple-200 bg-purple-50">{status}</Badge>;
       case "Completed":
-        return <Badge variant="outline" className="text-green-500 border-green-500">{status}</Badge>;
+        return <Badge variant="outline" className="text-green-500 border-green-200 bg-green-50">{status}</Badge>;
       default:
         return <Badge variant="secondary">{status || 'Pending'}</Badge>;
     }
@@ -441,7 +441,7 @@ const RequestDetailsView = ({
         const actorId = user.uid;
     
         const timelineUpdater = (stepName: string, nextStageName: string) => {
-            return (step: ApprovalRequest['timeline'][0]) => {
+            return (step: ApprovalRequest['timeline'][0]): ApprovalRequest['timeline'][0] => {
                 if (step.stage === stepName) {
                     return { 
                         ...step, 

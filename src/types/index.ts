@@ -43,12 +43,12 @@ export type ApprovalRequest = {
     timeline: {
         stage: string;
         actor: string;
-        actorId?: string;
+        actorId?: string | null;
         date: string | null;
         status: 'completed' | 'pending' | 'waiting' | 'rejected';
-        delegatedById?: string;
-        delegatedByName?: string;
-        fingerprint?: string;
+        delegatedById?: string | null;
+        delegatedByName?: string | null;
+        fingerprint?: string | null;
     }[];
     comments: { actor: string; actorId: string; text: string; timestamp: string }[];
     items: ApprovalItem[];
