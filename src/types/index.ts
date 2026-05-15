@@ -54,6 +54,7 @@ export type ApprovalRequest = {
     items: ApprovalItem[];
     createdAt?: { seconds: number, nanoseconds: number };
     updatedAt?: { seconds: number, nanoseconds: number };
+    delegatorIdForApproval?: string | null;
 };
 
 export type RecurringItem = {

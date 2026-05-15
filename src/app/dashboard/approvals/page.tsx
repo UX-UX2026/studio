@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useUser, type UserRole } from "@/firebase/auth/use-user";
@@ -450,8 +449,8 @@ const RequestDetailsView = ({
                         date: currentDate, 
                         actor: actorName,
                         actorId: actorId,
-                        delegatedById: asDelegate ? delegator?.id : undefined,
-                        delegatedByName: asDelegate ? delegator?.displayName : undefined,
+                        delegatedById: asDelegate && delegator ? (delegator.id || null) : null,
+                        delegatedByName: asDelegate && delegator ? (delegator.displayName || null) : null,
                     };
                 }
                 if (step.stage === nextStageName) {
@@ -493,8 +492,8 @@ const RequestDetailsView = ({
                     date: currentDate, 
                     actor: actorName, 
                     actorId, 
-                    delegatedById: asDelegate ? delegator?.id : undefined, 
-                    delegatedByName: asDelegate ? delegator?.displayName : undefined 
+                    delegatedById: asDelegate && delegator ? (delegator.id || null) : null, 
+                    delegatedByName: asDelegate && delegator ? (delegator.displayName || null) : null 
                 };
             }
             if (procProcessingIndex > -1) {
